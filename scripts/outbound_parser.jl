@@ -3,7 +3,7 @@ using CSV, DataFrames
 """
 Safe parsing function that handles empty strings and missing values
 """
-function safe_parse_int(s::AbstractString, default::Int = 0)
+function safe_parse_int(s::AbstractString, default::Int=0)
     s_trimmed = strip(s)
     if isempty(s_trimmed)
         return default
@@ -15,7 +15,7 @@ function safe_parse_int(s::AbstractString, default::Int = 0)
     end
 end
 
-function safe_parse_float(s::AbstractString, default::Float64 = 0.0)
+function safe_parse_float(s::AbstractString, default::Float64=0.0)
     s_trimmed = strip(s)
     if isempty(s_trimmed)
         return default
@@ -62,7 +62,7 @@ function parse_header(lines::Vector{String}, start_idx::Int)
     # First line contains column headers
     headers = split(lines[start_idx], ';')
     # Second line contains values
-    values = split(lines[start_idx+1], ';')
+    values = split(lines[start_idx + 1], ';')
 
     for (i, expected_name) in enumerate(expected_columns)
         if i <= length(values)
@@ -103,7 +103,7 @@ function parse_two_row_section(lines::Vector{String}, start_idx::Int, end_idx::I
     while i < end_idx
         # Combine two consecutive lines
         row1 = split(lines[i], ';')
-        row2 = split(lines[i+1], ';')
+        row2 = split(lines[i + 1], ';')
 
         # Merge the two rows
         combined_row = vcat(row1, row2)
@@ -122,19 +122,19 @@ function parse_volumes(lines::Vector{String}, start_idx::Int, end_idx::Int)
     data = parse_two_row_section(lines, start_idx, end_idx)
 
     # Create DataFrame with correct column names based on user specification
-    df = DataFrame(
-        model = Int[],
-        usine = Int[],
-        destinationFinale = Int[],
-        ID = Int[],
-        annee = Int[],
-        semaine = Int[],
-        typeBT = String[],
-        volumeSemaine = Int[],
-        volumeMoyenSemaine = Int[],
-        volumeMEdSemaine = Int[],
-        volumeAnnuel = Int[],
-        volumetotal = Int[],
+    df = DataFrame(;
+        model=Int[],
+        usine=Int[],
+        destinationFinale=Int[],
+        ID=Int[],
+        annee=Int[],
+        semaine=Int[],
+        typeBT=String[],
+        volumeSemaine=Int[],
+        volumeMoyenSemaine=Int[],
+        volumeMedSemaine=Int[],
+        volumeAnnuel=Int[],
+        volumetotal=Int[],
     )
 
     for row in data
@@ -149,11 +149,11 @@ function parse_volumes(lines::Vector{String}, start_idx::Int, end_idx::Int)
                     safe_parse_int(row[5]),          # annee
                     safe_parse_int(row[6]),          # semaine
                     strip(row[7]),                   # typeBT
-                    safe_parse_int(row[8]),          # volumeSemaine
-                    safe_parse_int(row[9]),          # volumeMoyenSemaine
-                    safe_parse_int(row[10]),         # volumeMEdSemaine
-                    safe_parse_int(row[11]),         # volumeAnnuel
-                    safe_parse_int(row[12]),         # volumetotal
+                    safe_parse_int(row[9]),          # volumeSemaine
+                    safe_parse_int(row[10]),          # volumeMoyenSemaine
+                    safe_parse_int(row[11]),         # volumeMEdSemaine
+                    safe_parse_int(row[12]),         # volumeAnnuel
+                    safe_parse_int(row[13]),         # volumetotal
                 ),
             )
         end
@@ -169,14 +169,14 @@ function parse_legs(lines::Vector{String}, start_idx::Int, end_idx::Int)
     data = parse_two_row_section(lines, start_idx, end_idx)
 
     # Correct column names based on user specification
-    df = DataFrame(
-        origine = Int[],
-        destination = Int[],
-        TypeLeg = String[],
-        model = Int[],
-        Cost = Float64[],
-        VolMin = Int[],
-        VolMax = Int[],
+    df = DataFrame(;
+        origine=Int[],
+        destination=Int[],
+        TypeLeg=String[],
+        model=Int[],
+        Cost=Float64[],
+        VolMin=Int[],
+        VolMax=Int[],
     )
 
     for row in data
@@ -188,9 +188,9 @@ function parse_legs(lines::Vector{String}, start_idx::Int, end_idx::Int)
                     safe_parse_int(row[2]),        # destination
                     strip(row[3]),                 # TypeLeg
                     safe_parse_int(row[4]),        # model
-                    safe_parse_float(row[5]),      # Cost
-                    safe_parse_int(row[6]),        # VolMin
-                    safe_parse_int(row[7]),        # VolMax
+                    safe_parse_float(row[6]),      # Cost
+                    safe_parse_int(row[7]),        # VolMin
+                    safe_parse_int(row[8]),        # VolMax
                 ),
             )
         end
@@ -209,9 +209,9 @@ function parse_three_row_section(lines::Vector{String}, start_idx::Int, end_idx:
     i = start_idx
     while i < end_idx - 1  # Need at least 2 more lines
         # Combine three consecutive lines
-        row1 = split(lines[i], ';')
-        row2 = split(lines[i+1], ';')
-        row3 = split(lines[i+2], ';')
+        row1 = split(lines[i], ';')[1:(end - 1)]
+        row2 = lines[i + 1] #split(, ';')
+        row3 = split(lines[i + 2], ';')
 
         # Merge the three rows
         combined_row = vcat(row1, row2, row3)
@@ -230,18 +230,18 @@ function parse_nodes(lines::Vector{String}, start_idx::Int, end_idx::Int)
     data = parse_three_row_section(lines, start_idx, end_idx)
 
     # Base columns from first row
-    df = DataFrame(
-        indice = Int[],
-        nom = String[],
-        nomReel = String[],
-        TypeNode = String[],
-        TypePort = String[],
-        Latitude = Float64[],
-        Longitude = Float64[],
-        nombreCandidatStockBTS = Int[],
-        ListeCandidatStockBTS = String[],  # From second row
-        NBmodel = Int[],  # From third row
-        model_configs = String[],  # Store the dynamic model configurations as string
+    df = DataFrame(;
+        indice=Int[],
+        nom=String[],
+        nomReel=String[],
+        TypeNode=String[],
+        TypePort=String[],
+        Latitude=Float64[],
+        Longitude=Float64[],
+        nombreCandidatStockBTS=Int[],
+        ListeCandidatStockBTS=String[],  # From second row
+        # NBmodel=Int[],  # From third row
+        # model_configs=String[],  # Store the dynamic model configurations as string
     )
 
     for row in data
@@ -258,15 +258,15 @@ function parse_nodes(lines::Vector{String}, start_idx::Int, end_idx::Int)
         # Second row - ListeCandidatStockBTS
         ListeCandidatStockBTS = length(row) > 8 ? strip(row[9]) : ""
 
-        # Third row starts with NBmodel, then model configurations
-        NBmodel = length(row) > 9 ? safe_parse_int(row[10]) : 0
+        # # Third row starts with NBmodel, then model configurations
+        # NBmodel = length(row) > 9 ? safe_parse_int(row[10]) : 0
 
-        # Collect remaining model configuration as a single string
-        model_configs = ""
-        if length(row) > 10
-            model_parts = row[11:end]
-            model_configs = join(model_parts, ";")
-        end
+        # # Collect remaining model configuration as a single string
+        # model_configs = ""
+        # if length(row) > 10
+        #     model_parts = row[11:end]
+        #     model_configs = join(model_parts, ";")
+        # end
 
         push!(
             df,
@@ -280,8 +280,8 @@ function parse_nodes(lines::Vector{String}, start_idx::Int, end_idx::Int)
                 Longitude,
                 nombreCandidatStockBTS,
                 ListeCandidatStockBTS,
-                NBmodel,
-                model_configs,
+                # NBmodel,
+                # model_configs,
             ),
         )
     end
@@ -294,7 +294,7 @@ Parse single-line sections (PDCFORCED, POLFORCED, PODFORCED)
 """
 function parse_single_line_section(lines::Vector{String}, start_idx::Int, end_idx::Int)
     data = Vector{String}()
-    for i = start_idx:(end_idx-1)
+    for i in start_idx:(end_idx - 1)
         line = strip(lines[i])
         if !isempty(line)
             push!(data, line)
@@ -308,9 +308,9 @@ Parse MODELES section into a DataFrame
 """
 function parse_models(lines::Vector{String}, start_idx::Int, end_idx::Int)
     # Correct column names based on user specification
-    df = DataFrame(indice = Int[], modelName = String[])
+    df = DataFrame(; indice=Int[], modelName=String[])
 
-    for i = start_idx:(end_idx-1)
+    for i in start_idx:(end_idx - 1)
         parts = split(lines[i], ';')
         if length(parts) >= 2
             push!(df, (
@@ -351,34 +351,31 @@ function parse_outbound_file(file_path::String)
     header, volumes_start = parse_header(lines, 1)
 
     # Parse sections
-    volumes_data =
-        parse_volumes(lines, section_indices["VOLUMES"] + 1, section_indices["LEGS"])
+    volumes_data = parse_volumes(
+        lines, section_indices["VOLUMES"] + 1, section_indices["LEGS"]
+    )
 
     legs_data = parse_legs(lines, section_indices["LEGS"] + 1, section_indices["NODES"])
 
-    nodes_data =
-        parse_nodes(lines, section_indices["NODES"] + 1, section_indices["PDCFORCED"])
+    nodes_data = parse_nodes(
+        lines, section_indices["NODES"] + 1, section_indices["PDCFORCED"]
+    )
 
     pdc_forced = parse_single_line_section(
-        lines,
-        section_indices["PDCFORCED"] + 1,
-        section_indices["POLFORCED"],
+        lines, section_indices["PDCFORCED"] + 1, section_indices["POLFORCED"]
     )
 
     pol_forced = parse_single_line_section(
-        lines,
-        section_indices["POLFORCED"] + 1,
-        section_indices["PODFORCED"],
+        lines, section_indices["POLFORCED"] + 1, section_indices["PODFORCED"]
     )
 
     pod_forced = parse_single_line_section(
-        lines,
-        section_indices["PODFORCED"] + 1,
-        section_indices["MODELES"],
+        lines, section_indices["PODFORCED"] + 1, section_indices["MODELES"]
     )
 
-    models_data =
-        parse_models(lines, section_indices["MODELES"] + 1, section_indices["FIN"])
+    models_data = parse_models(
+        lines, section_indices["MODELES"] + 1, section_indices["FIN"]
+    )
 
     return OutboundData(
         header,
@@ -451,7 +448,7 @@ function export_parsed_data(data::OutboundData, output_dir::String)
     CSV.write(joinpath(output_dir, "parsed_models.csv"), data.models)
 
     # Export header as a simple key-value CSV
-    header_df = DataFrame(parameter = String[], value = String[])
+    header_df = DataFrame(; parameter=String[], value=String[])
     for (key, value) in data.header
         push!(header_df, (string(key), string(value)))
     end
@@ -463,7 +460,7 @@ function export_parsed_data(data::OutboundData, output_dir::String)
     println("  - parsed_volumes.csv")
     println("  - parsed_legs.csv")
     println("  - parsed_nodes.csv")
-    println("  - parsed_models.csv")
+    return println("  - parsed_models.csv")
 end
 
 # Export parsed data

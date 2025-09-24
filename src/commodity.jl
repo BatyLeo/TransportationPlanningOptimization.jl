@@ -1,5 +1,6 @@
-struct Commodity{I}
-    storage_cost::Float64
+@kwdef struct Commodity{I}
+    origin_id::String
+    destination_id::String
     size::Int
     info::I
 end

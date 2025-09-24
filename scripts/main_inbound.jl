@@ -7,6 +7,7 @@ using Graphs, SimpleWeightedGraphs
 using Statistics
 using MultivariateStats
 using GLMakie
+using Tyler
 
 instance = "world"
 datadir = joinpath(@__DIR__, "..", "data")
