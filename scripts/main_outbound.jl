@@ -10,6 +10,13 @@ df_nodes, df_legs, df_commodities = read_outbound_instance(
     node_file, leg_file, commodity_file
 )
 
+df_commodities = filter(
+    row -> !ismissing(row.volumeSemaine) && row.volumeSemaine > 0, df_commodities
+)
+
+group_cols = [:destinationFinale, :annee, :semaine]
+gdf = groupby(df_commodities, group_cols)
+
 nodes = map(eachrow(df_nodes)) do row
     list = if ismissing(row.ListeCandidatStockBTS)
         Int[]
@@ -28,10 +35,6 @@ arcs = map(eachrow(df_legs)) do row
     )
 end
 
-df_commodities = filter(
-    row -> !ismissing(row.volumeSemaine) && row.volumeSemaine > 0, df_commodities
-)
-
 commodities = map(eachrow(df_commodities)) do row
     Commodity(;
         origin_id="$(row.usine)",
@@ -42,5 +45,10 @@ commodities = map(eachrow(df_commodities)) do row
 end
 
 using Plots
-histogram(df_commodities.volumeSemaine[df_commodities.volumeSemaine .< 100])
+histogram(df_commodities.volumeSemaine[5 .< df_commodities.volumeSemaine .< 100])
 minimum(df_commodities.volumeSemaine)
+
+# group by usine, destination, annee, semaine and aggregate
+
+gdf = groupby(df_legs, [:origine, :destination])
+gdf[2]
