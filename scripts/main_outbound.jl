@@ -45,10 +45,14 @@ commodities = map(eachrow(df_commodities)) do row
 end
 
 using Plots
-histogram(df_commodities.volumeSemaine[5 .< df_commodities.volumeSemaine .< 100])
-minimum(df_commodities.volumeSemaine)
+histogram(df_commodities.volumeSemaine[0 .< df_commodities.volumeSemaine .< 100])
+extrema(df_commodities.volumeSemaine)
 
 # group by usine, destination, annee, semaine and aggregate
 
 gdf = groupby(df_legs, [:origine, :destination])
 gdf[2]
+
+gdf = groupby(
+    df_commodities, [:usine, :destinationFinale, :model, :typeBT, :annee, :semaine]
+)
