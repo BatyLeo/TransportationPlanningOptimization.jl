@@ -1,3 +1,8 @@
+const NODE_ID = :point_account
+const NODE_COST = :point_m3_cost
+const NODE_CAPACITY = :point_m3_capacity
+const NODE_TYPE = :point_type
+
 """
 Read an inbound instance from three CSV files: nodes, legs, and commodities.
 """
