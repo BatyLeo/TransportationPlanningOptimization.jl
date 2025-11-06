@@ -390,7 +390,7 @@ function parse_outbound_file(file_path::String)
 end
 
 # Example usage
-data_dir = joinpath(@__DIR__, "..", "data", "outbound")
+data_dir = joinpath(@__DIR__, "..", "data", "outbound2")
 outbound_file = joinpath(data_dir, "HexData.csv")
 
 # Parse the file

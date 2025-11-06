@@ -1,7 +1,7 @@
 using NetworkDesignOptimization
 includet(joinpath(@__DIR__, "application_specific", "Outbound.jl"))
 
-data_dir = joinpath(@__DIR__, "..", "data", "outbound", "parsed")
+data_dir = joinpath(@__DIR__, "..", "data", "outbound2", "parsed")
 node_file = joinpath(data_dir, "parsed_nodes.csv")
 leg_file = joinpath(data_dir, "parsed_legs.csv")
 commodity_file = joinpath(data_dir, "parsed_volumes.csv")
