@@ -1,16 +1,76 @@
 """
 $TYPEDEF
 
-Commodity data structure that should be instantiated by the user's parser.
-This then will be used internally to instantiate an instance with more optimized data structures.
+User-facing commodity data structure for parsing input data.
+
+This structure is designed to be easy to instantiate from CSV, JSON, or other data sources.
+Once all commodities are loaded, they are consolidated into optimized internal structures
+(Commodity, Order, Bundle) based on problem-specific consolidation rules.
+
+# Type Parameters
+- `is_date_arrival::Bool`: `true` if `date` represents arrival, `false` if departure
+- `ID`: Type for node identifiers (e.g., String, Int)
+- `I`: Type for additional problem-specific information
 
 # Fields
 $TYPEDFIELDS
+
+# Examples
+```julia
+# Inbound logistics (arrival date)
+FullCommodity(
+    origin_id = "SUPPLIER_A",
+    destination_id = "PLANT_PARIS",
+    arrival_date = Date(2025, 11, 20),
+    size = 150.0,
+    info = (part_id = "ENGINE_V6", priority = :high)
+)
+
+# Outbound logistics (departure date)
+FullCommodity(
+    origin_id = "PLANT_PARIS",
+    destination_id = "DEALER_LYON",
+    departure_date = Date(2025, 11, 18),
+    size = 1.0,  # 1 vehicle
+    info = (model = "Clio", color = "Blue")
+)
+```
 """
-@kwdef struct FullCommodity{I}
-    origin_id::I
-    destination_id::I
+struct FullCommodity{is_date_arrival,ID,I}
+    "origin node identifier"
+    origin_id::ID
+    "destination node identifier"
+    destination_id::ID
+    "date information associated with the commodity"
+    date::DateTime
+    "size of the commodity"
     size::Float64
-    delivery_time_step::Int
-    max_delivery_time::Int
+    "additional problem-specific information"
+    info::I
+end
+
+function FullCommodity(;
+    origin_id::ID,
+    destination_id::ID,
+    size::Float64,
+    arrival_date=nothing,
+    departure_date=nothing,
+    info::I=nothing,
+) where {ID,I}
+    # Validate that exactly one of arrival_date or departure_date is provided
+    if !isnothing(arrival_date) && !isnothing(departure_date)
+        throw(ArgumentError("Cannot specify both arrival_date and departure_date"))
+    end
+
+    if isnothing(arrival_date) && isnothing(departure_date)
+        throw(ArgumentError("Must specify either arrival_date or departure_date"))
+    end
+
+    # Determine which date type and use the provided date
+    is_date_arrival = !isnothing(arrival_date)
+    actual_date = is_date_arrival ? arrival_date : departure_date
+
+    return FullCommodity{is_date_arrival,ID,I}(
+        origin_id, destination_id, actual_date, size, info
+    )
 end

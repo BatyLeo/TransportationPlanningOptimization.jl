@@ -10,24 +10,52 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
     df_nodes = DataFrame(CSV.File(node_file))
     df_legs = DataFrame(CSV.File(leg_file))
     df_commodities = DataFrame(CSV.File(commmodity_file))
-    println("Node columns: ", names(df_nodes))
-    println("Legs columns: ", names(df_legs))
-    println("Commodity columns: ", names(df_commodities))
-    return (df_nodes, df_legs, df_commodities)
-    # commodity_data = map(eachrow(df_commodities)) do row
-    #     @info row.max_delivery_time
-    #     FullCommodity(;
-    #         origin_id=row.supplier_account,
-    #         destination_id=row.customer_account,
-    #         size=row.volume,
-    #         delivery_time_step=row.delivery_time_step,
-    #         max_delivery_time=row.max_delivery_time,
-    #     )
-    # end
-    # println("Number of commodities: ", length(commodity_data))
-    # return commodity_data
+
+    nodes = map(eachrow(df_nodes)) do row
+        NetworkNode(;
+            id="$(row[NODE_ID])",
+            cost=row[NODE_COST],
+            capacity=Int(row[NODE_CAPACITY]),
+            info=InboundNodeInfo(Symbol(row[NODE_TYPE])),
+        )
+    end
+
+    raw_arcs = map(eachrow(df_legs)) do row
+        cost = if row.is_linear
+            LinearArcCost(row.shipment_cost)
+        else
+            BinPackingArcCost(row.shipment_cost, row.capacity)
+        end
+        return NetworkArc(;
+            origin_id="$(row.src_account)",
+            destination_id="$(row.dst_account)",
+            cost=cost,
+        )
+    end
+    typeof(raw_arcs)
+    arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
+
+    commodities = map(eachrow(df_commodities)) do row
+        FullCommodity(;
+            origin_id="$(row.supplier_account)",
+            destination_id="$(row.customer_account)",
+            size=row.volume,
+            arrival_date=DateTime(row.delivery_date, "yyyy-mm-dd HH:MM:SS+00:00"),
+            info=InboundCommodityInfo(row.max_delivery_time),
+        )
+    end
+
+    println("Number of nodes: ", length(nodes))
+    println("Number of arcs: ", length(arcs))
+    println("Number of commodities: ", length(commodities))
+
+    return (; nodes, arcs, commodities)
 end
 
 struct InboundNodeInfo
     node_type::Symbol
+end
+
+struct InboundCommodityInfo
+    max_delivery_time::Int
 end

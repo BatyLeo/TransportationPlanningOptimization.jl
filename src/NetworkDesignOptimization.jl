@@ -2,6 +2,7 @@ module NetworkDesignOptimization
 
 using CSV: CSV
 using DataFrames: DataFrame, names
+using Dates: DateTime
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 
 include("commodity.jl")
