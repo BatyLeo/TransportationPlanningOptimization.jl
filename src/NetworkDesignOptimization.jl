@@ -15,7 +15,7 @@ include("typed_instance.jl")
 
 include("parsing/commodity.jl")
 
-export FullCommodity
+export LightCommodity
 export Instance, Bundle, Order, Commodity, NetworkNode, NetworkArc
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
 export TypedInstance, collect_arcs

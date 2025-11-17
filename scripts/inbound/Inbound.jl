@@ -36,7 +36,7 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
     arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
 
     commodities = map(eachrow(df_commodities)) do row
-        FullCommodity(;
+        Commodity(;
             origin_id="$(row.supplier_account)",
             destination_id="$(row.customer_account)",
             size=row.volume,

@@ -18,7 +18,7 @@ $TYPEDFIELDS
 # Examples
 ```julia
 # Inbound logistics (arrival date)
-FullCommodity(
+Commodity(
     origin_id = "SUPPLIER_A",
     destination_id = "PLANT_PARIS",
     arrival_date = Date(2025, 11, 20),
@@ -27,7 +27,7 @@ FullCommodity(
 )
 
 # Outbound logistics (departure date)
-FullCommodity(
+Commodity(
     origin_id = "PLANT_PARIS",
     destination_id = "DEALER_LYON",
     departure_date = Date(2025, 11, 18),
@@ -36,7 +36,7 @@ FullCommodity(
 )
 ```
 """
-struct FullCommodity{is_date_arrival,ID,I}
+struct Commodity{is_date_arrival,ID,I}
     "origin node identifier"
     origin_id::ID
     "destination node identifier"
@@ -49,7 +49,7 @@ struct FullCommodity{is_date_arrival,ID,I}
     info::I
 end
 
-function FullCommodity(;
+function Commodity(;
     origin_id::ID,
     destination_id::ID,
     size::Float64,
@@ -70,7 +70,7 @@ function FullCommodity(;
     is_date_arrival = !isnothing(arrival_date)
     actual_date = is_date_arrival ? arrival_date : departure_date
 
-    return FullCommodity{is_date_arrival,ID,I}(
+    return Commodity{is_date_arrival,ID,I}(
         origin_id, destination_id, actual_date, size, info
     )
 end
