@@ -45,6 +45,8 @@ struct Commodity{is_date_arrival,ID,I}
     date::DateTime
     "size of the commodity (we assume 1D approximation)"
     size::Float64
+    "quantity of the commodity"
+    quantity::Int
     "additional problem-specific information"
     info::I
 end
@@ -53,6 +55,7 @@ function Commodity(;
     origin_id::ID,
     destination_id::ID,
     size::Float64,
+    quantity::Int=1,
     arrival_date=nothing,
     departure_date=nothing,
     info::I=nothing,
@@ -71,6 +74,19 @@ function Commodity(;
     actual_date = is_date_arrival ? arrival_date : departure_date
 
     return Commodity{is_date_arrival,ID,I}(
-        origin_id, destination_id, actual_date, size, info
+        origin_id, destination_id, actual_date, size, quantity, info
     )
+end
+
+function Base.show(
+    io::IO, commodity::Commodity{is_date_arrival,ID,I}
+) where {is_date_arrival,ID,I}
+    date_type = is_date_arrival ? "Arrival Date" : "Departure Date"
+    println(io, "Commodity{is_date_arrival=$(is_date_arrival)}:")
+    println(io, "  Origin ID: ", commodity.origin_id)
+    println(io, "  Destination ID: ", commodity.destination_id)
+    println(io, "  $date_type: ", commodity.date)
+    println(io, "  Quantity: ", commodity.quantity)
+    println(io, "  Size: ", commodity.size)
+    return println(io, "  Info: ", commodity.info)
 end

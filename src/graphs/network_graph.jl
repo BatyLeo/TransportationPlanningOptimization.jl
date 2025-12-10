@@ -37,7 +37,7 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
                         - record      : $(arc)
                         An arc with the same origin and destination is already present in the graph.
                         Please check $(legs_file) for duplicate entries or adjust the data/import logic.
-                    """
+                    """,
                 ),
             )
         end
@@ -48,5 +48,7 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
 end
 
 function Base.show(io::IO, ng::NetworkGraph)
-    println(io, "NetworkGraph with $(Graphs.nv(ng.graph)) nodes and $(Graphs.ne(ng.graph)) arcs")
+    return println(
+        io, "NetworkGraph with $(Graphs.nv(ng.graph)) nodes and $(Graphs.ne(ng.graph)) arcs"
+    )
 end

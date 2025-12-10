@@ -20,6 +20,7 @@ const COMMODITY_DESTINATION_ID = :customer_account
 const COMMODITY_SIZE = :volume
 const COMMODITY_ARRIVAL_DATE = :delivery_date
 const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
+const COMMODITY_QUANTITY = :quantity
 
 """
 Read an inbound instance from three CSV files: nodes, legs, and commodities.
@@ -84,6 +85,7 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
             origin_id="$(row[COMMODITY_ORIGIN_ID])",
             destination_id="$(row[COMMODITY_DESTINATION_ID])",
             size=row[COMMODITY_SIZE],
+            quantity=Int(row[COMMODITY_QUANTITY]),
             arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),
             info=InboundCommodityInfo(row[COMMODITY_MAX_DELIVERY_TIME]),
         )
