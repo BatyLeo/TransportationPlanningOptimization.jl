@@ -43,7 +43,7 @@ struct Commodity{is_date_arrival,ID,I}
     destination_id::ID
     "date information associated with the commodity"
     date::DateTime
-    "size of the commodity"
+    "size of the commodity (we assume 1D approximation)"
     size::Float64
     "additional problem-specific information"
     info::I

@@ -11,9 +11,9 @@ nodes_df = CSV.read(nodes_file, DataFrame)
 valid_nodes = filter(
     row ->
         row.Latitude <= 90 &&
-        row.Longitude <= 180 &&
-        row.Latitude >= -90 &&
-        row.Longitude >= -180,
+            row.Longitude <= 180 &&
+            row.Latitude >= -90 &&
+            row.Longitude >= -180,
     nodes_df,
 )
 

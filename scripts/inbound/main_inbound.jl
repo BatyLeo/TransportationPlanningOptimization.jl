@@ -4,8 +4,8 @@ using DataFrames
 using NetworkDesignOptimization
 includet("Inbound.jl")
 
-instance = "world"
-datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
+instance = "small"
+datadir = joinpath(@__DIR__, "..", "..", "data", "inbound2")
 nodes_file = joinpath(datadir, "$(instance)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance)_commodities.csv")
@@ -17,3 +17,7 @@ commodities_file = joinpath(datadir, "$(instance)_commodities.csv")
 eltype(nodes)
 eltype(arcs)
 eltype(commodities)
+
+using Graphs, MetaGraphsNext
+
+network_graph = NetworkGraph(nodes, arcs)
