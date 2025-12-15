@@ -26,7 +26,7 @@ export NetworkNode, NetworkArc
 export NetworkGraph
 
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
-export TypedInstance, collect_arcs
+export collect_arcs
 
 export evaluate
 

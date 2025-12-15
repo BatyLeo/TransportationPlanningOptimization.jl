@@ -15,12 +15,11 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
         if haskey(network_graph, node.id)
             prev_idx = findfirst(x -> x.id == node.id, nodes)
             prev_node = prev_idx === nothing ? "unknown" : nodes[prev_idx]
-            throw(ErrorException("""Duplicate node id detected in $(nodes_file):
+            throw(ErrorException("""Duplicate node id detected:
                   - node id           : $(node.id)
                   - first occurrence  : index $(prev_idx), record: $(prev_node)
                   - duplicate record  : $(node)
-                Please ensure each row in $(nodes_file) has a unique 'id' value,
-                or remove/merge duplicate entries before importing.
+                Please ensure each row has a unique 'id' value.
             """))
         end
         Graphs.add_vertex!(network_graph, node.id, node)
@@ -30,13 +29,13 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
         if MetaGraphsNext.haskey(network_graph, arc.origin_id, arc.destination_id)
             throw(
                 ErrorException(
-                    """Duplicate arc detected in $(legs_file):
+                    """Duplicate arc detected:
                         - origin      : $(arc.origin_id)
                         - destination : $(arc.destination_id)
                         - type        : $(arc.info.arc_type)
                         - record      : $(arc)
                         An arc with the same origin and destination is already present in the graph.
-                        Please check $(legs_file) for duplicate entries or adjust the data/import logic.
+                        Please ensure each arc between two nodes is unique.
                     """,
                 ),
             )

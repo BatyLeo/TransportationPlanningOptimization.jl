@@ -97,7 +97,9 @@ function collect_arcs(cost_types::Tuple, arcs; validate::Bool=true)
     return collect_arcs(CostUnion, arcs; validate=validate)
 end
 
-function collect_arcs(::Type{CostUnion}, arcs; validate::Bool=true) where {CostUnion}
+function collect_arcs(
+    union_types::Type{CostUnion}, arcs; validate::Bool=true
+) where {CostUnion}
     if isempty(arcs)
         return NetworkArc{CostUnion,Nothing}[]
     end

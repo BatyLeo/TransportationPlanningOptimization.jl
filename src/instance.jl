@@ -36,8 +36,12 @@ function build_instance(
     start_date = minimum(Dates.Date.([c.date for c in commodities]))
     for comm in commodities
         to_append = [
-            LightCommodity{is_date_arrival,I}(
-                comm.origin_id, comm.destination_id, comm.size, comm.info
+            LightCommodity(;
+                origin_id=comm.origin_id,
+                destination_id=comm.destination_id,
+                size=comm.size,
+                info=comm.info,
+                is_date_arrival=is_date_arrival,
             ) for _ in 1:(comm.quantity)
         ]
         max_delivery_time_steps = period_steps(
