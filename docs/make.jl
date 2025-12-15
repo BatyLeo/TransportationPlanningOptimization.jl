@@ -1,7 +1,12 @@
 using NetworkDesignOptimization
 using Documenter
 
-DocMeta.setdocmeta!(NetworkDesignOptimization, :DocTestSetup, :(using NetworkDesignOptimization); recursive=true)
+DocMeta.setdocmeta!(
+    NetworkDesignOptimization,
+    :DocTestSetup,
+    :(using NetworkDesignOptimization);
+    recursive=true,
+)
 
 makedocs(;
     modules=[NetworkDesignOptimization],
@@ -12,12 +17,7 @@ makedocs(;
         edit_link="main",
         assets=String[],
     ),
-    pages=[
-        "Home" => "index.md",
-    ],
+    pages=["Home" => "index.md"],
 )
 
-deploydocs(;
-    repo="github.com/BatyLeo/NetworkDesignOptimization.jl",
-    devbranch="main",
-)
+deploydocs(; repo="github.com/BatyLeo/NetworkDesignOptimization.jl", devbranch="main")
