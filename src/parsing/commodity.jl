@@ -43,16 +43,41 @@ struct Commodity{is_date_arrival,ID,I}
     destination_id::ID
     "date information associated with the commodity"
     date::DateTime
-    "size of the commodity"
+    max_delivery_time::Period
+    "size of the commodity (we assume 1D approximation)"
     size::Float64
+    "quantity of the commodity"
+    quantity::Int
     "additional problem-specific information"
     info::I
+
+    function Commodity{is_date_arrival,ID,I}(
+        origin_id::ID,
+        destination_id::ID,
+        date::DateTime,
+        max_delivery_time::Period,
+        size::Float64,
+        quantity::Int,
+        info::I,
+    ) where {is_date_arrival,ID,I}
+        if size <= 0.0
+            throw(DomainError(size, "Commodity size must be positive."))
+        end
+        if quantity <= 0
+            throw(DomainError(quantity, "Commodity quantity must be positive."))
+        end
+        return new{is_date_arrival,ID,I}(
+            origin_id, destination_id, date, max_delivery_time, size, quantity, info
+        )
+    end
 end
 
 function Commodity(;
     origin_id::ID,
     destination_id::ID,
     size::Float64,
+    quantity::Int=1,
+    max_delivery_time::Period,
     arrival_date=nothing,
     departure_date=nothing,
     info::I=nothing,
@@ -71,6 +96,21 @@ function Commodity(;
     actual_date = is_date_arrival ? arrival_date : departure_date
 
     return Commodity{is_date_arrival,ID,I}(
-        origin_id, destination_id, actual_date, size, info
+        origin_id, destination_id, actual_date, max_delivery_time, size, quantity, info
     )
+end
+
+function Base.show(
+    io::IO, commodity::Commodity{is_date_arrival,ID,I}
+) where {is_date_arrival,ID,I}
+    date_type = is_date_arrival ? "Arrival Date" : "Departure Date"
+    println(io, "Commodity{is_date_arrival=$(is_date_arrival)}:")
+    println(io, "  Origin ID: ", commodity.origin_id)
+    println(io, "  Destination ID: ", commodity.destination_id)
+    println(io, "  $date_type: ", commodity.date)
+    println(io, "  Quantity: ", commodity.quantity)
+    println(io, "  Size: ", commodity.size)
+    println(io, "  Max Delivery Time: ", commodity.max_delivery_time)
+    println(io, "  Info: ", commodity.info)
+    return nothing
 end

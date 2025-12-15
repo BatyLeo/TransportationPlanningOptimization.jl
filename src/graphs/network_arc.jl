@@ -29,6 +29,19 @@ struct GridLinearArcCost <: AbstractArcCostFunction end
     info::K = nothing
 end
 
+function Base.show(io::IO, arc::NetworkArc)
+    return print(
+        io,
+        "NetworkArc(",
+        "origin_id=$(arc.origin_id), ",
+        "destination_id=$(arc.destination_id), ",
+        "capacity=$(arc.capacity), ",
+        "cost=$(arc.cost), ",
+        "info=$(arc.info)",
+        ")",
+    )
+end
+
 # Conversion constructor to widen the cost type parameter
 # This allows automatic conversion to union types
 function NetworkArc{C,K}(arc::NetworkArc) where {C<:AbstractArcCostFunction,K}
@@ -84,7 +97,9 @@ function collect_arcs(cost_types::Tuple, arcs; validate::Bool=true)
     return collect_arcs(CostUnion, arcs; validate=validate)
 end
 
-function collect_arcs(::Type{CostUnion}, arcs; validate::Bool=true) where {CostUnion}
+function collect_arcs(
+    union_types::Type{CostUnion}, arcs; validate::Bool=true
+) where {CostUnion}
     if isempty(arcs)
         return NetworkArc{CostUnion,Nothing}[]
     end

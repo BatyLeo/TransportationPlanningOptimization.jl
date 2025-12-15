@@ -1,14 +1,13 @@
-using CSV
-using Dates
-using DataFrames
+using Dates: Week
 using NetworkDesignOptimization
-includet("Inbound.jl")
+push!(LOAD_PATH, joinpath(@__DIR__, "..", "..", "test"))
+using Inbound
 
-instance = "world"
-datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
-nodes_file = joinpath(datadir, "$(instance)_nodes.csv")
-legs_file = joinpath(datadir, "$(instance)_legs.csv")
-commodities_file = joinpath(datadir, "$(instance)_commodities.csv")
+instance_name = "small"
+datadir = joinpath(@__DIR__, "..", "..", "data", "inbound2")
+nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
+legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
+commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
 
 (; nodes, arcs, commodities) = read_inbound_instance(
     nodes_file, legs_file, commodities_file
@@ -17,3 +16,6 @@ commodities_file = joinpath(datadir, "$(instance)_commodities.csv")
 eltype(nodes)
 eltype(arcs)
 eltype(commodities)
+
+instance = build_instance(nodes, arcs, commodities, Week(1));
+instance
