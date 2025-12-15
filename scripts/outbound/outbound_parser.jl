@@ -389,52 +389,6 @@ function parse_outbound_file(file_path::String)
     )
 end
 
-# Example usage
-data_dir = joinpath(@__DIR__, "..", "data", "outbound2")
-outbound_file = joinpath(data_dir, "HexData.csv")
-
-# Parse the file
-println("Parsing outbound file: $outbound_file")
-outbound_data = parse_outbound_file(outbound_file)
-
-# Print summary information
-println("\n=== OUTBOUND DATA SUMMARY ===")
-println("Header parameters:")
-for (key, value) in outbound_data.header
-    println("  $key: $value")
-end
-
-println("\nData sections:")
-println("  VOLUMES: $(nrow(outbound_data.volumes)) entries")
-println("  LEGS: $(nrow(outbound_data.legs)) entries")
-println("  NODES: $(nrow(outbound_data.nodes)) entries")
-println("  PDC_FORCED: $(length(outbound_data.pdc_forced)) entries")
-println("  POL_FORCED: $(length(outbound_data.pol_forced)) entries")
-println("  POD_FORCED: $(length(outbound_data.pod_forced)) entries")
-println("  MODELS: $(nrow(outbound_data.models)) entries")
-
-# Display first few rows of each section
-println("\n=== SAMPLE DATA ===")
-if nrow(outbound_data.volumes) > 0
-    println("\nFirst 5 VOLUMES entries:")
-    println(first(outbound_data.volumes, 5))
-end
-
-if nrow(outbound_data.legs) > 0
-    println("\nFirst 5 LEGS entries:")
-    println(first(outbound_data.legs, 5))
-end
-
-if nrow(outbound_data.nodes) > 0
-    println("\nFirst 5 NODES entries:")
-    println(first(outbound_data.nodes, 5))
-end
-
-if nrow(outbound_data.models) > 0
-    println("\nMODELS:")
-    println(outbound_data.models)
-end
-
 """
 Export parsed data to separate CSV files
 """
@@ -462,7 +416,3 @@ function export_parsed_data(data::OutboundData, output_dir::String)
     println("  - parsed_nodes.csv")
     return println("  - parsed_models.csv")
 end
-
-# Export parsed data
-export_dir = joinpath(dirname(outbound_file), "parsed")
-export_parsed_data(outbound_data, export_dir)

@@ -2,6 +2,7 @@
 Tests for Instance creation and integration using Inbound test application
 """
 
+using CSV
 using NetworkDesignOptimization
 using Test
 
@@ -41,8 +42,13 @@ end
     routes_file = joinpath(inbound_data_dir, "small_routes.csv")
     commodities_file = joinpath(inbound_data_dir, "small_commodities.csv")
 
-    @test isfile(nodes_file) && isfile(legs_file) && isfile(routes_file) && isfile(commodities_file)
-    (; nodes, arcs, commodities) = read_inbound_instance(nodes_file, legs_file, commodities_file)
+    @test isfile(nodes_file) &&
+        isfile(legs_file) &&
+        isfile(routes_file) &&
+        isfile(commodities_file)
+    (; nodes, arcs, commodities) = read_inbound_instance(
+        nodes_file, legs_file, commodities_file
+    )
     instance = build_instance(nodes, arcs, commodities, Week(1))
     nb_bundles = length(instance.bundles)
     nb_orders = sum(length(bundle.orders) for bundle in instance.bundles)

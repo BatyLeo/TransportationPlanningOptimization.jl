@@ -4,7 +4,7 @@ push!(LOAD_PATH, joinpath(@__DIR__, "..", "..", "test"))
 using Inbound
 
 instance_name = "small"
-datadir = joinpath(@__DIR__, "..", "..", "data", "inbound2")
+datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
