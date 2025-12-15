@@ -1,18 +1,16 @@
 using NetworkDesignOptimization
 includet("Outbound.jl")
 using .Outbound
-using DataFrames
 
-# Example usage
+using Dates
+
+# Preprocessing
 raw_data_file = joinpath(@__DIR__, "..", "..", "data", "outbound", "raw", "HexData.csv")
 data_dir = joinpath(dirname(raw_data_file), "parsed")
-
-outbound_data = parse_outbound_file(raw_data_file)
-export_parsed_data(outbound_data, data_dir)
+preprocessing_outbound_data(raw_data_file, data_dir; overwrite=false)
 
 ##  ---- ###
 
-data_dir = joinpath(@__DIR__, "..", "data", "outbound2", "parsed")
 node_file = joinpath(data_dir, "parsed_nodes.csv")
 leg_file = joinpath(data_dir, "parsed_legs.csv")
 commodity_file = joinpath(data_dir, "parsed_volumes.csv")
@@ -50,7 +48,9 @@ commodities = map(eachrow(df_commodities)) do row
     Commodity(;
         origin_id="$(row.usine)",
         destination_id="$(row.destinationFinale)",
-        size=row.volumeSemaine,
+        size=Float64(row.volumeSemaine),
+        max_delivery_time=Year(1),
+        departure_date=DateTime(0),
         info=OutBoundCommodityInfo(row.model, row.typeBT == "BTS"),
     )
 end

@@ -11,7 +11,7 @@ function preprocessing_outbound_data(raw_data_file, output_data_dir; overwrite=f
         return nothing
     end
     raw_data = parse_outbound_file(raw_data_file)
-    export_parsed_data(outbound_data, data_dir)
+    export_parsed_data(raw_data, output_data_dir)
     return nothing
 end
 
@@ -36,6 +36,6 @@ struct OutBoundCommodityInfo
     is_BTS::Bool
 end
 
-export parse_outbound_file, export_parsed_data
+export preprocessing_outbound_data, read_outbound_instance, OutboundNodeInfo, OutBoundCommodityInfo
 
 end # module Outbound
