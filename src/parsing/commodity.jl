@@ -50,6 +50,26 @@ struct Commodity{is_date_arrival,ID,I}
     quantity::Int
     "additional problem-specific information"
     info::I
+
+    function Commodity{is_date_arrival,ID,I}(
+        origin_id::ID,
+        destination_id::ID,
+        date::DateTime,
+        max_delivery_time::Period,
+        size::Float64,
+        quantity::Int,
+        info::I,
+    ) where {is_date_arrival,ID,I}
+        if size <= 0.0
+            throw(DomainError(size, "Commodity size must be positive."))
+        end
+        if quantity <= 0
+            throw(DomainError(quantity, "Commodity quantity must be positive."))
+        end
+        return new{is_date_arrival,ID,I}(
+            origin_id, destination_id, date, max_delivery_time, size, quantity, info
+        )
+    end
 end
 
 function Commodity(;

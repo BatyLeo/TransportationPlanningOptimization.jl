@@ -5,6 +5,26 @@ struct Order{is_date_arrival,I}
     delivery_time_step::Int
     "maximum number of time steps for delivery among all commodities in the order"
     max_delivery_time_step::Int
+
+    function Order{is_date_arrival,I}(
+        commodities::Vector{LightCommodity{is_date_arrival,I}},
+        delivery_time_step::Int,
+        max_delivery_time_step::Int,
+    ) where {is_date_arrival,I}
+        if delivery_time_step <= 0
+            throw(DomainError(delivery_time_step, "Time steps start from 1."))
+        end
+        if max_delivery_time_step < 0
+            throw(
+                DomainError(
+                    max_delivery_time_step, "A number of time steps must be non-negative."
+                ),
+            )
+        end
+        return new{is_date_arrival,I}(
+            commodities, delivery_time_step, max_delivery_time_step
+        )
+    end
 end
 
 function Order(;
@@ -12,9 +32,7 @@ function Order(;
     delivery_time_step::Int,
     max_delivery_time_step::Int,
 ) where {is_date_arrival,I}
-    return Order{is_date_arrival(commodities[1]),I}(
-        commodities, delivery_time_step, max_delivery_time_step
-    )
+    return Order{is_date_arrival,I}(commodities, delivery_time_step, max_delivery_time_step)
 end
 
 function Base.show(io::IO, order::Order)

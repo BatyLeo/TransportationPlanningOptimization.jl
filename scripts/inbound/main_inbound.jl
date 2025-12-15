@@ -1,8 +1,7 @@
-using CSV
-using DataFrames
-using Graphs, MetaGraphsNext
+using Dates: Week
 using NetworkDesignOptimization
-includet("Inbound.jl")
+push!(LOAD_PATH, joinpath(@__DIR__, "..", "..", "test"))
+using Inbound
 
 instance_name = "small"
 datadir = joinpath(@__DIR__, "..", "..", "data", "inbound2")

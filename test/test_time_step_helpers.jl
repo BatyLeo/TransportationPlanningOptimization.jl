@@ -50,11 +50,9 @@ end
 end
 
 @testset "period_steps with fractional rounding" begin
-    # Fractional days to weeks (15 days = 2.14... weeks)
     @test period_steps(Day(15), Week(1); roundup=ceil) == 3
     @test period_steps(Day(15), Week(1); roundup=floor) == 2
 
-    # Fractional hours to days (25 hours = 1.04... days)
     @test period_steps(Hour(25), Day(1); roundup=ceil) == 2
     @test period_steps(Hour(25), Day(1); roundup=floor) == 1
 end

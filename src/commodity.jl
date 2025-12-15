@@ -1,17 +1,25 @@
 struct LightCommodity{is_date_arrival,I}
     origin_id::String
     destination_id::String
-    # date::DateTime
     size::Float64
     info::I
+
+    function LightCommodity{is_date_arrival,I}(
+        origin_id::String, destination_id::String, size::Float64, info::I
+    ) where {is_date_arrival,I}
+        if size <= 0.0
+            throw(DomainError(size, "LightCommodity size must be positive."))
+        end
+        return new{is_date_arrival,I}(origin_id, destination_id, size, info)
+    end
 end
 
 function LightCommodity(;
     origin_id::String,
     destination_id::String,
     size::Float64,
-    info::I,
     is_date_arrival::Bool=false,
+    info::I=nothing,
 ) where {I}
     return LightCommodity{is_date_arrival,I}(origin_id, destination_id, size, info)
 end
