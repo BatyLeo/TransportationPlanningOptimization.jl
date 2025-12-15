@@ -1,7 +1,7 @@
 @kwdef struct LightCommodity{is_date_arrival,I}
     origin_id::String
     destination_id::String
-    date::DateTime
+    # date::DateTime
     size::Float64
     info::I
 end

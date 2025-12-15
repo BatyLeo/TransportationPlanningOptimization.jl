@@ -87,7 +87,7 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
             size=row[COMMODITY_SIZE],
             quantity=Int(row[COMMODITY_QUANTITY]),
             arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),
-            info=InboundCommodityInfo(row[COMMODITY_MAX_DELIVERY_TIME]),
+            max_delivery_time=Week(row[COMMODITY_MAX_DELIVERY_TIME]),
         )
     end
 
@@ -102,9 +102,7 @@ struct InboundNodeInfo
     node_type::Symbol
 end
 
-struct InboundCommodityInfo
-    max_delivery_time::Int
-end
+struct InboundCommodityInfo end
 
 struct InboundArcInfo
     arc_type::Symbol

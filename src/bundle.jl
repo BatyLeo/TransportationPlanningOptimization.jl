@@ -1,5 +1,5 @@
-struct Bundle{I,J}
-    orders::Vector{Order{I}}
-    origin::NetworkNode{J}
-    destination::NetworkNode{J}
+struct Bundle{O<:Order}
+    orders::Vector{O}
+    origin_id::String
+    destination_id::String
 end
