@@ -1,8 +1,24 @@
-@kwdef struct Instance{B<:Bundle,G<:NetworkGraph}
+"""
+$TYPEDEF
+
+An `Instance` represents a transportation planning problem instance, containing bundles of orders, a network graph, and a time horizon.
+
+# Fields
+$TYPEDFIELDS
+"""
+@kwdef struct Instance{B<:Bundle,G<:NetworkGraph,TSG<:TimeSpaceGraph,TTG<:TravelTimeGraph}
+    "list of bundles in the instance"
     bundles::Vector{B}
+    "underlying network graph"
     network_graph::G
-    time_space_graph::Nothing = nothing    # Placeholder for future use
-    travel_time_graph::Nothing = nothing   # Placeholder for future use
+    "length of the time horizon in discrete time steps"
+    time_horizon_length::Int
+    "discretization time step for the instance"
+    time_step::Period
+    "time expanded graph (for order paths)"
+    time_space_graph::TSG
+    "travel time graph (for bundle paths)"
+    travel_time_graph::TTG
 end
 
 function Base.show(io::IO, instance::Instance)
@@ -10,22 +26,33 @@ function Base.show(io::IO, instance::Instance)
     nb_commodities = sum(
         length(order.commodities) for bundle in instance.bundles for order in bundle.orders
     )
+    padding = length(string(nb_commodities))
+    println(io, "Instance Summary:")
     println(
         io,
-        "Instance with $(length(instance.bundles)) bundles, $nb_orders orders, and $nb_commodities commodities.",
+        "  • Horizon: $(lpad(string(instance.time_horizon_length) * " time steps", 0)) ($(instance.time_step) per step)",
     )
-    return println(io, instance.network_graph)
+    println(io, "  • Commodities: $(lpad(nb_commodities, padding))")
+    println(io, "  • Orders:      $(lpad(nb_orders, padding))")
+    println(io, "  • Bundles:     $(lpad(length(instance.bundles), padding))")
+    print(io, "  • ", instance.network_graph)
+    print(io, "  • ", instance.time_space_graph)
+    print(io, "  • ", instance.travel_time_graph)
+    return nothing
 end
 
 function build_instance(
     nodes::Vector{<:NetworkNode},
-    arcs::Vector{<:NetworkArc},
+    raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
-    time_step,
+    time_step::Period,
+    arc_cost_types,
 ) where {is_date_arrival,ID,I}
-    # building the network graph
+    # Building the network graph
+    arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
     network_graph = NetworkGraph(nodes, arcs)
-    # wrapping commodities into light commodities
+
+    # Wrapping commodities into light commodities
     full_commodities = LightCommodity{is_date_arrival,I}[]
     # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_delivery_time_steps)
     order_dict = Dict{
@@ -61,6 +88,7 @@ function build_instance(
             order_dict[key] = (to_append, max_delivery_time_steps)
         end
     end
+    time_horizon_length = maximum(key[1] for key in keys(order_dict))
 
     # Build orders and bundles simultaneously in one pass
     bundle_dict = Dict{Tuple{String,String},Vector{Order{is_date_arrival,I}}}()
@@ -79,7 +107,20 @@ function build_instance(
             bundle_dict[bundle_key] = [order]
         end
     end
-
     bundles = [Bundle(bundle_dict[key], key[1], key[2]) for key in keys(bundle_dict)]
-    return Instance(; bundles, network_graph)
+
+    time_space_graph = TimeSpaceGraph(network_graph, time_horizon_length)
+    travel_time_graph = TravelTimeGraph()
+    return Instance(;
+        bundles,
+        network_graph,
+        time_space_graph,
+        travel_time_graph,
+        time_horizon_length,
+        time_step,
+    )
+end
+
+function time_horizon(instance::Instance)
+    return 1:(instance.time_horizon_length)
 end

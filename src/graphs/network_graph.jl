@@ -8,7 +8,7 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
         label_type=String,
         vertex_data_type=eltype(nodes),
         edge_data_type=eltype(arcs),
-        graph_data=Dict{Symbol,Int}(),
+        # graph_data=Dict{Symbol,Int}(),
     )
 
     for node in nodes

@@ -21,11 +21,26 @@ struct GridLinearArcCost <: AbstractArcCostFunction end
 
 # cout arc de douane (qui passe par un point de douane)
 
+"""
+$TYPEDEF
+
+Representation of an arc in the network graph.
+
+# Fields
+$TYPEDFIELDS
+"""
 @kwdef struct NetworkArc{C<:AbstractArcCostFunction,K}
+    "id of the origin node"
     origin_id::String
+    "id of the destination node"
     destination_id::String
+    "travel time in number of discrete time steps (0 if less than the time discretization step)"
+    travel_time::Int
+    "capacity of the arc (in size units)"
     capacity::Int = typemax(Int)
+    "cost function associated with the arc"
     cost::C
+    "additional information associated with the arc"
     info::K = nothing
 end
 
@@ -35,7 +50,7 @@ function Base.show(io::IO, arc::NetworkArc)
         "NetworkArc(",
         "origin_id=$(arc.origin_id), ",
         "destination_id=$(arc.destination_id), ",
-        "capacity=$(arc.capacity), ",
+        "capacity=$(arc.capacity == typemax(Int) ? "∞" : string(arc.capacity)), ",
         "cost=$(arc.cost), ",
         "info=$(arc.info)",
         ")",
@@ -91,14 +106,14 @@ const MyCostTypes = Union{LinearArcCost, BinPackingArcCost}
 typed_arcs = collect_arcs(MyCostTypes, arcs)
 ```
 """
-function collect_arcs(cost_types::Tuple, arcs; validate::Bool=true)
+function collect_arcs(cost_types::Tuple, arcs::Vector{<:Arc}, time_step::Period; validate::Bool=true)
     # Convert tuple to Union
     CostUnion = Union{cost_types...}
-    return collect_arcs(CostUnion, arcs; validate=validate)
+    return collect_arcs(CostUnion, arcs, time_step; validate=validate)
 end
 
 function collect_arcs(
-    union_types::Type{CostUnion}, arcs; validate::Bool=true
+    union_types::Type{CostUnion}, arcs::Vector{<:Arc}, time_step::Period; validate::Bool=true
 ) where {CostUnion}
     if isempty(arcs)
         return NetworkArc{CostUnion,Nothing}[]
@@ -126,5 +141,14 @@ function collect_arcs(
     end
 
     # Convert all arcs to the union type
-    return [NetworkArc{CostUnion,K}(arc) for arc in arcs]
+    return [
+        NetworkArc{CostUnion,K}(;
+            origin_id=arc.origin_id,
+            destination_id=arc.destination_id,
+            capacity=arc.capacity,
+            travel_time=period_steps(arc.travel_time, time_step; roundup=ceil),
+            cost=arc.cost,
+            info=arc.info,
+        ) for arc in arcs
+    ]
 end

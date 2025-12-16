@@ -19,7 +19,7 @@ period_steps(Hour(25), Week(1))                   # => 1
 period_steps(Day(1), Hour(12); roundup=floor)     # => 2
 ```
 """
-function period_steps(p::Dates.Period, step::Dates.Period; roundup=floor)::Int
+function period_steps(p::Dates.Period, step::Dates.Period; roundup=floor)
     floored_or_ceiled = roundup(p, step)
     return div(Dates.value(floored_or_ceiled), Dates.value(step))
 end

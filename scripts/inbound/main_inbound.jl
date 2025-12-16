@@ -1,7 +1,9 @@
 using Dates: Week
 using NetworkDesignOptimization
-push!(LOAD_PATH, joinpath(@__DIR__, "..", "..", "test"))
-using Inbound
+includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
+using .Inbound
+
+using NetworkDesignOptimization
 
 instance_name = "small"
 datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
@@ -17,5 +19,7 @@ eltype(nodes)
 eltype(arcs)
 eltype(commodities)
 
-instance = build_instance(nodes, arcs, commodities, Week(1));
+instance = build_instance(
+    nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
+);
 instance

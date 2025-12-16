@@ -8,11 +8,17 @@ using Graphs: Graphs
 using MetaGraphsNext: MetaGraphsNext, MetaGraph
 
 include("parsing/commodity.jl")
+
 include("commodity.jl")
 include("order.jl")
+
 include("graphs/network_node.jl")
 include("graphs/network_arc.jl")
+include("parsing/arc.jl")
 include("graphs/network_graph.jl")
+include("graphs/time_space_graph.jl")
+include("graphs/travel_time_graph.jl")
+
 include("bundle.jl")
 include("instance.jl")
 include("typed_instance.jl")
@@ -22,7 +28,7 @@ include("time_utils.jl")
 export LightCommodity
 export Instance, Bundle, Order, Commodity
 export build_instance
-export NetworkNode, NetworkArc
+export NetworkNode, NetworkArc, Arc
 export NetworkGraph
 
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
