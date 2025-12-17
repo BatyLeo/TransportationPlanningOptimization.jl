@@ -22,7 +22,9 @@ load_factor_file = joinpath(data_dir, "load_factor_min_estimated.csv")
     node_file, leg_file, commodity_file, model_file, load_factor_file
 );
 
-instance = build_instance(nodes, arcs, commodities, Week(12), (LinearArcCost, BinPackingArcCost));
+instance = build_instance(
+    nodes, arcs, commodities, Week(12), (LinearArcCost, BinPackingArcCost)
+);
 instance
 
 nodes

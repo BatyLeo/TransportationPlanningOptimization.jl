@@ -17,7 +17,11 @@ using .Inbound
         ]
         arcs = [
             NetworkArc(;
-                origin_id="1", destination_id="2", cost=LinearArcCost(5.0), info=nothing
+                origin_id="1",
+                destination_id="2",
+                travel_time=0,
+                cost=LinearArcCost(5.0),
+                info=nothing,
             ),
         ]
         commodities = [
@@ -49,7 +53,9 @@ end
     (; nodes, arcs, commodities) = read_inbound_instance(
         nodes_file, legs_file, commodities_file
     )
-    instance = build_instance(nodes, arcs, commodities, Week(1))
+    instance = build_instance(
+        nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
+    )
     nb_bundles = length(instance.bundles)
     nb_orders = sum(length(bundle.orders) for bundle in instance.bundles)
     nb_commodities = sum(
@@ -69,10 +75,18 @@ end
         ]
         arcs = [
             NetworkArc(;
-                origin_id="A", destination_id="B", cost=LinearArcCost(2.0), info=nothing
+                origin_id="A",
+                destination_id="B",
+                travel_time=0,
+                cost=LinearArcCost(2.0),
+                info=nothing,
             ),
             NetworkArc(;
-                origin_id="B", destination_id="C", cost=LinearArcCost(3.0), info=nothing
+                origin_id="B",
+                destination_id="C",
+                travel_time=0,
+                cost=LinearArcCost(3.0),
+                info=nothing,
             ),
         ]
         commodities = [
@@ -115,7 +129,11 @@ end
         ]
         arcs = [
             NetworkArc(;
-                origin_id="1", destination_id="2", cost=LinearArcCost(1.5), info=nothing
+                origin_id="1",
+                destination_id="2",
+                travel_time=0,
+                cost=LinearArcCost(1.5),
+                info=nothing,
             ),
         ]
         commodities = [
@@ -143,6 +161,7 @@ end
             NetworkArc(;
                 origin_id="1",
                 destination_id="2",
+                travel_time=0,
                 cost=BinPackingArcCost(100.0, 50.0),
                 info=nothing,
             ),
@@ -171,11 +190,16 @@ end
         ]
         arcs = [
             NetworkArc(;
-                origin_id="1", destination_id="2", cost=LinearArcCost(2.0), info=nothing
+                origin_id="1",
+                destination_id="2",
+                travel_time=0,
+                cost=LinearArcCost(2.0),
+                info=nothing,
             ),
             NetworkArc(;
                 origin_id="2",
                 destination_id="3",
+                travel_time=0,
                 cost=BinPackingArcCost(50.0, 40.0),
                 info=nothing,
             ),
@@ -211,7 +235,11 @@ end
         ]
         arcs = [
             NetworkArc(;
-                origin_id="1", destination_id="2", cost=LinearArcCost(1.0), info=nothing
+                origin_id="1",
+                destination_id="2",
+                travel_time=0,
+                cost=LinearArcCost(1.0),
+                info=nothing,
             ),
         ]
         commodities = [

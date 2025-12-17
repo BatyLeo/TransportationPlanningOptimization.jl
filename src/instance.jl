@@ -41,15 +41,17 @@ function Base.show(io::IO, instance::Instance)
     return nothing
 end
 
+function time_horizon(instance::Instance)
+    return 1:(instance.time_horizon_length)
+end
+
 function build_instance(
     nodes::Vector{<:NetworkNode},
-    raw_arcs::Vector{<:Arc},
+    arcs::Vector{<:NetworkArc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
-    arc_cost_types,
 ) where {is_date_arrival,ID,I}
     # Building the network graph
-    arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
     network_graph = NetworkGraph(nodes, arcs)
 
     # Wrapping commodities into light commodities
@@ -121,6 +123,13 @@ function build_instance(
     )
 end
 
-function time_horizon(instance::Instance)
-    return 1:(instance.time_horizon_length)
+function build_instance(
+    nodes::Vector{<:NetworkNode},
+    raw_arcs::Vector{<:Arc},
+    commodities::Vector{Commodity{is_date_arrival,ID,I}},
+    time_step::Period,
+    arc_cost_types, # TODO: have two methods, on ewith tuple of types, and a shorcut with only a single type
+) where {is_date_arrival,ID,I}
+    arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
+    return build_instance(nodes, arcs, commodities, time_step)
 end
