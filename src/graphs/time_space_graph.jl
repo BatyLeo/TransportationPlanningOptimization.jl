@@ -15,7 +15,8 @@ end
 
 function Base.show(io::IO, g::TimeSpaceGraph)
     return println(
-        io, "TimeSpaceGraph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs"
+        io,
+        "Time-Space Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
     )
 end
 

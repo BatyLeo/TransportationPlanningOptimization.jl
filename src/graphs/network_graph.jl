@@ -46,6 +46,7 @@ end
 
 function Base.show(io::IO, ng::NetworkGraph)
     return println(
-        io, "NetworkGraph with $(Graphs.nv(ng.graph)) nodes and $(Graphs.ne(ng.graph)) arcs"
+        io,
+        "Network Graph with $(Graphs.nv(ng.graph)) nodes and $(Graphs.ne(ng.graph)) arcs",
     )
 end

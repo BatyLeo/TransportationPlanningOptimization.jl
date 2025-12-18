@@ -8,7 +8,7 @@ end
 function Base.show(io::IO, g::TravelTimeGraph)
     return println(
         io,
-        "TravelTimeGraph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
+        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
     )
 end
 
