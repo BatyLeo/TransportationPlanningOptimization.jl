@@ -15,8 +15,7 @@ end
 
 function Base.show(io::IO, g::TimeSpaceGraph)
     return println(
-        io,
-        "TimeSpaceGraph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs over a time horizon of length $(g.time_horizon_length)",
+        io, "TimeSpaceGraph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs"
     )
 end
 
@@ -49,10 +48,20 @@ function add_network_arc!(
     destination::NetworkNode,
     arc::NetworkArc,
 )
+    (; time_horizon_length) = time_space_graph
     for t in time_horizon(time_space_graph)
         u_t = (origin.id, t)
-        v_t = (destination.id, t + arc.travel_time) # TODO: make sure evrything is correct and see if anything else is needed
-        Graphs.add_edge!(time_space_graph.graph, u_t, v_t, arc)
+        destination_time = t + arc.travel_time
+        if destination_time > time_horizon_length
+            destination_time -= time_horizon_length
+        end
+        v_t = (destination.id, destination_time)
+        was_added = Graphs.add_edge!(time_space_graph.graph, u_t, v_t, arc)
+        if !was_added
+            throw(
+                ErrorException("Unable to add edge from $u_t to $v_t to time-space graph")
+            )
+        end
     end
     return nothing
 end

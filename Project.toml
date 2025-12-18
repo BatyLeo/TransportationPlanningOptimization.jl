@@ -4,7 +4,7 @@ authors = ["Léo Baty and contributors"]
 version = "0.0.1"
 
 [workspace]
-projects = ["docs", "test"]
+projects = ["docs", "test", "scripts"]
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"

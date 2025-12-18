@@ -32,8 +32,6 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
                     """Duplicate arc detected:
                         - origin      : $(arc.origin_id)
                         - destination : $(arc.destination_id)
-                        - type        : $(arc.info.arc_type)
-                        - record      : $(arc)
                         An arc with the same origin and destination is already present in the graph.
                         Please ensure each arc between two nodes is unique.
                     """,
