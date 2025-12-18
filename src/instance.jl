@@ -99,6 +99,7 @@ function build_instance(
     for key in keys(order_dict)
         time_step_idx, origin_id, dest_id = key
         commodities_list, min_steps = order_dict[key]
+        min_steps = min(time_horizon_length, min_steps)
         order = Order{is_date_arrival,I}(commodities_list, time_step_idx, min_steps)
         push!(orders, order)
 
@@ -112,14 +113,14 @@ function build_instance(
     bundles = [Bundle(bundle_dict[key], key[1], key[2]) for key in keys(bundle_dict)]
 
     time_space_graph = TimeSpaceGraph(network_graph, time_horizon_length)
-    travel_time_graph = TravelTimeGraph()
+    travel_time_graph = TravelTimeGraph(network_graph, bundles)
     return Instance(;
+        time_horizon_length,
+        time_step,
         bundles,
         network_graph,
         time_space_graph,
         travel_time_graph,
-        time_horizon_length,
-        time_step,
     )
 end
 

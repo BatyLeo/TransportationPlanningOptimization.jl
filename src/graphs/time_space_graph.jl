@@ -79,7 +79,7 @@ function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
     # Fill with timed copies of network nodes
     for node_id in MetaGraphsNext.labels(network_graph.graph)
         node = network_graph.graph[node_id]
-        add_network_node!(TimeSpaceGraph(graph, time_horizon_length), node)
+        add_network_node!(time_space_graph, node)
     end
 
     # Connect timed nodes according to network arcs

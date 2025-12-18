@@ -9,6 +9,7 @@ using MetaGraphsNext: MetaGraphsNext, MetaGraph
 
 include("commodity.jl")
 include("order.jl")
+include("bundle.jl")
 
 include("graphs/network_node.jl")
 include("graphs/network_arc.jl")
@@ -20,7 +21,6 @@ include("graphs/network_graph.jl")
 include("graphs/time_space_graph.jl")
 include("graphs/travel_time_graph.jl")
 
-include("bundle.jl")
 include("instance.jl")
 
 include("time_utils.jl")
