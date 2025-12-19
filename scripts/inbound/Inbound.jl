@@ -33,9 +33,10 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
     nodes = map(eachrow(df_nodes)) do row
         NetworkNode(;
             id="$(row[NODE_ID])",
+            node_type=Symbol(row[NODE_TYPE]),
             cost=row[NODE_COST],
             capacity=Int(row[NODE_CAPACITY]),
-            info=InboundNodeInfo(Symbol(row[NODE_TYPE])),
+            info=InboundNodeInfo(),
         )
     end
 
@@ -98,9 +99,7 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
     return (; nodes, arcs, commodities)
 end
 
-struct InboundNodeInfo
-    node_type::Symbol
-end
+struct InboundNodeInfo end
 
 struct InboundCommodityInfo end
 

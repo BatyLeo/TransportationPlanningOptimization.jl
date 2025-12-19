@@ -1,3 +1,9 @@
+"""
+$TYPEDEF
+
+# Fields
+$TYPEDFIELDS
+"""
 struct TravelTimeGraph{G<:MetaGraph}
     "underlying time-expanded graph"
     graph::G
@@ -12,17 +18,27 @@ function Base.show(io::IO, g::TravelTimeGraph)
     )
 end
 
+"""
+$TYPEDSIGNATURES
+
+Get the time horizon of the travel-time graph.
+"""
 function time_horizon(travel_time_graph::TravelTimeGraph)
     return 0:(travel_time_graph.max_time_steps)
 end
 
-# TODO: possible factorization with time space graph
-
 # TODO: not all nodes should be duplicated, destinations can only appear if τ=0
 function add_network_node!(travel_time_graph::TravelTimeGraph, node::NetworkNode)
-    for τ in time_horizon(travel_time_graph)
-        Graphs.add_vertex!(travel_time_graph.graph, (node.id, τ), node)
+    if node.node_type == :destination
+        # Only add destinations at τ=0
+        Graphs.add_vertex!(travel_time_graph.graph, (node.id, 0), node)
+    else
+        # Add all other nodes at every time step
+        for τ in time_horizon(travel_time_graph)
+            Graphs.add_vertex!(travel_time_graph.graph, (node.id, τ), node)
+        end
     end
+    return nothing
 end
 
 function add_network_arc!(
@@ -31,23 +47,23 @@ function add_network_arc!(
     destination::NetworkNode,
     arc::NetworkArc,
 )
-    (; max_time_steps) = travel_time_graph
-    T = travel_time_graph.max_time_steps
-    for τ in time_horizon(travel_time_graph)
-        t = T - τ
-        u_t = (origin.id, t)
-        destination_time = t + arc.travel_time
-        if destination_time > max_time_steps
-            destination_time -= max_time_steps
-        end
-        v_t = (destination.id, destination_time)
-        was_added = Graphs.add_edge!(travel_time_graph.graph, u_t, v_t, arc)
-        if !was_added
-            throw(
-                ErrorException("Unable to add edge from $u_t to $v_t to travel-time graph")
-            )
-        end
-    end
+    # (; max_time_steps) = travel_time_graph
+    # T = travel_time_graph.max_time_steps
+    # for τ in time_horizon(travel_time_graph)
+    #     t = T - τ
+    #     u_t = (origin.id, t)
+    #     destination_time = t + arc.travel_time
+    #     if destination_time > max_time_steps
+    #         destination_time -= max_time_steps
+    #     end
+    #     v_t = (destination.id, destination_time)
+    #     was_added = Graphs.add_edge!(travel_time_graph.graph, u_t, v_t, arc)
+    #     if !was_added
+    #         throw(
+    #             ErrorException("Unable to add edge from $u_t to $v_t to travel-time graph")
+    #         )
+    #     end
+    # end
     return nothing
 end
 

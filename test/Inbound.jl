@@ -38,14 +38,12 @@ const COMMODITY_ARRIVAL_DATE = :delivery_date
 const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
 
-"""
+""" 
     InboundNodeInfo
 
 Test data structure for node metadata in inbound instances.
 """
-struct InboundNodeInfo
-    node_type::Symbol
-end
+struct InboundNodeInfo end
 
 """
     InboundArcInfo
@@ -82,20 +80,19 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
     df_commodities = DataFrame(CSV.File(commmodity_file))
 
     nodes = map(eachrow(df_nodes)) do row
-        node_type = if row[NODE_TYPE] == "supplier"
-            Origin()
+        node_type_symbol = if row[NODE_TYPE] == "supplier"
+            :origin
         elseif row[NODE_TYPE] == "plant"
-            Destination()
+            :destination
         else
-            Other()
+            :other
         end
 
         NetworkNode(;
             id="$(row[NODE_ID])",
-            type=NodeType(node_type),
+            node_type=node_type_symbol,
             cost=row[NODE_COST],
             capacity=Int(row[NODE_CAPACITY]),
-            info=InboundNodeInfo(Symbol(row[NODE_TYPE])),
         )
     end
 

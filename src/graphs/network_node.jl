@@ -1,22 +1,26 @@
-abstract type AbstractNodeType end
+struct NetworkNode{J}
+    id::String
+    node_type::Symbol
+    cost::Float64
+    capacity::Int
+    info::J
 
-struct Origin <: AbstractNodeType end
-struct Destination <: AbstractNodeType end
-struct Other <: AbstractNodeType end
-@wrapped struct NodeType <: WrappedUnion
-    union::Union{Origin,Destination,Other}
+    function NetworkNode{J}(id, node_type, cost, capacity, info) where {J}
+        if node_type ∉ (:origin, :destination, :other)
+            throw(ArgumentError("node_type must be :origin, :destination, or :other, got :$node_type"))
+        end
+        return new{J}(id, node_type, cost, capacity, info)
+    end
 end
 
-Base.show(io::IO, ::Origin) = print(io, "Origin")
-Base.show(io::IO, ::Destination) = print(io, "Destination")
-Base.show(io::IO, ::Other) = print(io, "Other")
-
-@kwdef struct NetworkNode{J}
-    id::String
-    type::NodeType = NodeType(Other())
-    cost::Float64 = 0.0
-    capacity::Int = typemax(Int)
-    info::J = nothing
+function NetworkNode(;
+    id::String,
+    node_type::Symbol,
+    cost::Float64=0.0,
+    capacity::Int=typemax(Int),
+    info=nothing,
+)
+    return NetworkNode{typeof(info)}(id, node_type, cost, capacity, info)
 end
 
 function Base.show(io::IO, node::NetworkNode)
@@ -24,7 +28,7 @@ function Base.show(io::IO, node::NetworkNode)
         io,
         "NetworkNode(",
         "id=$(node.id), ",
-        "type=$(node.type), ",
+        "node_type=$(node.node_type), ",
         "cost=$(node.cost), ",
         "capacity=$(node.capacity == typemax(Int) ? "∞" : string(node.capacity)), ",
         "info=$(node.info)",
