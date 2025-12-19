@@ -82,8 +82,17 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
     df_commodities = DataFrame(CSV.File(commmodity_file))
 
     nodes = map(eachrow(df_nodes)) do row
+        node_type = if row[NODE_TYPE] == "supplier"
+            Origin()
+        elseif row[NODE_TYPE] == "plant"
+            Destination()
+        else
+            Other()
+        end
+
         NetworkNode(;
             id="$(row[NODE_ID])",
+            type=NodeType(node_type),
             cost=row[NODE_COST],
             capacity=Int(row[NODE_CAPACITY]),
             info=InboundNodeInfo(Symbol(row[NODE_TYPE])),

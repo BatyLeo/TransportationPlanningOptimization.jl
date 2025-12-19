@@ -3,8 +3,6 @@ using NetworkDesignOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-using NetworkDesignOptimization
-
 instance_name = "small"
 datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
@@ -23,3 +21,4 @@ instance = build_instance(
     nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
 );
 instance
+nodes

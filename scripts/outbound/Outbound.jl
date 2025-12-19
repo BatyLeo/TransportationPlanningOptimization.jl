@@ -85,8 +85,17 @@ function read_outbound_instance(
         else
             parse.(Int, split(row[NODE_BTS_CANDIDATES], ";")[1:(end - 1)])
         end
+        node_type = if row[NODE_TYPE] == "PC"
+            Origin()
+        elseif row[NODE_TYPE] == "ZG"
+            Destination()
+        else
+            Other()
+        end
+
         NetworkNode(;
             id="$(row[NODE_ID])",
+            type=NodeType(node_type),
             cost=0.0,
             info=OutboundNodeInfo(Symbol(row[NODE_TYPE]), list),
         )

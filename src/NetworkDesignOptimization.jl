@@ -6,6 +6,7 @@ using Dates: Dates, DateTime, Period
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
 using MetaGraphsNext: MetaGraphsNext, MetaGraph
+using WrappedUnions: WrappedUnion, @wrapped
 
 include("commodity.jl")
 include("order.jl")
@@ -35,5 +36,7 @@ export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
 export collect_arcs
 
 export evaluate
+
+export NodeType, Origin, Destination, Other
 
 end
