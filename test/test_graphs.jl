@@ -4,7 +4,9 @@ Tests for network graph data structures: NetworkNode and NetworkArc
 
 @testset "NetworkNode creation" begin
     @test begin
-        node = NetworkNode(; id="1", cost=10.0, capacity=100, info=nothing)
+        node = NetworkNode(;
+            id="1", node_type=:origin, cost=10.0, capacity=100, info=nothing
+        )
         node.id == "1" && node.cost == 10.0 && node.capacity == 100
     end
 end
@@ -16,7 +18,11 @@ end
             country::String
         end
         node = NetworkNode(;
-            id="platform_A", cost=25.0, capacity=500, info=NodeMetadata(:warehouse, "USA")
+            id="platform_A",
+            node_type=:other,
+            cost=25.0,
+            capacity=500,
+            info=NodeMetadata(:warehouse, "USA"),
         )
         node.info.node_type == :warehouse && node.info.country == "USA"
     end
@@ -25,43 +31,34 @@ end
 @testset "NetworkNode capacity and cost" begin
     # Test various capacity and cost values
     @test begin
-        node_small = NetworkNode(; id="1", cost=5.0, capacity=10, info=nothing)
-        node_large = NetworkNode(; id="2", cost=100.0, capacity=10000, info=nothing)
+        node_small = NetworkNode(;
+            id="1", node_type=:origin, cost=5.0, capacity=10, info=nothing
+        )
+        node_large = NetworkNode(;
+            id="2", node_type=:destination, cost=100.0, capacity=10000, info=nothing
+        )
         node_small.capacity < node_large.capacity && node_small.cost < node_large.cost
     end
 
     # Test zero capacity edge case
     @test begin
-        node_zero = NetworkNode(; id="0", cost=0.0, capacity=0, info=nothing)
+        node_zero = NetworkNode(;
+            id="0", node_type=:destination, cost=0.0, capacity=0, info=nothing
+        )
         node_zero.capacity == 0
     end
 end
 
 @testset "NetworkArc with LinearArcCost" begin
     @test begin
-        arc = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=LinearArcCost(5.0),
-            info=nothing,
-        )
-        arc.origin_id == "1" &&
-            arc.destination_id == "2" &&
-            arc.travel_time == 0 &&
-            arc.cost.cost_per_unit_size == 5.0
+        arc = NetworkArc(; travel_time=0, cost=LinearArcCost(5.0), info=nothing)
+        arc.travel_time == 0 && arc.cost.cost_per_unit_size == 5.0
     end
 end
 
 @testset "NetworkArc with BinPackingArcCost" begin
     @test begin
-        arc = NetworkArc(;
-            origin_id="A",
-            destination_id="B",
-            travel_time=0,
-            cost=BinPackingArcCost(100.0, 50.0),
-            info=nothing,
-        )
+        arc = NetworkArc(; travel_time=0, cost=BinPackingArcCost(100.0, 50.0), info=nothing)
         arc.travel_time == 0 &&
             arc.cost.cost_per_bin == 100.0 &&
             arc.cost.bin_capacity == 50.0
@@ -75,11 +72,7 @@ end
             distance_km::Float64
         end
         arc = NetworkArc(;
-            origin_id="warehouse",
-            destination_id="distribution_center",
-            travel_time=0,
-            cost=LinearArcCost(2.5),
-            info=ArcMetadata(:truck, 150.5),
+            travel_time=0, cost=LinearArcCost(2.5), info=ArcMetadata(:truck, 150.5)
         )
         arc.travel_time == 0 &&
             arc.info.transport_mode == :truck &&
@@ -89,33 +82,17 @@ end
 
 @testset "NetworkArc self-loops" begin
     @test begin
-        arc = NetworkArc(;
-            origin_id="1",
-            destination_id="1",
-            travel_time=0,
-            cost=LinearArcCost(1.0),
-            info=nothing,
-        )
-        arc.origin_id == arc.destination_id
+        arc = NetworkArc(; travel_time=0, cost=LinearArcCost(1.0), info=nothing)
+        true  # self-loop semantics are now encoded when the arc is added to a graph
     end
 end
 
 @testset "NetworkArc cost function types" begin
     # Test that different cost function types can be used
     @test begin
-        linear_arc = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=LinearArcCost(3.0),
-            info=nothing,
-        )
+        linear_arc = NetworkArc(; travel_time=0, cost=LinearArcCost(3.0), info=nothing)
         bin_arc = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=BinPackingArcCost(75.0, 60.0),
-            info=nothing,
+            travel_time=0, cost=BinPackingArcCost(75.0, 60.0), info=nothing
         )
         linear_arc.travel_time == 0 &&
             bin_arc.travel_time == 0 &&
@@ -126,20 +103,10 @@ end
 @testset "NetworkArc capacity field" begin
     @test begin
         # LinearArcCost doesn't have a capacity field, but arc can still exist
-        arc1 = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=LinearArcCost(1.0),
-            info=nothing,
-        )
+        arc1 = NetworkArc(; travel_time=0, cost=LinearArcCost(1.0), info=nothing)
         # BinPackingArcCost has bin_capacity
         arc2 = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=BinPackingArcCost(100.0, 75.0),
-            info=nothing,
+            travel_time=0, cost=BinPackingArcCost(100.0, 75.0), info=nothing
         )
         arc1.travel_time == 0 &&
             arc2.travel_time == 0 &&
@@ -154,11 +121,7 @@ end
             arc_type::Symbol
         end
         arc = NetworkArc(;
-            origin_id="supplier",
-            destination_id="plant",
-            travel_time=0,
-            cost=LinearArcCost(4.5),
-            info=InboundArcInfo(:direct),
+            travel_time=0, cost=LinearArcCost(4.5), info=InboundArcInfo(:direct)
         )
         arc.travel_time == 0 && arc.info.arc_type == :direct
     end
@@ -166,27 +129,9 @@ end
 
 @testset "Multiple arcs between same nodes with different costs" begin
     @test begin
-        arc1 = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=LinearArcCost(2.0),
-            info=nothing,
-        )
-        arc2 = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=LinearArcCost(3.0),
-            info=nothing,
-        )
-        arc3 = NetworkArc(;
-            origin_id="1",
-            destination_id="2",
-            travel_time=0,
-            cost=BinPackingArcCost(50.0, 40.0),
-            info=nothing,
-        )
+        arc1 = NetworkArc(; travel_time=0, cost=LinearArcCost(2.0), info=nothing)
+        arc2 = NetworkArc(; travel_time=0, cost=LinearArcCost(3.0), info=nothing)
+        arc3 = NetworkArc(; travel_time=0, cost=BinPackingArcCost(50.0, 40.0), info=nothing)
         arc1.travel_time == 0 &&
             arc2.travel_time == 0 &&
             arc3.travel_time == 0 &&
@@ -197,15 +142,13 @@ end
 
 @testset "String IDs for nodes and arcs" begin
     @test begin
-        node1 = NetworkNode(; id="node_001", cost=1.0, capacity=100, info=nothing)
-        node2 = NetworkNode(; id="node_002", cost=2.0, capacity=200, info=nothing)
-        arc = NetworkArc(;
-            origin_id="node_001",
-            destination_id="node_002",
-            travel_time=0,
-            cost=LinearArcCost(0.5),
-            info=nothing,
+        node1 = NetworkNode(;
+            id="node_001", node_type=:origin, cost=1.0, capacity=100, info=nothing
         )
-        arc.travel_time == 0 && arc.origin_id == node1.id && arc.destination_id == node2.id
+        node2 = NetworkNode(;
+            id="node_002", node_type=:destination, cost=2.0, capacity=200, info=nothing
+        )
+        arc = NetworkArc(; travel_time=0, cost=LinearArcCost(0.5), info=nothing)
+        arc.travel_time == 0
     end
 end

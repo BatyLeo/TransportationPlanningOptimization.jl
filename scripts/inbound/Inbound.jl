@@ -60,13 +60,16 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
         else
             BinPackingArcCost(row[ARC_SHIPMENT_COST], row[ARC_CAPACITY])
         end
-        return NetworkArc(;
+        return Arc(;
             origin_id="$(row[ARC_ORIGIN_ID])",
             destination_id="$(row[ARC_DESTINATION_ID])",
+            travel_time=Week(row[ARC_TRAVEL_TIME]),
             cost=cost,
+            capacity=row[ARC_CAPACITY],
             info=InboundArcInfo(Symbol(row[ARC_TYPE])),
         )
     end
+
     # keep only the first arc for each (origin_id, destination_id) pair
     seen = Set{Tuple{String,String}}()
     raw_arcs = filter(arc -> begin
@@ -79,7 +82,7 @@ function read_inbound_instance(node_file::String, leg_file::String, commmodity_f
         end
     end, raw_arcs)
     # filter!(arc -> arc.info.arc_type in ALLOWED_ARC_TYPES, raw_arcs)
-    arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
+    arcs = raw_arcs  # leave conversion to build_instance to control cost types and time-step
 
     commodities = map(eachrow(df_commodities)) do row
         Commodity(;

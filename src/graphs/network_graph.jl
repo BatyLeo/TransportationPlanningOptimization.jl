@@ -2,12 +2,14 @@ struct NetworkGraph{G<:MetaGraph}
     graph::G
 end
 
-function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
+function NetworkGraph(
+    nodes::Vector{<:NetworkNode}, arcs::Vector{<:Tuple{String,String,NA}}
+) where {NA<:NetworkArc}
     network_graph = MetaGraph(
         Graphs.DiGraph();
         label_type=String,
         vertex_data_type=eltype(nodes),
-        edge_data_type=eltype(arcs),
+        edge_data_type=NA,
         # graph_data=Dict{Symbol,Int}(),
     )
 
@@ -25,20 +27,20 @@ function NetworkGraph(nodes::Vector{<:NetworkNode}, arcs::Vector{<:NetworkArc})
         Graphs.add_vertex!(network_graph, node.id, node)
     end
 
-    for arc in arcs
-        if MetaGraphsNext.haskey(network_graph, arc.origin_id, arc.destination_id)
+    for (origin_id, destination_id, arc) in arcs
+        if MetaGraphsNext.haskey(network_graph, origin_id, destination_id)
             throw(
                 ErrorException(
                     """Duplicate arc detected:
-                        - origin      : $(arc.origin_id)
-                        - destination : $(arc.destination_id)
+                        - origin      : $origin_id
+                        - destination : $destination_id
                         An arc with the same origin and destination is already present in the graph.
                         Please ensure each arc between two nodes is unique.
                     """,
                 ),
             )
         end
-        Graphs.add_edge!(network_graph, arc.origin_id, arc.destination_id, arc)
+        Graphs.add_edge!(network_graph, origin_id, destination_id, arc)
     end
 
     return NetworkGraph(network_graph)

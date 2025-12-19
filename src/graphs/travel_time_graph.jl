@@ -33,9 +33,22 @@ function add_network_node!(travel_time_graph::TravelTimeGraph, node::NetworkNode
         # Only add destinations at τ=0
         Graphs.add_vertex!(travel_time_graph.graph, (node.id, 0), node)
     else
+        # TODO:
+        #= in the case of origins, we may want to only add up to the maximum duration of
+        bundles starting from this origin =#
+
         # Add all other nodes at every time step
         for τ in time_horizon(travel_time_graph)
             Graphs.add_vertex!(travel_time_graph.graph, (node.id, τ), node)
+        end
+    end
+
+    # Add shortcut arcs
+    if node.node_type == :origin
+        for τ in 1:(travel_time_graph.max_time_steps)
+            u = (node.id, τ - 1)
+            v = (node.id, τ)
+            Graphs.add_edge!(travel_time_graph.graph, u, v, SHORTCUT_ARC)
         end
     end
     return nothing
@@ -47,23 +60,29 @@ function add_network_arc!(
     destination::NetworkNode,
     arc::NetworkArc,
 )
-    # (; max_time_steps) = travel_time_graph
-    # T = travel_time_graph.max_time_steps
-    # for τ in time_horizon(travel_time_graph)
-    #     t = T - τ
-    #     u_t = (origin.id, t)
-    #     destination_time = t + arc.travel_time
-    #     if destination_time > max_time_steps
-    #         destination_time -= max_time_steps
-    #     end
-    #     v_t = (destination.id, destination_time)
-    #     was_added = Graphs.add_edge!(travel_time_graph.graph, u_t, v_t, arc)
-    #     if !was_added
-    #         throw(
-    #             ErrorException("Unable to add edge from $u_t to $v_t to travel-time graph")
-    #         )
-    #     end
-    # end
+    (; max_time_steps) = travel_time_graph
+    T = travel_time_graph.max_time_steps
+    for τ in time_horizon(travel_time_graph)
+        t = T - τ
+        u_t = (origin.id, t)
+        destination_time = t + arc.travel_time
+        if destination_time > max_time_steps
+            destination_time -= max_time_steps
+        end
+        v_t = (destination.id, destination_time)
+
+        if MetaGraphsNext.haskey(travel_time_graph.graph, u_t) &&
+            MetaGraphsNext.haskey(travel_time_graph.graph, v_t)
+            was_added = Graphs.add_edge!(travel_time_graph.graph, u_t, v_t, arc)
+            if !was_added
+                throw(
+                    ErrorException(
+                        "Unable to add edge from $u_t to $v_t to travel-time graph"
+                    ),
+                )
+            end
+        end
+    end
     return nothing
 end
 

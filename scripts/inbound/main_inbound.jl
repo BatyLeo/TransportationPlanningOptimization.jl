@@ -21,4 +21,3 @@ instance = build_instance(
     nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
 );
 instance
-nodes

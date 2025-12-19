@@ -106,15 +106,17 @@ function collect_arcs(
         end
     end
 
-    # Convert all arcs to the union type
+    # Convert all arcs to the union type and return as (origin_id, destination_id, NetworkArc)
     return [
-        NetworkArc{CostUnion,K}(;
-            origin_id=arc.origin_id,
-            destination_id=arc.destination_id,
-            capacity=arc.capacity,
-            travel_time=period_steps(arc.travel_time, time_step; roundup=ceil),
-            cost=arc.cost,
-            info=arc.info,
+        (
+            arc.origin_id,
+            arc.destination_id,
+            NetworkArc{CostUnion,K}(;
+                capacity=arc.capacity,
+                travel_time=period_steps(arc.travel_time, time_step; roundup=ceil),
+                cost=arc.cost,
+                info=arc.info,
+            ),
         ) for arc in arcs
     ]
 end

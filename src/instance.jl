@@ -47,11 +47,11 @@ end
 
 function build_instance(
     nodes::Vector{<:NetworkNode},
-    arcs::Vector{<:NetworkArc},
+    arcs::Vector{<:Tuple{String,String,<:NetworkArc}},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
 ) where {is_date_arrival,ID,I}
-    # Building the network graph
+    # Building the network graph (arcs are provided as (origin_id,destination_id,NetworkArc))
     network_graph = NetworkGraph(nodes, arcs)
 
     # Wrapping commodities into light commodities
@@ -129,7 +129,7 @@ function build_instance(
     raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
-    arc_cost_types, # TODO: have two methods, on ewith tuple of types, and a shorcut with only a single type
+    arc_cost_types, # TODO: have two methods, one with tuple of types, and a shorcut with only a single type
 ) where {is_date_arrival,ID,I}
     arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
     return build_instance(nodes, arcs, commodities, time_step)

@@ -36,6 +36,4 @@ export collect_arcs
 
 export evaluate
 
-export NodeType, Origin, Destination, Other
-
 end

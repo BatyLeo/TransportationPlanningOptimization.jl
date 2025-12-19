@@ -7,7 +7,11 @@ struct NetworkNode{J}
 
     function NetworkNode{J}(id, node_type, cost, capacity, info) where {J}
         if node_type ∉ (:origin, :destination, :other)
-            throw(ArgumentError("node_type must be :origin, :destination, or :other, got :$node_type"))
+            throw(
+                ArgumentError(
+                    "node_type must be :origin, :destination, or :other, got :$node_type"
+                ),
+            )
         end
         return new{J}(id, node_type, cost, capacity, info)
     end
