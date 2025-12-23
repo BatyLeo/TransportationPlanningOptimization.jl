@@ -15,7 +15,8 @@ end
 
 function Base.show(io::IO, g::TimeSpaceGraph)
     return println(
-        io, "TimeSpaceGraph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs"
+        io,
+        "Time-Space Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
     )
 end
 
@@ -51,7 +52,7 @@ function add_network_arc!(
     (; time_horizon_length) = time_space_graph
     for t in time_horizon(time_space_graph)
         u_t = (origin.id, t)
-        destination_time = t + arc.travel_time
+        destination_time = t + arc.travel_time_steps
         if destination_time > time_horizon_length
             destination_time -= time_horizon_length
         end
@@ -79,7 +80,7 @@ function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
     # Fill with timed copies of network nodes
     for node_id in MetaGraphsNext.labels(network_graph.graph)
         node = network_graph.graph[node_id]
-        add_network_node!(TimeSpaceGraph(graph, time_horizon_length), node)
+        add_network_node!(time_space_graph, node)
     end
 
     # Connect timed nodes according to network arcs

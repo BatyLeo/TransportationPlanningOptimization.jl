@@ -30,12 +30,8 @@ Representation of an arc in the network graph.
 $TYPEDFIELDS
 """
 @kwdef struct NetworkArc{C<:AbstractArcCostFunction,K}
-    "id of the origin node"
-    origin_id::String
-    "id of the destination node"
-    destination_id::String
     "travel time in number of discrete time steps (0 if less than the time discretization step)"
-    travel_time::Int
+    travel_time_steps::Int
     "capacity of the arc (in size units)"
     capacity::Int = typemax(Int)
     "cost function associated with the arc"
@@ -44,12 +40,12 @@ $TYPEDFIELDS
     info::K = nothing
 end
 
+const SHORTCUT_ARC = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(0.0))
+
 function Base.show(io::IO, arc::NetworkArc)
     return print(
         io,
         "NetworkArc(",
-        "origin_id=$(arc.origin_id), ",
-        "destination_id=$(arc.destination_id), ",
         "capacity=$(arc.capacity == typemax(Int) ? "∞" : string(arc.capacity)), ",
         "cost=$(arc.cost), ",
         "info=$(arc.info)",
@@ -61,13 +57,14 @@ end
 # This allows automatic conversion to union types
 function NetworkArc{C,K}(arc::NetworkArc) where {C<:AbstractArcCostFunction,K}
     return NetworkArc{C,K}(;
-        origin_id=arc.origin_id,
-        destination_id=arc.destination_id,
         capacity=arc.capacity,
+        travel_time=arc.travel_time_steps,
         cost=arc.cost,
         info=arc.info,
     )
 end
+
+travel_time_steps(arc::NetworkArc) = arc.travel_time_steps
 
 function evaluate(arc_f::AbstractArcCostFunction)
     return 0.0

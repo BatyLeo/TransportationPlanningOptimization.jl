@@ -45,42 +45,59 @@ function time_horizon(instance::Instance)
     return 1:(instance.time_horizon_length)
 end
 
+# By default, group by origin and destination IDs
+function _default_group_by(commodity::Commodity)
+    return nothing
+end
+
 function build_instance(
     nodes::Vector{<:NetworkNode},
-    arcs::Vector{<:NetworkArc},
+    arcs::Vector{<:Tuple{String,String,<:NetworkArc}},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
-    time_step::Period,
+    time_step::Period;
+    group_by=_default_group_by,
 ) where {is_date_arrival,ID,I}
-    # Building the network graph
+    # Building the network graph (arcs are provided as (origin_id,destination_id,NetworkArc))
     network_graph = NetworkGraph(nodes, arcs)
 
     # Wrapping commodities into light commodities
     full_commodities = LightCommodity{is_date_arrival,I}[]
     # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_delivery_time_steps)
+    first_key = (
+        1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
+    )
     order_dict = Dict{
-        Tuple{Int,String,String},Tuple{Vector{LightCommodity{is_date_arrival,I}},Int}
+        typeof(first_key),Tuple{Vector{LightCommodity{is_date_arrival,I}},Int}
     }()
 
     # normalize all dates to Date so DateTime operands are handled consistently
     start_date = minimum(Dates.Date.([c.date for c in commodities]))
-    for comm in commodities
+
+    for commodity in commodities
         to_append = [
             LightCommodity(;
-                origin_id=comm.origin_id,
-                destination_id=comm.destination_id,
-                size=comm.size,
-                info=comm.info,
+                origin_id=commodity.origin_id,
+                destination_id=commodity.destination_id,
+                size=commodity.size,
+                info=commodity.info,
                 is_date_arrival=is_date_arrival,
-            ) for _ in 1:(comm.quantity)
+            ) for _ in 1:(commodity.quantity)
         ]
         max_delivery_time_steps = period_steps(
-            comm.max_delivery_time, time_step; roundup=floor
+            commodity.max_delivery_time, time_step; roundup=floor
         )
         append!(full_commodities, to_append)
         # time_step_idx relative to the earliest arrival_date (discretized by time_step)
         time_step_idx =
-            period_steps(Dates.Date(comm.date) - start_date, time_step; roundup=floor) + 1
-        key = (time_step_idx, comm.origin_id, comm.destination_id)
+            period_steps(
+                Dates.Date(commodity.date) - start_date, time_step; roundup=floor
+            ) + 1
+        key = (
+            time_step_idx,
+            commodity.origin_id,
+            commodity.destination_id,
+            group_by(commodity),
+        )
 
         if haskey(order_dict, key)
             commodities_list, min_steps = order_dict[key]
@@ -93,16 +110,22 @@ function build_instance(
     time_horizon_length = maximum(key[1] for key in keys(order_dict))
 
     # Build orders and bundles simultaneously in one pass
-    bundle_dict = Dict{Tuple{String,String},Vector{Order{is_date_arrival,I}}}()
+    first_group_key = (
+        commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
+    )
+    bundle_dict = Dict{
+        Tuple{String,String,eltype(first_group_key)},Vector{Order{is_date_arrival,I}}
+    }()
     orders = Order{is_date_arrival,I}[]
 
     for key in keys(order_dict)
-        time_step_idx, origin_id, dest_id = key
+        time_step_idx, origin_id, destination_id, group_key = key
         commodities_list, min_steps = order_dict[key]
+        min_steps = min(time_horizon_length, min_steps)
         order = Order{is_date_arrival,I}(commodities_list, time_step_idx, min_steps)
         push!(orders, order)
 
-        bundle_key = (origin_id, dest_id)
+        bundle_key = (origin_id, destination_id, group_key)
         if haskey(bundle_dict, bundle_key)
             push!(bundle_dict[bundle_key], order)
         else
@@ -112,14 +135,14 @@ function build_instance(
     bundles = [Bundle(bundle_dict[key], key[1], key[2]) for key in keys(bundle_dict)]
 
     time_space_graph = TimeSpaceGraph(network_graph, time_horizon_length)
-    travel_time_graph = TravelTimeGraph()
+    travel_time_graph = TravelTimeGraph(network_graph, bundles)
     return Instance(;
+        time_horizon_length,
+        time_step,
         bundles,
         network_graph,
         time_space_graph,
         travel_time_graph,
-        time_horizon_length,
-        time_step,
     )
 end
 
@@ -128,8 +151,9 @@ function build_instance(
     raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
-    arc_cost_types, # TODO: have two methods, on ewith tuple of types, and a shorcut with only a single type
+    arc_cost_types; # TODO: have two methods, one with tuple of types, and a shorcut with only a single type
+    group_by=_default_group_by,
 ) where {is_date_arrival,ID,I}
     arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
-    return build_instance(nodes, arcs, commodities, time_step)
+    return build_instance(nodes, arcs, commodities, time_step; group_by=group_by)
 end

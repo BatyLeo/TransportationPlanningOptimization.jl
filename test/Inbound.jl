@@ -38,14 +38,12 @@ const COMMODITY_ARRIVAL_DATE = :delivery_date
 const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
 
-"""
+""" 
     InboundNodeInfo
 
 Test data structure for node metadata in inbound instances.
 """
-struct InboundNodeInfo
-    node_type::Symbol
-end
+struct InboundNodeInfo end
 
 """
     InboundArcInfo
@@ -64,7 +62,7 @@ Test data structure for commodity metadata in inbound instances.
 struct InboundCommodityInfo end
 
 """
-    read_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
+    parse_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
 
 Read an inbound instance from three CSV files: nodes, legs, and commodities.
 
@@ -76,17 +74,27 @@ Returns a named tuple `(; nodes, arcs, commodities)` containing:
 The function performs deduplication of arcs (keeps only the first arc for each 
 origin-destination pair) and handles heterogeneous cost function types.
 """
-function read_inbound_instance(node_file::String, leg_file::String, commmodity_file::String)
+function parse_inbound_instance(
+    node_file::String, leg_file::String, commmodity_file::String
+)
     df_nodes = DataFrame(CSV.File(node_file))
     df_legs = DataFrame(CSV.File(leg_file))
     df_commodities = DataFrame(CSV.File(commmodity_file))
 
     nodes = map(eachrow(df_nodes)) do row
+        node_type_symbol = if row[NODE_TYPE] == "supplier"
+            :origin
+        elseif row[NODE_TYPE] == "plant"
+            :destination
+        else
+            :other
+        end
+
         NetworkNode(;
             id="$(row[NODE_ID])",
+            node_type=node_type_symbol,
             cost=row[NODE_COST],
             capacity=Int(row[NODE_CAPACITY]),
-            info=InboundNodeInfo(Symbol(row[NODE_TYPE])),
         )
     end
 
@@ -152,7 +160,7 @@ end
 export InboundNodeInfo,
     InboundArcInfo,
     InboundCommodityInfo,
-    read_inbound_instance,
+    parse_inbound_instance,
     NODE_ID,
     NODE_COST,
     NODE_CAPACITY,

@@ -1,7 +1,7 @@
 name = "NetworkDesignOptimization"
 uuid = "e92b3169-8dd3-4529-9d46-f74323416df7"
-authors = ["Léo Baty and contributors"]
 version = "0.0.1"
+authors = ["Léo Baty and contributors"]
 
 [workspace]
 projects = ["docs", "test", "scripts"]

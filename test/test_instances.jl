@@ -3,6 +3,7 @@ Tests for Instance creation and integration using Inbound test application
 """
 
 using CSV
+using Dates
 using NetworkDesignOptimization
 using Test
 
@@ -12,14 +13,16 @@ using .Inbound
 @testset "Instance creation" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", cost=10.0, capacity=100, info=nothing),
-            NetworkNode(; id="2", cost=20.0, capacity=200, info=nothing),
+            NetworkNode(; id="1", node_type=:origin, cost=10.0, capacity=100, info=nothing),
+            NetworkNode(;
+                id="2", node_type=:destination, cost=20.0, capacity=200, info=nothing
+            ),
         ]
         arcs = [
-            NetworkArc(;
+            Arc(;
                 origin_id="1",
                 destination_id="2",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=LinearArcCost(5.0),
                 info=nothing,
             ),
@@ -34,7 +37,7 @@ using .Inbound
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1))
+        instance = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
         length(instance.bundles) > 0
     end
 end
@@ -50,7 +53,7 @@ end
         isfile(legs_file) &&
         isfile(routes_file) &&
         isfile(commodities_file)
-    (; nodes, arcs, commodities) = read_inbound_instance(
+    (; nodes, arcs, commodities) = parse_inbound_instance(
         nodes_file, legs_file, commodities_file
     )
     instance = build_instance(
@@ -69,22 +72,24 @@ end
 @testset "Instance bundle aggregation" begin
     @test begin
         nodes = [
-            NetworkNode(; id="A", cost=5.0, capacity=50, info=nothing),
-            NetworkNode(; id="B", cost=10.0, capacity=100, info=nothing),
-            NetworkNode(; id="C", cost=15.0, capacity=150, info=nothing),
+            NetworkNode(; id="A", node_type=:origin, cost=5.0, capacity=50, info=nothing),
+            NetworkNode(; id="B", node_type=:other, cost=10.0, capacity=100, info=nothing),
+            NetworkNode(;
+                id="C", node_type=:destination, cost=15.0, capacity=150, info=nothing
+            ),
         ]
         arcs = [
-            NetworkArc(;
+            Arc(;
                 origin_id="A",
                 destination_id="B",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=LinearArcCost(2.0),
                 info=nothing,
             ),
-            NetworkArc(;
+            Arc(;
                 origin_id="B",
                 destination_id="C",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=LinearArcCost(3.0),
                 info=nothing,
             ),
@@ -115,7 +120,7 @@ end
                 max_delivery_time=Week(2),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1))
+        instance = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
         # Should create 2 bundles: A->B and B->C
         length(instance.bundles) == 2
     end
@@ -124,14 +129,16 @@ end
 @testset "Instance with linear arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", cost=0.0, capacity=1000, info=nothing),
-            NetworkNode(; id="2", cost=0.0, capacity=1000, info=nothing),
+            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=1000, info=nothing),
+            NetworkNode(;
+                id="2", node_type=:destination, cost=0.0, capacity=1000, info=nothing
+            ),
         ]
         arcs = [
-            NetworkArc(;
+            Arc(;
                 origin_id="1",
                 destination_id="2",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=LinearArcCost(1.5),
                 info=nothing,
             ),
@@ -146,7 +153,7 @@ end
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1))
+        instance = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
         instance.bundles[1].origin_id == "1" && instance.bundles[1].destination_id == "2"
     end
 end
@@ -154,14 +161,16 @@ end
 @testset "Instance with bin packing arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", cost=0.0, capacity=500, info=nothing),
-            NetworkNode(; id="2", cost=0.0, capacity=500, info=nothing),
+            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=500, info=nothing),
+            NetworkNode(;
+                id="2", node_type=:destination, cost=0.0, capacity=500, info=nothing
+            ),
         ]
         arcs = [
-            NetworkArc(;
+            Arc(;
                 origin_id="1",
                 destination_id="2",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=BinPackingArcCost(100.0, 50.0),
                 info=nothing,
             ),
@@ -176,7 +185,7 @@ end
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1))
+        instance = build_instance(nodes, arcs, commodities, Week(1), (BinPackingArcCost,))
         length(instance.bundles) == 1
     end
 end
@@ -184,22 +193,24 @@ end
 @testset "Instance with heterogeneous arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", cost=0.0, capacity=1000, info=nothing),
-            NetworkNode(; id="2", cost=0.0, capacity=1000, info=nothing),
-            NetworkNode(; id="3", cost=0.0, capacity=1000, info=nothing),
+            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=1000, info=nothing),
+            NetworkNode(; id="2", node_type=:other, cost=0.0, capacity=1000, info=nothing),
+            NetworkNode(;
+                id="3", node_type=:destination, cost=0.0, capacity=1000, info=nothing
+            ),
         ]
         arcs = [
-            NetworkArc(;
+            Arc(;
                 origin_id="1",
                 destination_id="2",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=LinearArcCost(2.0),
                 info=nothing,
             ),
-            NetworkArc(;
+            Arc(;
                 origin_id="2",
                 destination_id="3",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=BinPackingArcCost(50.0, 40.0),
                 info=nothing,
             ),
@@ -222,7 +233,9 @@ end
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1))
+        instance = build_instance(
+            nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
+        )
         length(instance.bundles) == 2
     end
 end
@@ -230,14 +243,16 @@ end
 @testset "Instance time period handling" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", cost=0.0, capacity=100, info=nothing),
-            NetworkNode(; id="2", cost=0.0, capacity=100, info=nothing),
+            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=100, info=nothing),
+            NetworkNode(;
+                id="2", node_type=:destination, cost=0.0, capacity=100, info=nothing
+            ),
         ]
         arcs = [
-            NetworkArc(;
+            Arc(;
                 origin_id="1",
                 destination_id="2",
-                travel_time=0,
+                travel_time=Week(0),
                 cost=LinearArcCost(1.0),
                 info=nothing,
             ),
@@ -253,8 +268,60 @@ end
             ),
         ]
         # Test with different time periods
-        instance_week = build_instance(nodes, arcs, commodities, Week(1))
-        instance_day = build_instance(nodes, arcs, commodities, Day(1))
+        instance_week = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
+        instance_day = build_instance(nodes, arcs, commodities, Day(1), (LinearArcCost,))
         length(instance_week.bundles) == 1 && length(instance_day.bundles) == 1
+    end
+end
+
+@testset "Instance with custom group_by" begin
+    @test begin
+        struct TestInfo
+            model::String
+        end
+        nodes = [
+            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
+            NetworkNode(;
+                id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing
+            ),
+        ]
+        arcs = [
+            Arc(;
+                origin_id="A",
+                destination_id="B",
+                travel_time=Week(0),
+                cost=LinearArcCost(1.0),
+                info=nothing,
+            ),
+        ]
+        commodities = [
+            Commodity(;
+                origin_id="A",
+                destination_id="B",
+                size=1.0,
+                quantity=1,
+                arrival_date=DateTime(2024, 1, 1),
+                max_delivery_time=Week(1),
+                info=TestInfo("X"),
+            ),
+            Commodity(;
+                origin_id="A",
+                destination_id="B",
+                size=1.0,
+                quantity=1,
+                arrival_date=DateTime(2024, 1, 1),
+                max_delivery_time=Week(1),
+                info=TestInfo("Y"),
+            ),
+        ]
+        # Default group_by: both in one bundle
+        instance_default = build_instance(
+            nodes, arcs, commodities, Week(1), (LinearArcCost,)
+        )
+        # Custom group_by: separate bundles by model
+        instance_grouped = build_instance(
+            nodes, arcs, commodities, Week(1), (LinearArcCost,); group_by=c -> c.info.model
+        )
+        length(instance_default.bundles) == 1 && length(instance_grouped.bundles) == 2
     end
 end

@@ -3,15 +3,13 @@ using NetworkDesignOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-using NetworkDesignOptimization
-
 instance_name = "small"
 datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
 
-(; nodes, arcs, commodities) = read_inbound_instance(
+(; nodes, arcs, commodities) = parse_inbound_instance(
     nodes_file, legs_file, commodities_file
 );
 
