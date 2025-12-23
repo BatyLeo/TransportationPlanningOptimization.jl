@@ -5,7 +5,7 @@ using DataFrames: DataFrame, names
 using Dates: Dates, DateTime, Period
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
-using MetaGraphsNext: MetaGraphsNext, MetaGraph
+using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey
 
 include("commodity.jl")
 include("order.jl")

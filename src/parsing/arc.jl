@@ -113,7 +113,7 @@ function collect_arcs(
             arc.destination_id,
             NetworkArc{CostUnion,K}(;
                 capacity=arc.capacity,
-                travel_time=period_steps(arc.travel_time, time_step; roundup=ceil),
+                travel_time_steps=period_steps(arc.travel_time, time_step; roundup=ceil),
                 cost=arc.cost,
                 info=arc.info,
             ),

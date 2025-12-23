@@ -52,7 +52,7 @@ function add_network_arc!(
     (; time_horizon_length) = time_space_graph
     for t in time_horizon(time_space_graph)
         u_t = (origin.id, t)
-        destination_time = t + arc.travel_time
+        destination_time = t + arc.travel_time_steps
         if destination_time > time_horizon_length
             destination_time -= time_horizon_length
         end
