@@ -18,18 +18,21 @@ commodity_file = joinpath(data_dir, "parsed_volumes.csv")
 model_file = joinpath(data_dir, "parsed_models.csv")
 load_factor_file = joinpath(data_dir, "load_factor_min_estimated.csv")
 
-(; nodes, arcs, commodities) = read_outbound_instance(
-    node_file, leg_file, commodity_file, model_file, load_factor_file
+(; nodes, arcs, commodities) = parse_outbound_instance(
+    node_file,
+    leg_file,
+    commodity_file,
+    model_file,
+    load_factor_file;
+    max_delivery_time=Week(36),
 );
 
 instance = build_instance(
-    nodes, arcs, commodities, Week(12), (LinearArcCost, BinPackingArcCost)
+    nodes,
+    arcs,
+    commodities,
+    Week(12),
+    (LinearArcCost, BinPackingArcCost);
+    group_by=commodity -> (commodity.info.model, commodity.info.is_BTS),
 );
 instance
-
-nodes
-arcs
-commodities
-
-group_cols = [:destinationFinale, :annee, :semaine]
-gdf = groupby(df_commodities, group_cols)

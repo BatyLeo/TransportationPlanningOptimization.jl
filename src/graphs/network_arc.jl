@@ -57,7 +57,10 @@ end
 # This allows automatic conversion to union types
 function NetworkArc{C,K}(arc::NetworkArc) where {C<:AbstractArcCostFunction,K}
     return NetworkArc{C,K}(;
-        capacity=arc.capacity, travel_time=arc.travel_time_steps, cost=arc.cost, info=arc.info
+        capacity=arc.capacity,
+        travel_time=arc.travel_time_steps,
+        cost=arc.cost,
+        info=arc.info,
     )
 end
 

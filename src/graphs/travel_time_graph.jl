@@ -20,10 +20,7 @@ end
 
 #
 
-function MetaGraphsNext.haskey(
-    travel_time_graph::TravelTimeGraph,
-    args...
-)
+function MetaGraphsNext.haskey(travel_time_graph::TravelTimeGraph, args...)
     return haskey(travel_time_graph.graph, args...)
 end
 
@@ -37,9 +34,7 @@ function Graphs.add_edge!(
 end
 
 function Graphs.add_vertex!(
-    travel_time_graph::TravelTimeGraph,
-    u::Tuple{String,Int},
-    node::NetworkNode,
+    travel_time_graph::TravelTimeGraph, u::Tuple{String,Int}, node::NetworkNode
 )
     return Graphs.add_vertex!(travel_time_graph.graph, u, node)
 end
@@ -53,7 +48,6 @@ function time_horizon(travel_time_graph::TravelTimeGraph)
     return 0:(travel_time_graph.max_time_steps)
 end
 
-# TODO: in the outbound case, where is_date_arrival=false, this may need to be adapted
 """
 $TYPEDSIGNATURES
 
@@ -62,7 +56,7 @@ Add a network node to the travel-time graph, creating timed copies as needed.
 function add_network_node!(
     travel_time_graph::TravelTimeGraph,
     node::NetworkNode,
-    node_to_bundles_map::Dict{String, Vector{B}},
+    node_to_bundles_map::Dict{String,Vector{B}},
 ) where {B<:Bundle}
     if node.node_type == :destination
         # Only add destinations at τ=0
@@ -73,7 +67,8 @@ function add_network_node!(
         max_duration = maximum(
             order.max_delivery_time_step for bundle in
                                              get(node_to_bundles_map, node.id, []) for
-            order in bundle.orders
+            order in bundle.orders;
+            init=-1,
         )
         for τ in 0:max_duration
             Graphs.add_vertex!(travel_time_graph, (node.id, τ), node)

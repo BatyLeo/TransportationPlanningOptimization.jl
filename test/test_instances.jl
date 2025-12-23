@@ -53,7 +53,7 @@ end
         isfile(legs_file) &&
         isfile(routes_file) &&
         isfile(commodities_file)
-    (; nodes, arcs, commodities) = read_inbound_instance(
+    (; nodes, arcs, commodities) = parse_inbound_instance(
         nodes_file, legs_file, commodities_file
     )
     instance = build_instance(

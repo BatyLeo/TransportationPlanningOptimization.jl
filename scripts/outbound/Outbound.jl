@@ -65,8 +65,13 @@ function parse_load_factor_file(load_factor_file)
     return load_factor_by_model
 end
 
-function read_outbound_instance(
-    node_file, leg_file, commodity_file, model_file, load_factor_file
+function parse_outbound_instance(
+    node_file,
+    leg_file,
+    commodity_file,
+    model_file,
+    load_factor_file;
+    max_delivery_time=Day(365),
 )
     df_nodes = DataFrame(CSV.File(node_file))
     df_legs = DataFrame(CSV.File(leg_file))
@@ -166,7 +171,7 @@ function read_outbound_instance(
             destination_id="$(row[COMMODITY_DESTINATION_ID])",
             quantity=Int(row[COMMODITY_QUANTITY]),
             size=size_by_model[row[COMMODITY_MODEL]],
-            max_delivery_time=Day(365),
+            max_delivery_time=max_delivery_time,
             departure_date=date,
             info=OutBoundCommodityInfo(
                 row[COMMODITY_MODEL], row[COMMODITY_TYPE_BT] == "BTS"
@@ -192,6 +197,6 @@ struct OutBoundCommodityInfo
 end
 
 export preprocessing_outbound_data,
-    read_outbound_instance, OutboundNodeInfo, OutBoundCommodityInfo
+    parse_outbound_instance, OutboundNodeInfo, OutBoundCommodityInfo
 
 end # module Outbound

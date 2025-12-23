@@ -9,7 +9,7 @@ nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
 
-(; nodes, arcs, commodities) = read_inbound_instance(
+(; nodes, arcs, commodities) = parse_inbound_instance(
     nodes_file, legs_file, commodities_file
 );
 

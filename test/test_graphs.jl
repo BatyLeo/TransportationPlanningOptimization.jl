@@ -51,15 +51,17 @@ end
 
 @testset "NetworkArc with LinearArcCost" begin
     @test begin
-        arc = NetworkArc(; travel_time=0, cost=LinearArcCost(5.0), info=nothing)
-        arc.travel_time == 0 && arc.cost.cost_per_unit_size == 5.0
+        arc = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(5.0), info=nothing)
+        arc.travel_time_steps == 0 && arc.cost.cost_per_unit_size == 5.0
     end
 end
 
 @testset "NetworkArc with BinPackingArcCost" begin
     @test begin
-        arc = NetworkArc(; travel_time=0, cost=BinPackingArcCost(100.0, 50.0), info=nothing)
-        arc.travel_time == 0 &&
+        arc = NetworkArc(;
+            travel_time_steps=0, cost=BinPackingArcCost(100.0, 50.0), info=nothing
+        )
+        arc.travel_time_steps == 0 &&
             arc.cost.cost_per_bin == 100.0 &&
             arc.cost.bin_capacity == 50.0
     end
@@ -72,30 +74,25 @@ end
             distance_km::Float64
         end
         arc = NetworkArc(;
-            travel_time=0, cost=LinearArcCost(2.5), info=ArcMetadata(:truck, 150.5)
+            travel_time_steps=0, cost=LinearArcCost(2.5), info=ArcMetadata(:truck, 150.5)
         )
-        arc.travel_time == 0 &&
+        arc.travel_time_steps == 0 &&
             arc.info.transport_mode == :truck &&
             arc.info.distance_km == 150.5
-    end
-end
-
-@testset "NetworkArc self-loops" begin
-    @test begin
-        arc = NetworkArc(; travel_time=0, cost=LinearArcCost(1.0), info=nothing)
-        true  # self-loop semantics are now encoded when the arc is added to a graph
     end
 end
 
 @testset "NetworkArc cost function types" begin
     # Test that different cost function types can be used
     @test begin
-        linear_arc = NetworkArc(; travel_time=0, cost=LinearArcCost(3.0), info=nothing)
-        bin_arc = NetworkArc(;
-            travel_time=0, cost=BinPackingArcCost(75.0, 60.0), info=nothing
+        linear_arc = NetworkArc(;
+            travel_time_steps=0, cost=LinearArcCost(3.0), info=nothing
         )
-        linear_arc.travel_time == 0 &&
-            bin_arc.travel_time == 0 &&
+        bin_arc = NetworkArc(;
+            travel_time_steps=0, cost=BinPackingArcCost(75.0, 60.0), info=nothing
+        )
+        linear_arc.travel_time_steps == 0 &&
+            bin_arc.travel_time_steps == 0 &&
             typeof(linear_arc.cost) != typeof(bin_arc.cost)
     end
 end
@@ -103,13 +100,13 @@ end
 @testset "NetworkArc capacity field" begin
     @test begin
         # LinearArcCost doesn't have a capacity field, but arc can still exist
-        arc1 = NetworkArc(; travel_time=0, cost=LinearArcCost(1.0), info=nothing)
+        arc1 = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(1.0), info=nothing)
         # BinPackingArcCost has bin_capacity
         arc2 = NetworkArc(;
-            travel_time=0, cost=BinPackingArcCost(100.0, 75.0), info=nothing
+            travel_time_steps=0, cost=BinPackingArcCost(100.0, 75.0), info=nothing
         )
-        arc1.travel_time == 0 &&
-            arc2.travel_time == 0 &&
+        arc1.travel_time_steps == 0 &&
+            arc2.travel_time_steps == 0 &&
             arc1.cost isa LinearArcCost &&
             arc2.cost.bin_capacity == 75.0
     end
@@ -121,20 +118,22 @@ end
             arc_type::Symbol
         end
         arc = NetworkArc(;
-            travel_time=0, cost=LinearArcCost(4.5), info=InboundArcInfo(:direct)
+            travel_time_steps=0, cost=LinearArcCost(4.5), info=InboundArcInfo(:direct)
         )
-        arc.travel_time == 0 && arc.info.arc_type == :direct
+        arc.travel_time_steps == 0 && arc.info.arc_type == :direct
     end
 end
 
 @testset "Multiple arcs between same nodes with different costs" begin
     @test begin
-        arc1 = NetworkArc(; travel_time=0, cost=LinearArcCost(2.0), info=nothing)
-        arc2 = NetworkArc(; travel_time=0, cost=LinearArcCost(3.0), info=nothing)
-        arc3 = NetworkArc(; travel_time=0, cost=BinPackingArcCost(50.0, 40.0), info=nothing)
-        arc1.travel_time == 0 &&
-            arc2.travel_time == 0 &&
-            arc3.travel_time == 0 &&
+        arc1 = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(2.0), info=nothing)
+        arc2 = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(3.0), info=nothing)
+        arc3 = NetworkArc(;
+            travel_time_steps=0, cost=BinPackingArcCost(50.0, 40.0), info=nothing
+        )
+        arc1.travel_time_steps == 0 &&
+            arc2.travel_time_steps == 0 &&
+            arc3.travel_time_steps == 0 &&
             arc1.cost.cost_per_unit_size < arc2.cost.cost_per_unit_size &&
             typeof(arc1.cost) != typeof(arc3.cost)
     end
@@ -148,7 +147,7 @@ end
         node2 = NetworkNode(;
             id="node_002", node_type=:destination, cost=2.0, capacity=200, info=nothing
         )
-        arc = NetworkArc(; travel_time=0, cost=LinearArcCost(0.5), info=nothing)
-        arc.travel_time == 0
+        arc = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(0.5), info=nothing)
+        arc.travel_time_steps == 0
     end
 end

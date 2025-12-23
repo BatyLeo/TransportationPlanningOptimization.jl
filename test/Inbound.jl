@@ -62,7 +62,7 @@ Test data structure for commodity metadata in inbound instances.
 struct InboundCommodityInfo end
 
 """
-    read_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
+    parse_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
 
 Read an inbound instance from three CSV files: nodes, legs, and commodities.
 
@@ -74,7 +74,9 @@ Returns a named tuple `(; nodes, arcs, commodities)` containing:
 The function performs deduplication of arcs (keeps only the first arc for each 
 origin-destination pair) and handles heterogeneous cost function types.
 """
-function read_inbound_instance(node_file::String, leg_file::String, commmodity_file::String)
+function parse_inbound_instance(
+    node_file::String, leg_file::String, commmodity_file::String
+)
     df_nodes = DataFrame(CSV.File(node_file))
     df_legs = DataFrame(CSV.File(leg_file))
     df_commodities = DataFrame(CSV.File(commmodity_file))
@@ -158,7 +160,7 @@ end
 export InboundNodeInfo,
     InboundArcInfo,
     InboundCommodityInfo,
-    read_inbound_instance,
+    parse_inbound_instance,
     NODE_ID,
     NODE_COST,
     NODE_CAPACITY,
