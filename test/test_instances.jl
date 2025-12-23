@@ -273,3 +273,55 @@ end
         length(instance_week.bundles) == 1 && length(instance_day.bundles) == 1
     end
 end
+
+@testset "Instance with custom group_by" begin
+    @test begin
+        struct TestInfo
+            model::String
+        end
+        nodes = [
+            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
+            NetworkNode(;
+                id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing
+            ),
+        ]
+        arcs = [
+            Arc(;
+                origin_id="A",
+                destination_id="B",
+                travel_time=Week(0),
+                cost=LinearArcCost(1.0),
+                info=nothing,
+            ),
+        ]
+        commodities = [
+            Commodity(;
+                origin_id="A",
+                destination_id="B",
+                size=1.0,
+                quantity=1,
+                arrival_date=DateTime(2024, 1, 1),
+                max_delivery_time=Week(1),
+                info=TestInfo("X"),
+            ),
+            Commodity(;
+                origin_id="A",
+                destination_id="B",
+                size=1.0,
+                quantity=1,
+                arrival_date=DateTime(2024, 1, 1),
+                max_delivery_time=Week(1),
+                info=TestInfo("Y"),
+            ),
+        ]
+        # Default group_by: both in one bundle
+        instance_default = build_instance(
+            nodes, arcs, commodities, Week(1), (LinearArcCost,)
+        )
+        # Custom group_by: separate bundles by model
+        instance_grouped = build_instance(
+            nodes, arcs, commodities, Week(1), (LinearArcCost,); group_by=c -> c.info.model
+        )
+        length(instance_default.bundles) == 1 && length(instance_grouped.bundles) == 2
+    end
+end

@@ -36,4 +36,8 @@ export collect_arcs
 
 export evaluate
 
+export TimeSpaceGraph, TravelTimeGraph
+
+export time_horizon
+
 end
