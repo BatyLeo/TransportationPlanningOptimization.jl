@@ -1,4 +1,4 @@
-using Dates: Week
+using Dates
 using NetworkDesignOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound

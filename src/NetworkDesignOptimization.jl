@@ -7,23 +7,23 @@ using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
 using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey
 
-include("commodity.jl")
-include("order.jl")
-include("bundle.jl")
+include("utils.jl")
 
-include("graphs/network_node.jl")
-include("graphs/network_arc.jl")
+include("instance/commodity.jl")
+include("instance/order.jl")
+include("instance/bundle.jl")
 
-include("parsing/commodity.jl")
-include("parsing/arc.jl")
+include("instance/graphs/network_node.jl")
+include("instance/graphs/network_arc.jl")
 
-include("graphs/network_graph.jl")
-include("graphs/time_space_graph.jl")
-include("graphs/travel_time_graph.jl")
+include("instance/parsing/commodity.jl")
+include("instance/parsing/arc.jl")
 
-include("instance.jl")
+include("instance/graphs/network_graph.jl")
+include("instance/graphs/time_space_graph.jl")
+include("instance/graphs/travel_time_graph.jl")
 
-include("time_utils.jl")
+include("instance/instance.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity
