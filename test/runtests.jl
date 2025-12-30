@@ -19,6 +19,7 @@ using Test
         end
         @testset "Graphs" begin
             include("test_graphs.jl")
+            include("test_travel_time_cost_matrix.jl")
         end
         @testset "Instances" begin
             include("test_instances.jl")

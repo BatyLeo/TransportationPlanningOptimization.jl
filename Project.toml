@@ -13,6 +13,7 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 MetaGraphsNext = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 CSV = "0.10.15"
@@ -21,4 +22,5 @@ Dates = "1.11.0"
 DocStringExtensions = "0.9.5"
 Graphs = "1.13.1"
 MetaGraphsNext = "0.7.4"
+SparseArrays = "1.12.0"
 julia = "1.11"
