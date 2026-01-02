@@ -1,3 +1,19 @@
+"""
+$TYPEDEF
+
+An internal structure representing a group of commodities to be delivered together.
+Commodities in an `Order` share the same:
+- Origin node
+- Destination node
+- Delivery date (interpreted as a deadline or release depending on `is_date_arrival`)
+
+# Type Parameters
+- `is_date_arrival::Bool`: Inherited from the commodities. `true` for deadline-driven, `false` for release-driven.
+- `I`: Additional problem-specific information.
+
+# Fields
+$TYPEDFIELDS
+"""
 struct Order{is_date_arrival,I}
     "list of commodities in the order"
     commodities::Vector{LightCommodity{is_date_arrival,I}}

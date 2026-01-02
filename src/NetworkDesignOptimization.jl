@@ -26,6 +26,8 @@ include("instance/graphs/travel_time_graph.jl")
 
 include("instance/instance.jl")
 
+include("solution/solution.jl")
+
 export LightCommodity
 export Instance, Bundle, Order, Commodity
 export build_instance
@@ -40,5 +42,7 @@ export evaluate
 export TimeSpaceGraph, TravelTimeGraph
 
 export time_horizon
+
+export Solution, is_feasible, cost
 
 end

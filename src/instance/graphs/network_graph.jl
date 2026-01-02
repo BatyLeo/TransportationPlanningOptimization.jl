@@ -1,7 +1,24 @@
+"""
+$TYPEDEF
+
+A representation of the physical (spatial) network graph.
+Nodes are identified by `String` labels and store `NetworkNode` metadata.
+Edges store `NetworkArc` metadata.
+
+# Fields
+$TYPEDFIELDS
+"""
 struct NetworkGraph{G<:MetaGraph}
+    "The underlying MetaGraph mapping node IDs (Strings) to metadata."
     graph::G
 end
 
+"""
+$TYPEDSIGNATURES
+
+Constructor for `NetworkGraph`.
+Ensures node and arc IDs are unique during creation.
+"""
 function NetworkGraph(
     nodes::Vector{<:NetworkNode}, arcs::Vector{<:Tuple{String,String,NA}}
 ) where {NA<:NetworkArc}

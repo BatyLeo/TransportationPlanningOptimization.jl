@@ -41,6 +41,11 @@ function Base.show(io::IO, instance::Instance)
     return nothing
 end
 
+"""
+$TYPEDSIGNATURES
+
+Return the time horizon of the instance as a range of discrete time steps.
+"""
 function time_horizon(instance::Instance)
     return 1:(instance.time_horizon_length)
 end
@@ -50,6 +55,24 @@ function _default_group_by(commodity::Commodity)
     return nothing
 end
 
+"""
+$TYPEDSIGNATURES
+
+Build an `Instance` from raw problem data.
+
+# Arguments
+- `nodes::Vector{<:NetworkNode}`: List of nodes in the spatial network.
+- `arcs::Vector{<:Tuple{String,String,<:NetworkArc}}`: Arcs in the spatial network as `(origin_id, destination_id, arc_data)`.
+- `commodities::Vector{Commodity}`: User-facing commodity specifications.
+- `time_step::Period`: The discrete time step size (e.g., `Hour(1)`, `Day(1)`).
+- `group_by`: Optional function to group commodities into `Order`s (default: no additional grouping).
+
+# Discretization and Normalization
+1. **Start Date**: The time horizon starts at the earliest release date (for departure-based) or the earliest possible start (for arrival-based).
+2. **Time Steps**: Dates and periods are converted to discrete steps using `period_steps`.
+3. **Consolidation**: Commodities with the same origin, destination, and delivery step are grouped into `Order`s. Orders with the same origin and destination are grouped into `Bundle`s for routing.
+4. **Graphs**: Both `TimeSpaceGraph` (absolute time) and `TravelTimeGraph` (relative time) are constructed.
+"""
 function build_instance(
     nodes::Vector{<:NetworkNode},
     arcs::Vector{<:Tuple{String,String,<:NetworkArc}},
@@ -71,7 +94,11 @@ function build_instance(
     }()
 
     # normalize all dates to Date so DateTime operands are handled consistently
-    start_date = minimum(Dates.Date.([c.date for c in commodities]))
+    if is_date_arrival
+        start_date = minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
+    else
+        start_date = minimum(Dates.Date(c.date) for c in commodities)
+    end
 
     for commodity in commodities
         to_append = [
@@ -107,7 +134,13 @@ function build_instance(
             order_dict[key] = (to_append, max_delivery_time_steps)
         end
     end
-    time_horizon_length = maximum(key[1] for key in keys(order_dict))
+    if is_date_arrival
+        time_horizon_length = maximum(key[1] for key in keys(order_dict))
+    else
+        time_horizon_length = maximum(
+            key[1] + order_dict[key][2] for key in keys(order_dict)
+        )
+    end
 
     # Build orders and bundles simultaneously in one pass
     first_group_key = (
@@ -146,6 +179,12 @@ function build_instance(
     )
 end
 
+"""
+$TYPEDSIGNATURES
+
+Convenience constructor for `build_instance` using `Arc` parsing structures.
+Automatically converts `Arc` (with time periods) into `NetworkArc` (with time steps) using `collect_arcs`.
+"""
 function build_instance(
     nodes::Vector{<:NetworkNode},
     raw_arcs::Vector{<:Arc},

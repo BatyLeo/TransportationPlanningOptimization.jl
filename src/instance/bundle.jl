@@ -1,3 +1,12 @@
+"""
+$TYPEDEF
+
+A collection of `Order`s that share the same origin and destination.
+While orders in a bundle can have different delivery dates, they should follow the same path (in the travel time graph).
+
+# Fields
+$TYPEDFIELDS
+"""
 struct Bundle{O<:Order}
     orders::Vector{O}
     origin_id::String

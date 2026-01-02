@@ -236,22 +236,23 @@ end
         # Basic creation checks
         ttg isa TravelTimeGraph &&
             time_horizon(ttg) == 0:2 &&
-            Graphs.nv(ttg.graph) == 4 &&  # O0,O1,O2,D0
-            Graphs.ne(ttg.graph) == 3 &&   # O0->O1, O1->O2, O1->D0
+            Graphs.nv(ttg.graph) == 4 &&  # O0,O1,O2, D0
+            Graphs.ne(ttg.graph) == 3 &&   # 2 shortcuts O, 1 transport arc (O1->D0)
 
             # Vertex labels and data
             haskey(ttg.graph, ("O", 0)) &&
             haskey(ttg.graph, ("O", 1)) &&
             haskey(ttg.graph, ("O", 2)) &&
             haskey(ttg.graph, ("D", 0)) &&
-            !haskey(ttg.graph, ("D", 1)) &&  # D only at 0
+            !haskey(ttg.graph, ("D", 1)) &&
             ttg.graph[("O", 0)].id == "O" &&
             ttg.graph[("D", 0)].id == "D" &&
 
-            # Edge labels and data
-            haskey(ttg.graph, ("O", 0), ("O", 1)) &&  # shortcut
-            haskey(ttg.graph, ("O", 1), ("O", 2)) &&  # shortcut
+            # Edge labels and data (Count Down)
+            haskey(ttg.graph, ("O", 2), ("O", 1)) &&  # wait origin
+            haskey(ttg.graph, ("O", 1), ("O", 0)) &&  # wait origin
             haskey(ttg.graph, ("O", 1), ("D", 0)) &&  # transport arc
+            !haskey(ttg.graph, ("O", 2), ("D", 1)) &&  # D1 doesn't exist
             !haskey(ttg.graph, ("O", 0), ("D", 0)) &&  # no edge from O0 to D0
             ttg.graph[("O", 1), ("D", 0)].travel_time_steps == 1
     end

@@ -1,23 +1,43 @@
 """
 $TYPEDEF
 
+A time-expanded graph where nodes represent `(location, τ)`. 
+The parameter `is_date_arrival` (boolean) defines the semantics of `τ`:
+
+- **`is_date_arrival = true` (Count Down / Remaining Time)**:
+    `τ` represents the remaining time budget to meet a deadline.
+    - Arcs move from `τ` to `τ - travel_time`.
+    - Paths enter the graph at `(origin, max_duration)` and exit at `(destination, 0)`.
+- **`is_date_arrival = false` (Count Up / Elapsed Time)**:
+    `τ` represents the time elapsed since a release date.
+    - Arcs move from `τ` to `τ + travel_time`.
+    - Paths enter the graph at `(origin, 0)` and exit at `(destination, max_duration)`.
+
 # Fields
 $TYPEDFIELDS
 """
-struct TravelTimeGraph{G<:MetaGraph}
+struct TravelTimeGraph{is_date_arrival,G<:MetaGraph}
     "underlying time-expanded graph"
     graph::G
-    "Maximum duration of a delivery"
+    "Maximum duration allowed for a bundle in this graph"
     max_time_steps::Int
     "Cost matrix between timed nodes (sparse)"
     cost_matrix::SparseMatrixCSC{Float64,Int}
+    "Map from bundle index to unique origin node code entry point"
+    origin_codes::Vector{Int}
+    "Map from bundle index to unique destination node code exit point"
+    destination_codes::Vector{Int}
 end
 
-function Base.show(io::IO, g::TravelTimeGraph)
+function Base.show(io::IO, g::TravelTimeGraph{is_date_arrival}) where {is_date_arrival}
     return println(
         io,
-        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
+        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs (is_date_arrival=$is_date_arrival)",
     )
+end
+
+function is_date_arrival(::TravelTimeGraph{IDA}) where {IDA}
+    return IDA
 end
 
 """
@@ -143,35 +163,64 @@ function _add_network_node_to_travel_time_graph!(
     node::NetworkNode,
     node_to_bundles_map::Dict{String,Vector{B}},
     max_time_steps::Int,
+    is_date_arrival::Bool,
 ) where {B<:Bundle}
-    if node.node_type == :destination
-        # Only add destinations at τ=0
-        Graphs.add_vertex!(g, (node.id, 0), node)
-    elseif node.node_type == :origin
-        # TODO: make sure this is really needed
-        # Only add origins up to the maximum delivery time of orders originating here
-        max_duration = maximum(
-            order.max_delivery_time_step for bundle in
-                                             get(node_to_bundles_map, node.id, []) for
-            order in bundle.orders;
-            init=-1,
-        )
-        for τ in 0:max_duration
-            Graphs.add_vertex!(g, (node.id, τ), node)
-        end
+    if node.node_type == :origin
+        if is_date_arrival
+            # Max duration over all bundles starting at this node
+            max_duration = maximum(
+                order.max_delivery_time_step for
+                bundle in get(node_to_bundles_map, node.id, []) for order in bundle.orders;
+                init=-1,
+            )
+            for τ in 0:max_duration
+                Graphs.add_vertex!(g, (node.id, τ), node)
+            end
 
-        for τ in 1:max_time_steps
-            u = (node.id, τ - 1)
-            v = (node.id, τ)
-            if haskey(g, u) && haskey(g, v)
-                Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
+            for τ in 1:max_duration
+                # If remaining time: spend budget, move from τ to τ-1
+                u, v = (node.id, τ), (node.id, τ - 1)
+                if haskey(g, u) && haskey(g, v)
+                    Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
+                end
+            end
+        else
+            # Elapsed time: origin only appears in first step (tau=0)
+            Graphs.add_vertex!(g, (node.id, 0), node)
+        end
+    elseif node.node_type == :destination
+        if is_date_arrival
+            # Remaining time: destination only appears in last step (tau=0)
+            Graphs.add_vertex!(g, (node.id, 0), node)
+        else
+            # Elapsed time: copies for all time steps up to max_time_steps
+            for τ in 0:max_time_steps
+                Graphs.add_vertex!(g, (node.id, τ), node)
+            end
+            # Shortcuts to stay at destination (increasing τ)
+            for τ in 1:max_time_steps
+                u, v = (node.id, τ - 1), (node.id, τ)
+                if haskey(g, u) && haskey(g, v)
+                    Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
+                end
             end
         end
     else
-        # Add all other nodes at every time step
+        # Intermediate nodes: timed copies for all steps
         for τ in 0:max_time_steps
             Graphs.add_vertex!(g, (node.id, τ), node)
         end
+        # # Shortcuts (wait arcs), no wait arcs for now
+        # for τ in 1:max_time_steps
+        #     if is_date_arrival
+        #         u, v = (node.id, τ), (node.id, τ - 1)
+        #     else
+        #         u, v = (node.id, τ - 1), (node.id, τ)
+        #     end
+        #     if haskey(g, u) && haskey(g, v)
+        #         Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
+        #     end
+        # end
     end
 
     return nothing
@@ -188,10 +237,16 @@ function _add_network_arc_to_travel_time_graph!(
     destination::NetworkNode,
     arc::NetworkArc,
     max_time_steps::Int,
+    is_date_arrival::Bool,
 )
     for τ_u in 0:max_time_steps
         u = (origin.id, τ_u)
-        τ_v = τ_u - travel_time_steps(arc)
+        d = travel_time_steps(arc)
+        if is_date_arrival
+            τ_v = τ_u - d
+        else
+            τ_v = τ_u + d
+        end
         v = (destination.id, τ_v)
         if haskey(g, u) && haskey(g, v)
             Graphs.add_edge!(g, u, v, arc)
@@ -205,7 +260,9 @@ $TYPEDSIGNATURES
 
 Construct a `TravelTimeGraph` from a `NetworkGraph` and a set of `Bundle`s.
 """
-function TravelTimeGraph(network_graph::NetworkGraph, bundles::Vector{<:Bundle})
+function TravelTimeGraph(
+    network_graph::NetworkGraph, bundles::Vector{<:Bundle{<:Order{is_date_arrival,I}}}
+) where {is_date_arrival,I}
     # Initialize empty TimeTravelGraph
     graph = MetaGraph(
         Graphs.DiGraph();
@@ -214,6 +271,8 @@ function TravelTimeGraph(network_graph::NetworkGraph, bundles::Vector{<:Bundle})
         edge_data_type=NetworkArc,
         default_weight=Inf,
     )
+
+    isempty(bundles) && throw(ArgumentError("bundles cannot be empty"))
 
     max_time_steps = maximum(
         order.max_delivery_time_step for bundle in bundles for order in bundle.orders
@@ -225,7 +284,7 @@ function TravelTimeGraph(network_graph::NetworkGraph, bundles::Vector{<:Bundle})
     for node_id in MetaGraphsNext.labels(network_graph.graph)
         node = network_graph.graph[node_id]
         _add_network_node_to_travel_time_graph!(
-            graph, node, node_to_bundles_map, max_time_steps
+            graph, node, node_to_bundles_map, max_time_steps, is_date_arrival
         )
     end
 
@@ -234,22 +293,42 @@ function TravelTimeGraph(network_graph::NetworkGraph, bundles::Vector{<:Bundle})
         u = network_graph.graph[u_id]
         v = network_graph.graph[v_id]
         arc = network_graph.graph[u_id, v_id]
-        _add_network_arc_to_travel_time_graph!(graph, u, v, arc, max_time_steps)
+        _add_network_arc_to_travel_time_graph!(
+            graph, u, v, arc, max_time_steps, is_date_arrival
+        )
     end
 
-    # Build cost matrix with random values per timed edge
+    # Build cost matrix
     n = Graphs.nv(graph)
-    I = Int[]
-    J = Int[]
-    V = Float64[]
+    I_indices = Int[]
+    J_indices = Int[]
+    V_values = Float64[]
     for (u_id, v_id) in MetaGraphsNext.edge_labels(graph)
         i = MetaGraphsNext.code_for(graph, u_id)
         j = MetaGraphsNext.code_for(graph, v_id)
-        push!(I, i)
-        push!(J, j)
-        push!(V, 0.0)
+        push!(I_indices, i)
+        push!(J_indices, j)
+        push!(V_values, 0.0)
     end
-    cost_matrix = sparse(I, J, V, n, n)
+    cost_matrix = sparse(I_indices, J_indices, V_values, n, n)
 
-    return TravelTimeGraph(graph, max_time_steps, cost_matrix)
+    origin_codes = Vector{Int}(undef, length(bundles))
+    destination_codes = Vector{Int}(undef, length(bundles))
+
+    for (i, bundle) in enumerate(bundles)
+        max_val = maximum(order.max_delivery_time_step for order in bundle.orders)
+        if is_date_arrival
+            start_label = (bundle.origin_id, max_val)
+            end_label = (bundle.destination_id, 0)
+        else
+            start_label = (bundle.origin_id, 0)
+            end_label = (bundle.destination_id, max_val)
+        end
+        origin_codes[i] = MetaGraphsNext.code_for(graph, start_label)
+        destination_codes[i] = MetaGraphsNext.code_for(graph, end_label)
+    end
+
+    return TravelTimeGraph{is_date_arrival,typeof(graph)}(
+        graph, max_time_steps, cost_matrix, origin_codes, destination_codes
+    )
 end

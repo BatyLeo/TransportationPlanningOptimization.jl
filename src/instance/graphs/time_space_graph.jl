@@ -67,6 +67,12 @@ function add_network_arc!(
     return nothing
 end
 
+"""
+$TYPEDSIGNATURES
+
+Constructor for `TimeSpaceGraph`.
+Creates timed copies of all nodes and arcs from the `network_graph` for each step in `1:time_horizon_length`.
+"""
 function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
     # Initialize empty TimeSpaceGraph
     graph = MetaGraph(
