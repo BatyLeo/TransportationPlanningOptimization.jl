@@ -21,11 +21,43 @@ $TYPEDFIELDS
     travel_time_graph::TTG
 end
 
-function Base.show(io::IO, instance::Instance)
-    nb_orders = sum(length(bundle.orders) for bundle in instance.bundles)
-    nb_commodities = sum(
+"""
+$TYPEDSIGNATURES
+
+Return the number of bundles in the instance.
+"""
+function bundle_count(instance::Instance)
+    return length(instance.bundles)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return the number of orders in the instance.
+"""
+function order_count(instance::Instance)
+    return sum(length(bundle.orders) for bundle in instance.bundles)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return the number of commodities in the instance.
+"""
+function commodity_count(instance::Instance)
+    return sum(
         length(order.commodities) for bundle in instance.bundles for order in bundle.orders
     )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return a summary of the instance.
+"""
+function Base.show(io::IO, instance::Instance)
+    nb_orders = order_count(instance)
+    nb_commodities = commodity_count(instance)
     padding = length(string(nb_commodities))
     println(io, "Instance Summary:")
     println(
@@ -34,7 +66,7 @@ function Base.show(io::IO, instance::Instance)
     )
     println(io, "  • Commodities: $(lpad(nb_commodities, padding))")
     println(io, "  • Orders:      $(lpad(nb_orders, padding))")
-    println(io, "  • Bundles:     $(lpad(length(instance.bundles), padding))")
+    println(io, "  • Bundles:     $(lpad(bundle_count(instance), padding))")
     print(io, "  • ", instance.network_graph)
     print(io, "  • ", instance.time_space_graph)
     print(io, "  • ", instance.travel_time_graph)
@@ -182,7 +214,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Convenience constructor for `build_instance` using `Arc` parsing structures.
+Build an `Instance` using the `Arc` interface. This is the recommended constructor.
 Automatically converts `Arc` (with time periods) into `NetworkArc` (with time steps) using `collect_arcs`.
 """
 function build_instance(
@@ -190,9 +222,11 @@ function build_instance(
     raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
-    arc_cost_types; # TODO: have two methods, one with tuple of types, and a shorcut with only a single type
+    arc_cost_types;
     group_by=_default_group_by,
 ) where {is_date_arrival,ID,I}
-    arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
+    # If arc_cost_types is a single type, wrap it in a tuple for collect_arcs
+    types = arc_cost_types isa Type ? (arc_cost_types,) : arc_cost_types
+    arcs = collect_arcs(types, raw_arcs, time_step)
     return build_instance(nodes, arcs, commodities, time_step; group_by=group_by)
 end

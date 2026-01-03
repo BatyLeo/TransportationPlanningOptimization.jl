@@ -2,14 +2,21 @@
 $TYPEDEF
 
 A solution to the network design optimization problem.
-It stores the chosen paths for each bundle in the `TravelTimeGraph`.
+It stores the chosen paths for each bundle in the `TravelTimeGraph` and precomputes
+key metrics such as commodity distributions on arcs and individual arc costs.
 
 # Fields
 $TYPEDFIELDS
 """
-struct Solution
+struct Solution{C<:LightCommodity}
     "Paths for each bundle in the instance. `bundle_paths[i]` is a sequence of node codes in the `TravelTimeGraph` for the i-th bundle."
     bundle_paths::Vector{Vector{Int}}
+    "Commodities on each arc of the `TimeSpaceGraph`. Maps `(u, v)` to a list of commodities."
+    commodities_on_arcs::Dict{Tuple{Int,Int},Vector{C}}
+    "Bin assignments on each arc (for `BinPackingArcCost` arcs). Maps `(u, v)` to a list of bins."
+    bin_assignments::Dict{Tuple{Int,Int},Vector{Bin{C}}}
+    "Cost of each arc in the solution. Maps `(u, v)` to the arc's cost."
+    arc_costs::Dict{Tuple{Int,Int},Float64}
 end
 
 """
@@ -113,36 +120,90 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the cost of the solution.
+Construct a `Solution` from bundle paths and an instance.
+This constructor precomputes commodity distributions on arcs, bin-packing results, and total cost.
 """
-function cost(sol::Solution, instance::Instance)
-    # Project paths
-    order_paths = project_bundle_path_to_order_paths(sol, instance)
+function Solution(
+    bundle_paths::Vector{Vector{Int}}, instance::Instance{Bundle{Order{IDA,I}}}
+) where {IDA,I}
+    (; time_space_graph, bundles) = instance
 
-    # Compute edge loads
-    # Map (u, v) in TSG -> total size of commodities
-    edge_loads = Dict{Tuple{Int,Int},Float64}()
+    C = LightCommodity{IDA,I}
+    # Project paths to TimeSpaceGraph and collect commodities per arc
+    commodities_on_arcs = Dict{Tuple{Int,Int},Vector{C}}()
 
-    for (order, path) in order_paths
-        if isempty(path)
+    for (bundle_idx, ttg_path) in enumerate(bundle_paths)
+        bundle = bundles[bundle_idx]
+
+        # For each order in the bundle, project the path and collect commodities
+        for order in bundle.orders
+            tsg_path = [
+                project_to_time_space_graph(node_code, order, instance) for
+                node_code in ttg_path
+            ]
+
+            # Add all commodities from this order to each arc in the path
+            for i in 1:(length(tsg_path) - 1)
+                u, v = tsg_path[i], tsg_path[i + 1]
+                edge = (u, v)
+
+                if !haskey(commodities_on_arcs, edge)
+                    commodities_on_arcs[edge] = C[]
+                end
+
+                append!(commodities_on_arcs[edge], order.commodities)
+            end
+        end
+    end
+
+    # Compute cost and bin-packing results
+    bin_assignments = Dict{Tuple{Int,Int},Vector{Bin{C}}}()
+    arc_costs = Dict{Tuple{Int,Int},Float64}()
+
+    for (edge, commodities) in commodities_on_arcs
+        u, v = edge
+
+        # Convert codes to labels for MetaGraphsNext
+        u_label = MetaGraphsNext.label_for(time_space_graph.graph, u)
+        v_label = MetaGraphsNext.label_for(time_space_graph.graph, v)
+
+        # Get the arc metadata from the TimeSpaceGraph
+        if !haskey(time_space_graph.graph, u_label, v_label)
+            @warn "Arc ($u_label, $v_label) not found in TimeSpaceGraph"
             continue
         end
-        total_size = sum(c.size for c in order.commodities)
 
-        for i in 1:(length(path) - 1)
-            u, v = path[i], path[i + 1]
-            edge = (u, v)
-            edge_loads[edge] = get(edge_loads, edge, 0.0) + total_size
+        arc = time_space_graph.graph[u_label, v_label]
+
+        # Handle BinPackingArcCost specially to avoid double computation
+        if arc.cost isa BinPackingArcCost
+            assignments = compute_bin_assignments(arc.cost, commodities)
+            bin_assignments[edge] = assignments
+            arc_costs[edge] = arc.cost.cost_per_bin * length(assignments)
+        else
+            # Evaluate cost using the arc's cost function
+            arc_costs[edge] = evaluate(arc.cost, commodities)
         end
     end
 
-    total_cost = 0.0
-    # Note: this cost computation is a placeholder.
-    # Bin packing need to be computed depending on the arc type and associated cost function.
-    # There may also be other cost sources.
-    for ((u, v), load) in edge_loads
-        total_cost += load
-    end
+    return Solution{C}(bundle_paths, commodities_on_arcs, bin_assignments, arc_costs)
+end
 
-    return total_cost
+"""
+$TYPEDSIGNATURES
+
+Compute the cost of the solution.
+Sums the individual arc costs stored in the solution.
+"""
+function cost(sol::Solution)
+    return sum(values(sol.arc_costs); init=0.0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Compute the cost of the solution (legacy signature for compatibility).
+"""
+function cost(sol::Solution, instance::Instance)
+    return sum(values(sol.arc_costs); init=0.0)
 end

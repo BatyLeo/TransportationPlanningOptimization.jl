@@ -100,17 +100,31 @@ travel_time_steps(arc::NetworkArc) = arc.travel_time_steps
 """
 $TYPEDSIGNATURES
 
-Evaluate the unit or fixed cost component of the arc's cost function.
-This is a base dispatcher; specific implementations for concrete types return relevant rates.
+Evaluate the cost of transporting a list of commodities on an arc with a linear cost function.
+The cost is proportional to the total size of all commodities.
 """
-function evaluate(arc_f::AbstractArcCostFunction)
+function evaluate(arc_f::LinearArcCost, commodities::Vector{<:LightCommodity})
+    total_size = sum(c.size for c in commodities; init=0.0)
+    return arc_f.cost_per_unit_size * total_size
+end
+
+"""
+$TYPEDSIGNATURES
+
+Evaluate the cost of transporting a list of commodities on an arc with a bin-packing cost function.
+The cost is based on the number of bins (trucks) needed to transport all commodities.
+Uses the First-Fit Decreasing (FFD) heuristic to determine bin assignments and count.
+"""
+function evaluate(arc_f::BinPackingArcCost, commodities::Vector{<:LightCommodity})
+    assignments = compute_bin_assignments(arc_f, commodities)
+    return arc_f.cost_per_bin * length(assignments)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Fallback evaluate for unknown cost function types.
+"""
+function evaluate(arc_f::AbstractArcCostFunction, commodities::Vector{<:LightCommodity})
     return 0.0
-end
-
-function evaluate(arc_f::LinearArcCost)
-    return arc_f.cost_per_unit_size
-end
-
-function evaluate(arc_f::BinPackingArcCost)
-    return arc_f.cost_per_bin
 end

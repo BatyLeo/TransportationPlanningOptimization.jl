@@ -16,6 +16,7 @@ include("instance/bundle.jl")
 
 include("instance/graphs/network_node.jl")
 include("instance/graphs/network_arc.jl")
+include("instance/bin.jl")
 
 include("instance/parsing/commodity.jl")
 include("instance/parsing/arc.jl")
@@ -30,11 +31,13 @@ include("solution/solution.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity
+export bundle_count, order_count, commodity_count
 export build_instance
 export NetworkNode, NetworkArc, Arc
 export NetworkGraph
 
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
+export Bin
 export collect_arcs
 
 export evaluate
