@@ -35,3 +35,12 @@ function compute_node_to_bundles_map(bundles::Vector{B}) where {B<:Bundle}
     end
     return node_to_bundles
 end
+
+"""
+$TYPEDSIGNATURES
+
+Compute the total size of all commodities in the bundle.
+"""
+function total_size(bundle::Bundle)
+    return sum(total_size(order) for order in bundle.orders; init=0.0)
+end

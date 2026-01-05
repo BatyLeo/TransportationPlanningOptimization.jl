@@ -6,6 +6,7 @@ using Dates: Dates, DateTime, Period
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
 using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey, code_for, label_for
+using ProgressMeter: @showprogress
 using SparseArrays: SparseMatrixCSC, sparse
 
 include("utils.jl")
@@ -28,11 +29,13 @@ include("instance/graphs/travel_time_graph.jl")
 include("instance/instance.jl")
 
 include("solution/solution.jl")
+include("algorithms/greedy_insertion.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity
-export bundle_count, order_count, commodity_count
+export bundle_count, order_count, commodity_count, total_size
 export build_instance
+export write_solution_csv, read_solution_csv
 export NetworkNode, NetworkArc, Arc
 export NetworkGraph
 
@@ -46,6 +49,7 @@ export TimeSpaceGraph, TravelTimeGraph
 
 export time_horizon
 
-export Solution, is_feasible, cost
+export Solution, is_feasible, cost, add_bundle_path!
+export greedy_construction, insert_bundle!
 
 end

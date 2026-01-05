@@ -20,6 +20,21 @@ struct Solution{C<:LightCommodity}
 end
 
 """
+    Solution(instance::Instance)
+
+Initialize an empty solution for the given instance.
+"""
+function Solution(instance::Instance{Bundle{Order{IDA,I}}}) where {IDA,I}
+    C = LightCommodity{IDA,I}
+    return Solution{C}(
+        [Int[] for _ in 1:bundle_count(instance)],
+        Dict{Tuple{Int,Int},Vector{C}}(),
+        Dict{Tuple{Int,Int},Vector{Bin{C}}}(),
+        Dict{Tuple{Int,Int},Float64}(),
+    )
+end
+
+"""
 $TYPEDSIGNATURES
 
 Check if a solution is feasible for a given instance.
@@ -118,7 +133,55 @@ function project_bundle_path_to_order_paths(sol::Solution, instance::Instance)
 end
 
 """
-$TYPEDSIGNATURES
+    add_bundle_path!(sol::Solution, instance::Instance, bundle_idx::Int, path::Vector{Int})
+
+Incrementally add a path (sequence of TTG node codes) for a bundle and update the solution.
+This updates `bundle_paths`, `commodities_on_arcs`, `bin_assignments`, and `arc_costs`.
+"""
+function add_bundle_path!(
+    sol::Solution{C}, instance::Instance, bundle_idx::Int, path::Vector{Int}
+) where {C}
+    sol.bundle_paths[bundle_idx] = path
+    bundle = instance.bundles[bundle_idx]
+    tsg = instance.time_space_graph
+
+    # For each order in the bundle, project and update
+    for order in bundle.orders
+        tsg_path = [
+            project_to_time_space_graph(node_code, order, instance) for node_code in path
+        ]
+        for i in 1:(length(tsg_path) - 1)
+            u, v = tsg_path[i], tsg_path[i + 1]
+            edge = (u, v)
+
+            # Update commodities_on_arcs
+            if !haskey(sol.commodities_on_arcs, edge)
+                sol.commodities_on_arcs[edge] = C[]
+            end
+            commodities = sol.commodities_on_arcs[edge]
+            append!(commodities, order.commodities)
+
+            # Update bins and costs using arc metadata
+            u_label = MetaGraphsNext.label_for(tsg.graph, u)
+            v_label = MetaGraphsNext.label_for(tsg.graph, v)
+            arc = tsg.graph[u_label, v_label]
+
+            if arc.cost isa BinPackingArcCost
+                # For bin packing, we recompute assignments
+                # Optimization: could use incremental bin packing if performance is an issue
+                assignments = compute_bin_assignments(arc.cost, commodities)
+                sol.bin_assignments[edge] = assignments
+                sol.arc_costs[edge] = arc.cost.cost_per_bin * length(assignments)
+            else
+                sol.arc_costs[edge] = evaluate(arc.cost, commodities)
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+    Solution(bundle_paths, instance)
 
 Construct a `Solution` from bundle paths and an instance.
 This constructor precomputes commodity distributions on arcs, bin-packing results, and total cost.
@@ -190,10 +253,9 @@ function Solution(
 end
 
 """
-$TYPEDSIGNATURES
+    cost(sol)
 
-Compute the cost of the solution.
-Sums the individual arc costs stored in the solution.
+Compute the cost of the solution by summing individual arc costs.
 """
 function cost(sol::Solution)
     return sum(values(sol.arc_costs); init=0.0)
@@ -207,3 +269,5 @@ Compute the cost of the solution (legacy signature for compatibility).
 function cost(sol::Solution, instance::Instance)
     return sum(values(sol.arc_costs); init=0.0)
 end
+
+include("parsing.jl")

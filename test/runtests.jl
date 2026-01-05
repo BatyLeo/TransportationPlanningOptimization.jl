@@ -21,9 +21,13 @@ using Test
             include("test_graphs.jl")
             include("test_travel_time_cost_matrix.jl")
             include("test_solution.jl")
+            include("test_solution_parsing.jl")
         end
         @testset "Instances" begin
             include("test_instances.jl")
+        end
+        @testset "Greedy Insertion" begin
+            include("test_insertion.jl")
         end
     end
 end

@@ -87,6 +87,10 @@ function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
     for node_id in MetaGraphsNext.labels(network_graph.graph)
         node = network_graph.graph[node_id]
         add_network_node!(time_space_graph, node)
+
+        # NOTE: wait arcs (t -> t+1) are intentionally not added here to keep
+        # the time-space graph representation focused on network movement arcs
+        # (movement wrapping is still handled when adding network arcs).
     end
 
     # Connect timed nodes according to network arcs

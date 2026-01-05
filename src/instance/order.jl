@@ -57,3 +57,12 @@ function Base.show(io::IO, order::Order)
         "Order(delivery_time_step=$(order.delivery_time_step), num_commodities=$(length(order.commodities)), max_delivery_time_step=$(order.max_delivery_time_step))",
     )
 end
+
+"""
+$TYPEDSIGNATURES
+
+Compute the total size of all commodities in the order.
+"""
+function total_size(order::Order)
+    return sum(c.size for c in order.commodities; init=0.0)
+end
