@@ -42,7 +42,7 @@ is_feasible(read_greedy_solution, instance)
 mismatches = 0
 for i in 1:bundle_count(instance)
     if greedy_solution.bundle_paths[i] != read_greedy_solution.bundle_paths[i]
-        global mismatches += 1
+        mismatches += 1
     end
 end
 println("Path Mismatches: ", mismatches)

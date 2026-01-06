@@ -73,22 +73,6 @@ function compute_ttg_edge_incremental_cost(
 end
 
 """
-    greedy_construction(instance)
-
-Construct a solution by inserting bundles one by one into an initially empty solution.
-Bundles are processed in the order they appear in the instance.
-"""
-function greedy_construction(instance::Instance)
-    sol = Solution(instance)
-    # Get bundle indices sorted by decreasing total size
-    sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
-    @showprogress for i in sorted_indices
-        insert_bundle!(sol, instance, i)
-    end
-    return sol
-end
-
-"""
     insert_bundle!(sol, instance, bundle_idx)
 
 Find the cheapest path for a bundle in the TravelTimeGraph (considering incremental costs)
@@ -124,4 +108,20 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
 
     add_bundle_path!(sol, instance, bundle_idx, path)
     return nothing
+end
+
+"""
+    greedy_construction(instance)
+
+Construct a solution by inserting bundles one by one into an initially empty solution.
+Bundles are processed in the order they appear in the instance.
+"""
+function greedy_construction(instance::Instance)
+    sol = Solution(instance)
+    # Get bundle indices sorted by decreasing total size
+    sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
+    @showprogress for i in sorted_indices
+        insert_bundle!(sol, instance, i)
+    end
+    return sol
 end
