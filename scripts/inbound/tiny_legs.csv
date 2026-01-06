@@ -1,0 +1,15 @@
+,Unnamed: 0,dst_account,src_account,dst_type,src_type,leg_type,distance,travel_time,capacity,shipment_cost,is_linear,carbon_cost,src_index,dst_index
+0,1,P1,O1,platform,supplier,direct,50.0,2,15,100.0,False,10.0,1,10
+1,2,P2,O1,platform,supplier,direct,80.0,3,15,140.0,False,16.0,1,11
+2,3,P1,O2,platform,supplier,direct,70.0,3,15,130.0,False,14.0,2,10
+3,4,P2,O2,platform,supplier,direct,60.0,2,15,110.0,False,12.0,2,11
+4,5,P3,P1,platform,platform,direct,30.0,1,12,60.0,False,6.0,10,12
+5,6,P4,P1,platform,platform,direct,40.0,2,12,70.0,False,8.0,10,13
+6,7,P3,P2,platform,platform,direct,45.0,2,12,75.0,False,9.0,11,12
+7,8,P4,P2,platform,platform,direct,35.0,1,12,65.0,False,7.0,11,13
+8,9,D1,P3,plant,platform,delivery,20.0,1,10,50.0,False,5.0,12,20
+9,10,D2,P3,plant,platform,delivery,25.0,1,10,55.0,False,5.5,12,21
+10,11,D1,P4,plant,platform,delivery,30.0,1,10,60.0,False,6.0,13,20
+11,12,D2,P4,plant,platform,delivery,22.0,1,10,52.0,False,5.2,13,21
+12,13,D1,O1,plant,supplier,direct,120.0,5,8,250.0,False,25.0,1,20
+13,14,D2,O2,plant,supplier,direct,110.0,5,8,240.0,False,24.0,2,21
