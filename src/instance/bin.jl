@@ -16,6 +16,12 @@ struct Bin{C<:LightCommodity}
     remaining_capacity::Float64
 end
 
+function Base.show(io::IO, bin::Bin)
+    println(
+        io, "$(bin.total_size) / $(bin.max_capacity)"
+    )
+end
+
 """
 $TYPEDSIGNATURES
 

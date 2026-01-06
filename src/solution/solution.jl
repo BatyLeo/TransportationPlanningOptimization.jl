@@ -103,7 +103,7 @@ function project_to_time_space_graph(
     end
 
     if !(1 <= t <= instance.time_horizon_length)
-        throw(DomainError(t, "Projected time step out of bounds for order $(order)"))
+        throw(DomainError(t, "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order)"))
     end
 
     tsg_node_label = (u_label, t)

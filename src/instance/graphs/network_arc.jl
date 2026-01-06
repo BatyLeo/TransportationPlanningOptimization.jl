@@ -22,6 +22,12 @@ struct LinearArcCost <: AbstractArcCostFunction
     cost_per_unit_size::Float64
 end
 
+struct LinearArcCostPerBin <: AbstractArcCostFunction
+    "Unit cost per unit of size (e.g. m³, kg, etc.)"
+    cost_per_unit_size::Float64
+    capacity_per_bin::Float64
+end
+
 """
 $TYPEDEF
 

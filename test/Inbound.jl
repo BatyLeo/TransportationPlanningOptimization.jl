@@ -77,9 +77,9 @@ origin-destination pair) and handles heterogeneous cost function types.
 function parse_inbound_instance(
     node_file::String, leg_file::String, commmodity_file::String
 )
-    df_nodes = DataFrame(CSV.File(node_file))
-    df_legs = DataFrame(CSV.File(leg_file))
-    df_commodities = DataFrame(CSV.File(commmodity_file))
+    df_nodes = DataFrame(CSV.File(node_file, stringtype=String))
+    df_legs = DataFrame(CSV.File(leg_file, stringtype=String))
+    df_commodities = DataFrame(CSV.File(commmodity_file, stringtype=String))
 
     nodes = map(eachrow(df_nodes)) do row
         node_type_symbol = if row[NODE_TYPE] == "supplier"
@@ -91,7 +91,7 @@ function parse_inbound_instance(
         end
 
         NetworkNode(;
-            id="$(row[NODE_ID])",
+            id=string(row[NODE_ID]),
             node_type=node_type_symbol,
             cost=row[NODE_COST],
             capacity=Int(row[NODE_CAPACITY]),
@@ -114,13 +114,13 @@ function parse_inbound_instance(
 
     raw_arcs = map(eachrow(df_legs)) do row
         cost = if row.is_linear
-            LinearArcCost(row[ARC_SHIPMENT_COST])
+            LinearArcCost(row[ARC_SHIPMENT_COST] / row[ARC_CAPACITY])
         else
             BinPackingArcCost(row[ARC_SHIPMENT_COST], row[ARC_CAPACITY])
         end
         return Arc(;
-            origin_id="$(row[ARC_ORIGIN_ID])",
-            destination_id="$(row[ARC_DESTINATION_ID])",
+            origin_id=string(row[ARC_ORIGIN_ID]),
+            destination_id=string(row[ARC_DESTINATION_ID]),
             travel_time=Week(row[ARC_TRAVEL_TIME]),
             cost=cost,
             info=InboundArcInfo(Symbol(row[ARC_TYPE])),
@@ -145,8 +145,8 @@ function parse_inbound_instance(
 
     commodities = map(eachrow(df_commodities)) do row
         Commodity(;
-            origin_id="$(row[COMMODITY_ORIGIN_ID])",
-            destination_id="$(row[COMMODITY_DESTINATION_ID])",
+            origin_id=string(row[COMMODITY_ORIGIN_ID]),
+            destination_id=string(row[COMMODITY_DESTINATION_ID]),
             size=row[COMMODITY_SIZE],
             quantity=Int(row[COMMODITY_QUANTITY]),
             arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),

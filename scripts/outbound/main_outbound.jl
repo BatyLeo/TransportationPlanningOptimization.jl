@@ -31,7 +31,7 @@ instance = build_instance(
     nodes,
     arcs,
     commodities,
-    Week(12),
+    Week(1000),
     (LinearArcCost, BinPackingArcCost);
     group_by=commodity -> (commodity.info.model, commodity.info.is_BTS),
 );
