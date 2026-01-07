@@ -19,6 +19,15 @@ struct Solution{C<:LightCommodity}
     arc_costs::Dict{Tuple{Int,Int},Float64}
 end
 
+function Base.show(io::IO, sol::Solution)
+    nb_trucks = sum(
+        length(assignments) for assignments in values(sol.bin_assignments); init=0
+    )
+    return print(
+        io, "Solution(num_trucks=$(nb_trucks), bin_assignments=$(sol.bin_assignments))"
+    )
+end
+
 """
     Solution(instance::Instance)
 
@@ -97,13 +106,18 @@ function project_to_time_space_graph(
     u_label, τ = MetaGraphsNext.label_for(travel_time_graph.graph, ttg_node_code)
 
     if is_date_arrival
-        t = order.delivery_time_step - τ
+        t = order.time_step - τ
     else
-        t = order.delivery_time_step + τ
+        t = order.time_step + τ
     end
 
     if !(1 <= t <= instance.time_horizon_length)
-        throw(DomainError(t, "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order)"))
+        throw(
+            DomainError(
+                t,
+                "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order) and node code $(ttg_node_code) u_label=$(u_label)",
+            ),
+        )
     end
 
     tsg_node_label = (u_label, t)

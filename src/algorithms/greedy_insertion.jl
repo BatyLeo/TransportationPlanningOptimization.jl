@@ -28,19 +28,20 @@ Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
 function compute_ttg_edge_incremental_cost(
-    sol::Solution{C}, instance::Instance, bundle::Bundle, u_ttg_label, v_ttg_label
+    sol::Solution{C}, instance::Instance, bundle::Bundle, u_ttg_code, v_ttg_code
 ) where {C}
     tsg = instance.time_space_graph
-    ttg = instance.travel_time_graph
+    # ttg = instance.travel_time_graph
 
     # Collect all TSG edges affected by this TTG edge for this bundle
     # Many orders might map to the same TSG edge
     tsg_edge_to_new_commodities = Dict{Tuple{Int,Int},Vector{C}}()
 
-    u_ttg_code = MetaGraphsNext.code_for(ttg.graph, u_ttg_label)
-    v_ttg_code = MetaGraphsNext.code_for(ttg.graph, v_ttg_label)
+    # u_ttg_code = MetaGraphsNext.code_for(ttg.graph, u_ttg_label)
+    # v_ttg_code = MetaGraphsNext.code_for(ttg.graph, v_ttg_label)
 
     for order in bundle.orders
+        # @info "$u_ttg_code -> $v_ttg_code for order $order"
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
         edge = (u_tsg, v_tsg)
@@ -82,28 +83,31 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
     ttg = instance.travel_time_graph
     bundle = instance.bundles[bundle_idx]
 
-    nv_ttg = Graphs.nv(ttg.graph)
+    # nv_ttg = Graphs.nv(ttg.graph)
     # We need a weight matrix for Dijkstra
     # Using a 2D matrix; if performance is an issue for large networks, use a function-based approach
-    weights = fill(Inf, nv_ttg, nv_ttg)
+    # weights = fill(Inf, nv_ttg, nv_ttg)
 
-    for (u_label, v_label) in MetaGraphsNext.edge_labels(ttg.graph)
-        u_code = MetaGraphsNext.code_for(ttg.graph, u_label)
-        v_code = MetaGraphsNext.code_for(ttg.graph, v_label)
-
-        cost = compute_ttg_edge_incremental_cost(sol, instance, bundle, u_label, v_label)
-        weights[u_code, v_code] = cost
+    for (u_code, v_code) in ttg.bundle_arcs[bundle_idx]
+        cost = compute_ttg_edge_incremental_cost(sol, instance, bundle, u_code, v_code)
+        ttg.cost_matrix[u_code, v_code] = cost
     end
+    # for (u_label, v_label) in MetaGraphsNext.edge_labels(ttg.graph)
+    #     u_code = MetaGraphsNext.code_for(ttg.graph, u_label)
+    #     v_code = MetaGraphsNext.code_for(ttg.graph, v_label)
+
+    #     cost = compute_ttg_edge_incremental_cost(sol, instance, bundle, u_label, v_label)
+    #     ttg.cost_matrix[u_code, v_code] = cost
+    # end
 
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]
 
-    res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, weights)
+    res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
     path = Graphs.enumerate_paths(res, destination)
 
     if isempty(path)
-        @warn "No feasible path found for bundle $bundle_idx"
-        return nothing
+        throw(ArgumentError("No feasible path found for bundle $bundle_idx"))
     end
 
     add_bundle_path!(sol, instance, bundle_idx, path)

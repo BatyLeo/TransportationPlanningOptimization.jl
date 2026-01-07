@@ -254,7 +254,7 @@ using MetaGraphsNext
         instance = build_instance(nodes, arcs, commodities, time_step, LinearArcCost)
 
         # In Arrival setting (countdown mode):
-        # We have 2 days max duration (max_delivery_time_step = 2).
+        # We have 2 days max duration (max_transit_steps = 2).
         # We start at origin with budget 2, and arrive at destination with budget 0.
         # Path in TTG: (A, 2) -> (B, 1) -> (C, 0)
         # These project to absolute steps (1, 2, 3) in TimeSpaceGraph.

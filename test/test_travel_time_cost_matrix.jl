@@ -13,7 +13,7 @@ using SparseArrays
     net = NetworkGraph(nodes, arcs)
 
     c = LightCommodity(; origin_id=origin.id, destination_id=destination.id, size=1.0)
-    order = Order(; commodities=[c], delivery_time_step=1, max_delivery_time_step=1)
+    order = Order(; commodities=[c], time_step=1, max_transit_steps=1)
     bundle = Bundle(; orders=[order], origin_id=origin.id, destination_id=destination.id)
 
     ttg = TravelTimeGraph(net, [bundle])

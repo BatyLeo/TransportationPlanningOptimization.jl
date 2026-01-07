@@ -226,8 +226,8 @@ end
                     is_date_arrival=true,
                 ),
             ],
-            delivery_time_step=1,
-            max_delivery_time_step=2,
+            time_step=1,
+            max_transit_steps=2,
         )
         bundle = Bundle(; orders=[order], origin_id="O", destination_id="D")
         bundles = [bundle]

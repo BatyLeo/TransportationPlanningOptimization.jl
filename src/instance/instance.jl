@@ -15,6 +15,8 @@ $TYPEDFIELDS
     time_horizon_length::Int
     "discretization time step for the instance"
     time_step::Period
+    "mapping from time step index to date"
+    time_step_to_date::Vector{Dates.Date}
     "time expanded graph (for order paths)"
     time_space_graph::TSG
     "travel time graph (for bundle paths)"
@@ -111,13 +113,14 @@ function build_instance(
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period;
     group_by=_default_group_by,
+    wrap_time=false,
 ) where {is_date_arrival,ID,I}
     # Building the network graph (arcs are provided as (origin_id,destination_id,NetworkArc))
     network_graph = NetworkGraph(nodes, arcs)
 
     # Wrapping commodities into light commodities
     full_commodities = LightCommodity{is_date_arrival,I}[]
-    # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_delivery_time_steps)
+    # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_time_steps)
     first_key = (
         1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
     )
@@ -127,7 +130,11 @@ function build_instance(
 
     # normalize all dates to Date so DateTime operands are handled consistently
     if is_date_arrival
-        start_date = minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
+        start_date = if wrap_time
+            minimum(Dates.Date(c.date) for c in commodities)
+        else
+            minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
+        end
     else
         start_date = minimum(Dates.Date(c.date) for c in commodities)
     end
@@ -142,7 +149,7 @@ function build_instance(
                 is_date_arrival=is_date_arrival,
             ) for _ in 1:(commodity.quantity)
         ]
-        max_delivery_time_steps = period_steps(
+        max_transit_steps = period_steps(
             commodity.max_delivery_time, time_step; roundup=floor
         )
         append!(full_commodities, to_append)
@@ -161,17 +168,20 @@ function build_instance(
         if haskey(order_dict, key)
             commodities_list, min_steps = order_dict[key]
             append!(commodities_list, to_append)
-            order_dict[key] = (commodities_list, min(min_steps, max_delivery_time_steps))
+            order_dict[key] = (commodities_list, min(min_steps, max_transit_steps))
         else
-            order_dict[key] = (to_append, max_delivery_time_steps)
+            order_dict[key] = (to_append, max_transit_steps)
         end
     end
+
     if is_date_arrival
         time_horizon_length = maximum(key[1] for key in keys(order_dict))
     else
-        time_horizon_length = maximum(
-            key[1] + order_dict[key][2] for key in keys(order_dict)
-        )
+        time_horizon_length = if wrap_time
+            maximum(key[1] for key in keys(order_dict))
+        else
+            maximum(key[1] + order_dict[key][2] for key in keys(order_dict))
+        end
     end
 
     # Build orders and bundles simultaneously in one pass
@@ -199,11 +209,17 @@ function build_instance(
     end
     bundles = [Bundle(bundle_dict[key], key[1], key[2]) for key in keys(bundle_dict)]
 
-    time_space_graph = TimeSpaceGraph(network_graph, time_horizon_length)
+    # Build mapping from time step index to date
+    time_step_to_date = [start_date + (i - 1) * time_step for i in 1:time_horizon_length]
+
+    time_space_graph = TimeSpaceGraph(
+        network_graph, time_horizon_length; wrap_time=wrap_time
+    )
     travel_time_graph = TravelTimeGraph(network_graph, bundles)
     return Instance(;
         time_horizon_length,
         time_step,
+        time_step_to_date,
         bundles,
         network_graph,
         time_space_graph,
@@ -224,9 +240,12 @@ function build_instance(
     time_step::Period,
     arc_cost_types;
     group_by=_default_group_by,
+    wrap_time=false,
 ) where {is_date_arrival,ID,I}
     # If arc_cost_types is a single type, wrap it in a tuple for collect_arcs
     types = arc_cost_types isa Type ? (arc_cost_types,) : arc_cost_types
     arcs = collect_arcs(types, raw_arcs, time_step)
-    return build_instance(nodes, arcs, commodities, time_step; group_by=group_by)
+    return build_instance(
+        nodes, arcs, commodities, time_step; group_by=group_by, wrap_time=wrap_time
+    )
 end

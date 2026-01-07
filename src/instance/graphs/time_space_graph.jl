@@ -47,15 +47,23 @@ function add_network_arc!(
     time_space_graph::TimeSpaceGraph,
     origin::NetworkNode,
     destination::NetworkNode,
-    arc::NetworkArc,
+    arc::NetworkArc;
+    wrap_time::Bool,
 )
     (; time_horizon_length) = time_space_graph
     for t in time_horizon(time_space_graph)
         u_t = (origin.id, t)
         destination_time = t + arc.travel_time_steps
+
+        # Handle time wrapping if enabled
         if destination_time > time_horizon_length
-            destination_time -= time_horizon_length
+            if wrap_time
+                destination_time -= time_horizon_length
+            else
+                break
+            end
         end
+
         v_t = (destination.id, destination_time)
         was_added = Graphs.add_edge!(time_space_graph.graph, u_t, v_t, arc)
         if !was_added
@@ -73,7 +81,9 @@ $TYPEDSIGNATURES
 Constructor for `TimeSpaceGraph`.
 Creates timed copies of all nodes and arcs from the `network_graph` for each step in `1:time_horizon_length`.
 """
-function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
+function TimeSpaceGraph(
+    network_graph::NetworkGraph, time_horizon_length::Int; wrap_time::Bool
+)
     # Initialize empty TimeSpaceGraph
     graph = MetaGraph(
         Graphs.DiGraph();
@@ -98,7 +108,7 @@ function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
         u = network_graph.graph[u_id]
         v = network_graph.graph[v_id]
         arc = network_graph.graph[u_id, v_id]
-        add_network_arc!(time_space_graph, u, v, arc)
+        add_network_arc!(time_space_graph, u, v, arc; wrap_time=wrap_time)
     end
 
     return time_space_graph

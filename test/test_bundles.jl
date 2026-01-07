@@ -9,7 +9,7 @@ using Test
     @test begin
         light_commodity = LightCommodity(; origin_id="1", destination_id="2", size=10.0)
         order = Order(;
-            commodities=[light_commodity], delivery_time_step=1, max_delivery_time_step=7
+            commodities=[light_commodity], time_step=1, max_transit_steps=7
         )
         bundle = Bundle(; orders=[order], origin_id="1", destination_id="2")
         bundle.origin_id == "1" &&
@@ -25,20 +25,20 @@ end
                 commodities=[
                     LightCommodity(; origin_id="1", destination_id="2", size=10.0)
                 ],
-                delivery_time_step=1,
-                max_delivery_time_step=7,
+                time_step=1,
+                max_transit_steps=7,
             ),
             Order(;
                 commodities=[
                     LightCommodity(; origin_id="1", destination_id="2", size=15.0)
                 ],
-                delivery_time_step=2,
-                max_delivery_time_step=14,
+                time_step=2,
+                max_transit_steps=14,
             ),
             Order(;
                 commodities=[LightCommodity(; origin_id="1", destination_id="2", size=5.0)],
-                delivery_time_step=3,
-                max_delivery_time_step=21,
+                time_step=3,
+                max_transit_steps=21,
             ),
         ]
         bundle = Bundle(; orders=orders, origin_id="A", destination_id="B")
@@ -54,15 +54,15 @@ end
                 commodities=[
                     LightCommodity(; origin_id="X", destination_id="Y", size=10.0)
                 ],
-                delivery_time_step=1,
-                max_delivery_time_step=7,
+                time_step=1,
+                max_transit_steps=7,
             ),
             Order(;
                 commodities=[
                     LightCommodity(; origin_id="X", destination_id="Y", size=20.0)
                 ],
-                delivery_time_step=2,
-                max_delivery_time_step=14,
+                time_step=2,
+                max_transit_steps=14,
             ),
         ]
         bundle = Bundle(; orders=orders, origin_id="X", destination_id="Y")
@@ -87,15 +87,15 @@ end
                     LightCommodity(; origin_id="1", destination_id="2", size=5.0),
                     LightCommodity(; origin_id="1", destination_id="2", size=5.0),
                 ],
-                delivery_time_step=1,
-                max_delivery_time_step=7,
+                time_step=1,
+                max_transit_steps=7,
             ),
             Order(;
                 commodities=[
                     LightCommodity(; origin_id="1", destination_id="2", size=10.0)
                 ],
-                delivery_time_step=2,
-                max_delivery_time_step=14,
+                time_step=2,
+                max_transit_steps=14,
             ),
         ]
         bundle = Bundle(; orders=orders, origin_id="1", destination_id="2")
@@ -114,8 +114,8 @@ end
                     commodities=[
                         LightCommodity(; origin_id="A", destination_id="B", size=10.0)
                     ],
-                    delivery_time_step=1,
-                    max_delivery_time_step=7,
+                    time_step=1,
+                    max_transit_steps=7,
                 ),
             ],
             origin_id="A",
@@ -127,8 +127,8 @@ end
                     commodities=[
                         LightCommodity(; origin_id="C", destination_id="D", size=15.0)
                     ],
-                    delivery_time_step=1,
-                    max_delivery_time_step=7,
+                    time_step=1,
+                    max_transit_steps=7,
                 ),
             ],
             origin_id="C",

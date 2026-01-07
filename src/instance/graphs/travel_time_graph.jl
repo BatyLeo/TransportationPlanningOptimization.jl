@@ -27,6 +27,8 @@ struct TravelTimeGraph{is_date_arrival,G<:MetaGraph}
     origin_codes::Vector{Int}
     "Map from bundle index to unique destination node code exit point"
     destination_codes::Vector{Int}
+    "arcs usable for each bundle to ease looping through them"
+    bundle_arcs::Vector{Vector{Tuple{Int,Int}}}
 end
 
 function Base.show(io::IO, g::TravelTimeGraph{is_date_arrival}) where {is_date_arrival}
@@ -169,8 +171,8 @@ function _add_network_node_to_travel_time_graph!(
         if is_date_arrival
             # Max duration over all bundles starting at this node
             max_duration = maximum(
-                order.max_delivery_time_step for
-                bundle in get(node_to_bundles_map, node.id, []) for order in bundle.orders;
+                order.max_transit_steps for bundle in get(node_to_bundles_map, node.id, [])
+                for order in bundle.orders;
                 init=-1,
             )
             for τ in 0:max_duration
@@ -258,6 +260,68 @@ end
 """
 $TYPEDSIGNATURES
 
+Compute usable arcs for each bundle by finding all arcs that lie on paths
+from the bundle's origin to its destination in the travel-time graph.
+"""
+function _compute_bundle_arcs(
+    graph::MetaGraph, origin_codes::Vector{Int}, destination_codes::Vector{Int}
+)
+    bundle_arcs = Vector{Vector{Tuple{Int,Int}}}(undef, length(origin_codes))
+
+    for i in eachindex(origin_codes)
+        origin_code = origin_codes[i]
+        destination_code = destination_codes[i]
+
+        # Find all nodes reachable from origin
+        reachable_from_origin = Set{Int}()
+        queue = [origin_code]
+        push!(reachable_from_origin, origin_code)
+        while !isempty(queue)
+            node = popfirst!(queue)
+            for neighbor in Graphs.outneighbors(graph, node)
+                if neighbor ∉ reachable_from_origin
+                    push!(reachable_from_origin, neighbor)
+                    push!(queue, neighbor)
+                end
+            end
+        end
+
+        # Find all nodes that can reach destination (reverse BFS)
+        can_reach_destination = Set{Int}()
+        queue = [destination_code]
+        push!(can_reach_destination, destination_code)
+        while !isempty(queue)
+            node = popfirst!(queue)
+            for neighbor in Graphs.inneighbors(graph, node)
+                if neighbor ∉ can_reach_destination
+                    push!(can_reach_destination, neighbor)
+                    push!(queue, neighbor)
+                end
+            end
+        end
+
+        # Intersection: nodes on paths from origin to destination
+        nodes_on_paths = intersect(reachable_from_origin, can_reach_destination)
+
+        # Collect all arcs where both endpoints are on paths
+        arcs = Tuple{Int,Int}[]
+        for u in nodes_on_paths
+            for v in Graphs.outneighbors(graph, u)
+                if v in nodes_on_paths
+                    push!(arcs, (u, v))
+                end
+            end
+        end
+
+        bundle_arcs[i] = arcs
+    end
+
+    return bundle_arcs
+end
+
+"""
+$TYPEDSIGNATURES
+
 Construct a `TravelTimeGraph` from a `NetworkGraph` and a set of `Bundle`s.
 """
 function TravelTimeGraph(
@@ -275,7 +339,7 @@ function TravelTimeGraph(
     isempty(bundles) && throw(ArgumentError("bundles cannot be empty"))
 
     max_time_steps = maximum(
-        order.max_delivery_time_step for bundle in bundles for order in bundle.orders
+        order.max_transit_steps for bundle in bundles for order in bundle.orders
     )
 
     node_to_bundles_map = compute_node_to_bundles_map(bundles)
@@ -316,7 +380,7 @@ function TravelTimeGraph(
     destination_codes = Vector{Int}(undef, length(bundles))
 
     for (i, bundle) in enumerate(bundles)
-        max_val = maximum(order.max_delivery_time_step for order in bundle.orders)
+        max_val = maximum(order.max_transit_steps for order in bundle.orders)
         if is_date_arrival
             start_label = (bundle.origin_id, max_val)
             end_label = (bundle.destination_id, 0)
@@ -328,7 +392,10 @@ function TravelTimeGraph(
         destination_codes[i] = MetaGraphsNext.code_for(graph, end_label)
     end
 
+    # Compute usable arcs for each bundle
+    bundle_arcs = _compute_bundle_arcs(graph, origin_codes, destination_codes)
+
     return TravelTimeGraph{is_date_arrival,typeof(graph)}(
-        graph, max_time_steps, cost_matrix, origin_codes, destination_codes
+        graph, max_time_steps, cost_matrix, origin_codes, destination_codes, bundle_arcs
     )
 end
