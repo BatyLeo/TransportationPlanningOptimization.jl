@@ -22,14 +22,15 @@ Ensures node and arc IDs are unique during creation.
 function NetworkGraph(
     nodes::Vector{<:NetworkNode}, arcs::Vector{<:Tuple{String,String,NA}}
 ) where {NA<:NetworkArc}
+    # Initialize empty MetaGraph with correct types
     network_graph = MetaGraph(
         Graphs.DiGraph();
         label_type=String,
         vertex_data_type=eltype(nodes),
         edge_data_type=NA,
-        # graph_data=Dict{Symbol,Int}(),
     )
 
+    # Add vertices from nodes
     for node in nodes
         if haskey(network_graph, node.id)
             prev_idx = findfirst(x -> x.id == node.id, nodes)
@@ -44,6 +45,7 @@ function NetworkGraph(
         Graphs.add_vertex!(network_graph, node.id, node)
     end
 
+    # Add edges from arcs
     for (origin_id, destination_id, arc) in arcs
         if MetaGraphsNext.haskey(network_graph, origin_id, destination_id)
             throw(

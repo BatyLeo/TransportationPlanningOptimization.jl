@@ -77,9 +77,9 @@ origin-destination pair) and handles heterogeneous cost function types.
 function parse_inbound_instance(
     node_file::String, leg_file::String, commmodity_file::String
 )
-    df_nodes = DataFrame(CSV.File(node_file, stringtype=String))
-    df_legs = DataFrame(CSV.File(leg_file, stringtype=String))
-    df_commodities = DataFrame(CSV.File(commmodity_file, stringtype=String))
+    df_nodes = DataFrame(CSV.File(node_file; stringtype=String))
+    df_legs = DataFrame(CSV.File(leg_file; stringtype=String))
+    df_commodities = DataFrame(CSV.File(commmodity_file; stringtype=String))
 
     nodes = map(eachrow(df_nodes)) do row
         node_type_symbol = if row[NODE_TYPE] == "supplier"

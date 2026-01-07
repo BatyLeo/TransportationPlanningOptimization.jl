@@ -17,9 +17,7 @@ struct Bin{C<:LightCommodity}
 end
 
 function Base.show(io::IO, bin::Bin)
-    println(
-        io, "$(bin.total_size) / $(bin.max_capacity)"
-    )
+    return println(io, "$(bin.total_size) / $(bin.max_capacity)")
 end
 
 """

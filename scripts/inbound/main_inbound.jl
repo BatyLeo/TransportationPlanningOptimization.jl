@@ -19,7 +19,7 @@ eltype(arcs)
 eltype(commodities)
 
 instance = build_instance(
-    nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost); wrap_time=true
+    nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost); wrap_time=false
 );
 instance
 
@@ -68,3 +68,7 @@ is_feasible(read_greedy_solution, instance)
 readable_solution = read_solution_csv(joinpath(@__DIR__, "readable_solution.csv"), instance)
 cost(readable_solution)
 is_feasible(readable_solution, instance)
+
+filter(collect(edge_labels(instance.travel_time_graph.graph))) do ((id1, t1), (id2, t2))
+    return contains(id1, "O") && contains(id2, "O")
+end

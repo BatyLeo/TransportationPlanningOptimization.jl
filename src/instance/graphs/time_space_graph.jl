@@ -34,7 +34,7 @@ $TYPEDSIGNATURES
 
 Adds a timed copy of the given network node for each time step in the time horizon.
 """
-function add_network_node!(time_space_graph::TimeSpaceGraph, node::NetworkNode)
+function _add_network_node!(time_space_graph::TimeSpaceGraph, node::NetworkNode)
     for time_step in time_horizon(time_space_graph)
         Graphs.add_vertex!(time_space_graph.graph, (node.id, time_step), node)
     end
@@ -43,7 +43,7 @@ end
 """
 $TYPEDSIGNATURES
 """
-function add_network_arc!(
+function _add_network_arc!(
     time_space_graph::TimeSpaceGraph,
     origin::NetworkNode,
     destination::NetworkNode,
@@ -96,11 +96,9 @@ function TimeSpaceGraph(
     # Fill with timed copies of network nodes
     for node_id in MetaGraphsNext.labels(network_graph.graph)
         node = network_graph.graph[node_id]
-        add_network_node!(time_space_graph, node)
+        _add_network_node!(time_space_graph, node)
 
-        # NOTE: wait arcs (t -> t+1) are intentionally not added here to keep
-        # the time-space graph representation focused on network movement arcs
-        # (movement wrapping is still handled when adding network arcs).
+        # ! If we wanted to add wait arcs, we could do it here !
     end
 
     # Connect timed nodes according to network arcs
@@ -108,7 +106,7 @@ function TimeSpaceGraph(
         u = network_graph.graph[u_id]
         v = network_graph.graph[v_id]
         arc = network_graph.graph[u_id, v_id]
-        add_network_arc!(time_space_graph, u, v, arc; wrap_time=wrap_time)
+        _add_network_arc!(time_space_graph, u, v, arc; wrap_time=wrap_time)
     end
 
     return time_space_graph

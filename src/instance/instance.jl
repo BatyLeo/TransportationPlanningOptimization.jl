@@ -89,6 +89,23 @@ function _default_group_by(commodity::Commodity)
     return nothing
 end
 
+function _compute_start_date(
+    commodities::Vector{Commodity{is_date_arrival,ID,I}}, wrap_time::Bool
+) where {is_date_arrival,ID,I}
+    if is_date_arrival
+        # Arrival-based: start date is min of arrival dates (- max delivery times)
+        return if wrap_time
+            minimum(Dates.Date(c.date) for c in commodities)
+        else
+            # Need to extend the time horizon to account for max delivery times, if no wrapping
+            minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
+        end
+    else
+        # Departure-based: start date is min of departure dates
+        return minimum(Dates.Date(c.date) for c in commodities)
+    end
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -128,16 +145,7 @@ function build_instance(
         typeof(first_key),Tuple{Vector{LightCommodity{is_date_arrival,I}},Int}
     }()
 
-    # normalize all dates to Date so DateTime operands are handled consistently
-    if is_date_arrival
-        start_date = if wrap_time
-            minimum(Dates.Date(c.date) for c in commodities)
-        else
-            minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
-        end
-    else
-        start_date = minimum(Dates.Date(c.date) for c in commodities)
-    end
+    start_date = _compute_start_date(commodities, wrap_time)
 
     for commodity in commodities
         to_append = [

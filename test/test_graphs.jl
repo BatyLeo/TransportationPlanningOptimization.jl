@@ -157,46 +157,60 @@ end
 end
 
 @testset "TimeSpaceGraph creation" begin
-    @test begin
-        nodes = [
-            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
-            NetworkNode(;
-                id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing
-            ),
-        ]
-        arcs = [
-            (
-                "A",
-                "B",
-                NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing),
-            ),
-        ]
-        network_graph = NetworkGraph(nodes, arcs)
-        time_horizon_length = 3
-        tsg = TimeSpaceGraph(network_graph, time_horizon_length)
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
+        NetworkNode(; id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing),
+    ]
+    arcs = [(
+        "A", "B", NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing)
+    )]
+    network_graph = NetworkGraph(nodes, arcs)
+    time_horizon_length = 3
+    tsg = TimeSpaceGraph(network_graph, time_horizon_length; wrap_time=true)
+    tsg_unwrapped = TimeSpaceGraph(network_graph, time_horizon_length; wrap_time=false)
 
-        # Basic creation checks
-        tsg isa TimeSpaceGraph &&
-            time_horizon(tsg) == 1:3 &&
-            Graphs.nv(tsg.graph) == 6 &&  # 2 nodes * 3 time steps
-            Graphs.ne(tsg.graph) == 3 &&   # 1 arc * 3 time steps
+    # Basic creation checks
+    @test tsg isa TimeSpaceGraph &&
+        time_horizon(tsg) == 1:3 &&
+        Graphs.nv(tsg.graph) == 6 &&  # 2 nodes * 3 time steps
+        Graphs.ne(tsg.graph) == 3 &&   # 1 arc * 3 time steps
 
-            # Vertex labels and data
-            haskey(tsg.graph, ("A", 1)) &&
-            haskey(tsg.graph, ("A", 2)) &&
-            haskey(tsg.graph, ("A", 3)) &&
-            haskey(tsg.graph, ("B", 1)) &&
-            haskey(tsg.graph, ("B", 2)) &&
-            haskey(tsg.graph, ("B", 3)) &&
-            tsg.graph[("A", 1)].id == "A" &&
-            tsg.graph[("B", 1)].id == "B" &&
+        # Vertex labels and data
+        haskey(tsg.graph, ("A", 1)) &&
+        haskey(tsg.graph, ("A", 2)) &&
+        haskey(tsg.graph, ("A", 3)) &&
+        haskey(tsg.graph, ("B", 1)) &&
+        haskey(tsg.graph, ("B", 2)) &&
+        haskey(tsg.graph, ("B", 3)) &&
+        tsg.graph[("A", 1)].id == "A" &&
+        tsg.graph[("B", 1)].id == "B" &&
 
-            # Edge labels and data (including wrapping)
-            haskey(tsg.graph, ("A", 1), ("B", 2)) &&
-            haskey(tsg.graph, ("A", 2), ("B", 3)) &&
-            haskey(tsg.graph, ("A", 3), ("B", 1)) &&  # wrapping: 3+1=4 >3, 4-3=1
-            tsg.graph[("A", 1), ("B", 2)].travel_time_steps == 1
-    end
+        # Edge labels and data (including wrapping)
+        haskey(tsg.graph, ("A", 1), ("B", 2)) &&
+        haskey(tsg.graph, ("A", 2), ("B", 3)) &&
+        haskey(tsg.graph, ("A", 3), ("B", 1)) &&  # wrapping: 3+1=4 >3, 4-3=1
+        tsg.graph[("A", 1), ("B", 2)].travel_time_steps == 1
+
+    @test tsg_unwrapped isa TimeSpaceGraph &&
+        time_horizon(tsg_unwrapped) == 1:3 &&
+        Graphs.nv(tsg_unwrapped.graph) == 6 &&  # 2 nodes * 3 time steps
+        Graphs.ne(tsg_unwrapped.graph) == 2 &&   # 1 arc * 2 time steps (no wrapping)
+
+        # Vertex labels and data
+        haskey(tsg_unwrapped.graph, ("A", 1)) &&
+        haskey(tsg_unwrapped.graph, ("A", 2)) &&
+        haskey(tsg_unwrapped.graph, ("A", 3)) &&
+        haskey(tsg_unwrapped.graph, ("B", 1)) &&
+        haskey(tsg_unwrapped.graph, ("B", 2)) &&
+        haskey(tsg_unwrapped.graph, ("B", 3)) &&
+        tsg_unwrapped.graph[("A", 1)].id == "A" &&
+        tsg_unwrapped.graph[("B", 1)].id == "B" &&
+
+        # Edge labels and data (no wrapping)
+        haskey(tsg_unwrapped.graph, ("A", 1), ("B", 2)) &&
+        haskey(tsg_unwrapped.graph, ("A", 2), ("B", 3)) &&
+        !haskey(tsg_unwrapped.graph, ("A", 3), ("B", 1)) &&  # no wrapping
+        tsg_unwrapped.graph[("A", 1), ("B", 2)].travel_time_steps == 1
 end
 
 @testset "TravelTimeGraph creation and data" begin

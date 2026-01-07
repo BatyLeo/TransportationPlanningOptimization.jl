@@ -29,5 +29,8 @@ using Test
         @testset "Greedy Insertion" begin
             include("test_insertion.jl")
         end
+        @testset "Tiny instance" begin
+            include("test_tiny_instance.jl")
+        end
     end
 end

@@ -83,22 +83,11 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
     ttg = instance.travel_time_graph
     bundle = instance.bundles[bundle_idx]
 
-    # nv_ttg = Graphs.nv(ttg.graph)
-    # We need a weight matrix for Dijkstra
-    # Using a 2D matrix; if performance is an issue for large networks, use a function-based approach
-    # weights = fill(Inf, nv_ttg, nv_ttg)
-
     for (u_code, v_code) in ttg.bundle_arcs[bundle_idx]
-        cost = compute_ttg_edge_incremental_cost(sol, instance, bundle, u_code, v_code)
-        ttg.cost_matrix[u_code, v_code] = cost
+        ttg.cost_matrix[u_code, v_code] = compute_ttg_edge_incremental_cost(
+            sol, instance, bundle, u_code, v_code
+        )
     end
-    # for (u_label, v_label) in MetaGraphsNext.edge_labels(ttg.graph)
-    #     u_code = MetaGraphsNext.code_for(ttg.graph, u_label)
-    #     v_code = MetaGraphsNext.code_for(ttg.graph, v_label)
-
-    #     cost = compute_ttg_edge_incremental_cost(sol, instance, bundle, u_label, v_label)
-    #     ttg.cost_matrix[u_code, v_code] = cost
-    # end
 
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]

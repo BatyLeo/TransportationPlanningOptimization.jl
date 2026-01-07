@@ -8,9 +8,7 @@ using Test
 @testset "Bundle creation" begin
     @test begin
         light_commodity = LightCommodity(; origin_id="1", destination_id="2", size=10.0)
-        order = Order(;
-            commodities=[light_commodity], time_step=1, max_transit_steps=7
-        )
+        order = Order(; commodities=[light_commodity], time_step=1, max_transit_steps=7)
         bundle = Bundle(; orders=[order], origin_id="1", destination_id="2")
         bundle.origin_id == "1" &&
             bundle.destination_id == "2" &&
