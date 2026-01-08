@@ -53,10 +53,11 @@ Feasibility requires:
 3. Every path must start at the bundle's designated entry node (`origin_codes`).
 4. Every path must end at the bundle's designated exit node (`destination_codes`).
 """
-function is_feasible(sol::Solution, instance::Instance)
+function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
     (; travel_time_graph) = instance
     for (bundle_idx, path) in enumerate(sol.bundle_paths)
         if isempty(path)
+            verbose && @warn "Bundle $(bundle_idx) has an empty path."
             return false
         end
 
@@ -66,6 +67,8 @@ function is_feasible(sol::Solution, instance::Instance)
         for i in 1:(length(path) - 1)
             u, v = path[i], path[i + 1]
             if !Graphs.has_edge(travel_time_graph.graph, u, v)
+                verbose &&
+                    @warn "Arc ($(u), $(v)) in bundle $(bundle_idx) path does not exist."
                 return false
             end
         end
@@ -74,6 +77,8 @@ function is_feasible(sol::Solution, instance::Instance)
         start_node_code = path[1]
         valid_origin = travel_time_graph.origin_codes[bundle_idx]
         if start_node_code != valid_origin
+            verbose &&
+                @warn "Bundle $(bundle_idx) starts at node $(start_node_code) instead of valid origin $(valid_origin)."
             return false
         end
 
@@ -81,6 +86,8 @@ function is_feasible(sol::Solution, instance::Instance)
         end_node_code = path[end]
         valid_destination = travel_time_graph.destination_codes[bundle_idx]
         if end_node_code != valid_destination
+            verbose &&
+                @warn "Bundle $(bundle_idx) ends at node $(end_node_code) instead of valid destination $(valid_destination)."
             return false
         end
     end

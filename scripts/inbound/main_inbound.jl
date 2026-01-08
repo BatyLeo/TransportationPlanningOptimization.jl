@@ -3,7 +3,7 @@ using NetworkDesignOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-instance_name = "tiny"
+instance_name = "small"
 # datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 datadir = joinpath(@__DIR__, "..", "..", "test", "public")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
@@ -24,15 +24,27 @@ instance = build_instance(
 instance
 
 empty_sol = Solution(instance)
-is_feasible(empty_sol, instance)
+is_feasible(empty_sol, instance; verbose=true)
 
 greedy_solution = greedy_construction(instance)
-is_feasible(greedy_solution, instance)
+is_feasible(greedy_solution, instance; verbose=true)
 cost(greedy_solution)
+
+using MetaGraphsNext
 [
     [label_for(instance.travel_time_graph.graph, ee) for ee in e] for
     e in greedy_solution.bundle_paths
 ]
+
+for (key, val) in greedy_solution.arc_costs
+    println(
+        "Arc: ",
+        label_for(instance.time_space_graph.graph, key[1]),
+        label_for(instance.time_space_graph.graph, key[2]),
+        " Cost: ",
+        val,
+    )
+end
 
 bb = [
     [("P2", 2), ("P4", 1), ("D2", 0)],
@@ -40,19 +52,31 @@ bb = [
     [("O2", 5), ("P2", 3), ("P3", 1), ("D1", 0)],
     [("O1", 4), ("P1", 2), ("P3", 1), ("D1", 0)],
 ]
-using MetaGraphsNext
+bb = [
+    [("O2", 5), ("D1", 0)],
+    [("O2", 5), ("D2", 0)],
+    [("O1", 5), ("D2", 0)],
+    [("O1", 5), ("D1", 0)],
+]
+
+bb = [
+    [("O2", 5), ("P2", 3), ("P3", 1), ("D2", 0)],
+    [("O1", 6), ("P2", 3), ("P3", 1), ("D2", 0)],
+    [("O2", 4), ("P2", 2), ("P4", 1), ("D1", 0)],
+    [("O1", 5), ("D1", 0)],
+]
 bundle_paths = map(bb) do path
     map(path) do node_label
         MetaGraphsNext.code_for(instance.travel_time_graph.graph, node_label)
     end
 end
 new_solution = Solution(bundle_paths, instance)
-is_feasible(new_solution, instance)
+is_feasible(new_solution, instance; verbose=true)
 cost(new_solution)
 # @profview greedy_solution = greedy_construction(instance)
 
 solution_2 = Solution(greedy_solution.bundle_paths, instance)
-is_feasible(solution_2, instance)
+is_feasible(solution_2, instance; verbose=true)
 cost(solution_2, instance)
 
 write_solution_csv(joinpath(@__DIR__, "greedy_solution.csv"), greedy_solution, instance)

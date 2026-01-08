@@ -96,7 +96,7 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
     path = Graphs.enumerate_paths(res, destination)
 
     if isempty(path)
-        throw(ArgumentError("No feasible path found for bundle $bundle_idx"))
+        throw(ArgumentError("No feasible path found for bundle $bundle_idx, ($path)"))
     end
 
     add_bundle_path!(sol, instance, bundle_idx, path)
