@@ -3,7 +3,7 @@ using NetworkDesignOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-instance_name = "small"
+instance_name = "tiny"
 # datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 datadir = joinpath(@__DIR__, "..", "..", "test", "public")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
@@ -30,7 +30,14 @@ greedy_solution = greedy_construction(instance)
 is_feasible(greedy_solution, instance; verbose=true)
 cost(greedy_solution)
 
+instance.travel_time_graph.cost_matrix
+using Graphs
 using MetaGraphsNext
+[
+    label_for(instance.travel_time_graph.graph, v) for
+    v in vertices(instance.travel_time_graph.graph)
+]
+
 [
     [label_for(instance.travel_time_graph.graph, ee) for ee in e] for
     e in greedy_solution.bundle_paths

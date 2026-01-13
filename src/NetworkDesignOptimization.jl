@@ -29,6 +29,7 @@ include("instance/graphs/travel_time_graph.jl")
 include("instance/instance.jl")
 
 include("solution/solution.jl")
+include("solution/parsing.jl")
 include("algorithms/greedy_insertion.jl")
 
 export LightCommodity

@@ -11,6 +11,8 @@ struct TimeSpaceGraph{G}
     graph::G
     "length of the time horizon in discrete time steps"
     time_horizon_length::Int
+    "whether time wrapping is enabled for arcs that exceed the time horizon"
+    wrap_time::Bool
 end
 
 function Base.show(io::IO, g::TimeSpaceGraph)
@@ -48,9 +50,8 @@ function _add_network_arc!(
     origin::NetworkNode,
     destination::NetworkNode,
     arc::NetworkArc;
-    wrap_time::Bool,
 )
-    (; time_horizon_length) = time_space_graph
+    (; time_horizon_length, wrap_time) = time_space_graph
     for t in time_horizon(time_space_graph)
         u_t = (origin.id, t)
         destination_time = t + arc.travel_time_steps
@@ -91,7 +92,7 @@ function TimeSpaceGraph(
         vertex_data_type=NetworkNode,
         edge_data_type=NetworkArc,
     )
-    time_space_graph = TimeSpaceGraph(graph, time_horizon_length)
+    time_space_graph = TimeSpaceGraph(graph, time_horizon_length, wrap_time)
 
     # Fill with timed copies of network nodes
     for node_id in MetaGraphsNext.labels(network_graph.graph)
@@ -106,7 +107,7 @@ function TimeSpaceGraph(
         u = network_graph.graph[u_id]
         v = network_graph.graph[v_id]
         arc = network_graph.graph[u_id, v_id]
-        _add_network_arc!(time_space_graph, u, v, arc; wrap_time=wrap_time)
+        _add_network_arc!(time_space_graph, u, v, arc)
     end
 
     return time_space_graph

@@ -118,13 +118,23 @@ function project_to_time_space_graph(
         t = order.time_step + τ
     end
 
+    wrap_time = time_space_graph.wrap_time
+
     if !(1 <= t <= instance.time_horizon_length)
-        throw(
-            DomainError(
-                t,
-                "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order) and node code $(ttg_node_code) u_label=$(u_label)",
-            ),
-        )
+        if wrap_time
+            if t > instance.time_horizon_length
+                t = t - instance.time_horizon_length
+            else
+                t = t + instance.time_horizon_length
+            end
+        else
+            throw(
+                DomainError(
+                    t,
+                    "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order) and node code $(ttg_node_code) u_label=$(u_label)",
+                ),
+            )
+        end
     end
 
     tsg_node_label = (u_label, t)
@@ -187,6 +197,7 @@ function add_bundle_path!(
             v_label = MetaGraphsNext.label_for(tsg.graph, v)
             arc = tsg.graph[u_label, v_label]
 
+            # TODO: use multiple dispatch and methods on arc costs
             if arc.cost isa BinPackingArcCost
                 # For bin packing, we recompute assignments
                 # Optimization: could use incremental bin packing if performance is an issue
@@ -290,5 +301,3 @@ Compute the cost of the solution (legacy signature for compatibility).
 function cost(sol::Solution, instance::Instance)
     return sum(values(sol.arc_costs); init=0.0)
 end
-
-include("parsing.jl")
