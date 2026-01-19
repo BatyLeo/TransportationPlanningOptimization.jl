@@ -37,7 +37,7 @@ using Test
 
     @test bundle_count(wrapped_instance) == 4
     @test order_count(wrapped_instance) == 6
-    @test commodity_count(wrapped_instance) == 20
+    @test commodity_count(wrapped_instance) == 21
     @test wrapped_instance.time_horizon_length == 6
     @test nv(wrapped_instance.network_graph.graph) == 8
     @test nv(unwrapped_instance.network_graph.graph) == 8
@@ -48,7 +48,7 @@ using Test
 
     @test bundle_count(unwrapped_instance) == 4
     @test order_count(unwrapped_instance) == 6
-    @test commodity_count(unwrapped_instance) == 20
+    @test commodity_count(unwrapped_instance) == 21
     @test unwrapped_instance.time_horizon_length == 11
     @test ne(wrapped_instance.network_graph.graph) == 14
     @test ne(unwrapped_instance.network_graph.graph) == 14

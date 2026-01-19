@@ -116,36 +116,36 @@ function greedy_construction(instance::Instance)
     sol = Solution(instance)
     # Get bundle indices sorted by decreasing total size
     sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
-    for e in Graphs.edges(instance.travel_time_graph.graph)
-        u, v = Graphs.src(e), Graphs.dst(e)
-        println(
-            "Arc ($u, $v): ",
-            label_for(instance.travel_time_graph.graph, u),
-            " -> ",
-            label_for(instance.travel_time_graph.graph, v),
-            " Cost: ",
-            instance.travel_time_graph.cost_matrix[u, v],
-        )
-    end
-    display(instance.travel_time_graph.cost_matrix)
+    # for e in Graphs.edges(instance.travel_time_graph.graph)
+    #     u, v = Graphs.src(e), Graphs.dst(e)
+    #     println(
+    #         "Arc ($u, $v): ",
+    #         label_for(instance.travel_time_graph.graph, u),
+    #         " -> ",
+    #         label_for(instance.travel_time_graph.graph, v),
+    #         " Cost: ",
+    #         instance.travel_time_graph.cost_matrix[u, v],
+    #     )
+    # end
+    # display(instance.travel_time_graph.cost_matrix)
     @showprogress for i in sorted_indices
         insert_bundle!(sol, instance, i)
-        println("Inserting bundle $i ($(instance.bundles[i]))")
-        for e in Graphs.edges(instance.travel_time_graph.graph)
-            u, v = Graphs.src(e), Graphs.dst(e)
-            println(
-                "Arc ($u, $v): ",
-                label_for(instance.travel_time_graph.graph, u),
-                " -> ",
-                label_for(instance.travel_time_graph.graph, v),
-                " Cost: ",
-                instance.travel_time_graph.cost_matrix[u, v],
-            )
-        end
-        display(instance.travel_time_graph.cost_matrix)
-        println("Bundle inserted with path: $(sol.bundle_paths[i])")
-        println("Current cost: $(cost(sol, instance))")
-        println("-----")
+        # println("Inserting bundle $i ($(instance.bundles[i]))")
+        # for e in Graphs.edges(instance.travel_time_graph.graph)
+        #     u, v = Graphs.src(e), Graphs.dst(e)
+        #     println(
+        #         "Arc ($u, $v): ",
+        #         label_for(instance.travel_time_graph.graph, u),
+        #         " -> ",
+        #         label_for(instance.travel_time_graph.graph, v),
+        #         " Cost: ",
+        #         instance.travel_time_graph.cost_matrix[u, v],
+        #     )
+        # end
+        # display(instance.travel_time_graph.cost_matrix)
+        # println("Bundle inserted with path: $(sol.bundle_paths[i])")
+        # println("Current cost: $(cost(sol, instance))")
+        # println("-----")
     end
     return sol
 end

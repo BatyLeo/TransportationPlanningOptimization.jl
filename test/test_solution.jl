@@ -69,6 +69,28 @@ using MetaGraphsNext
         @test is_feasible(sol, instance)
         @test cost(sol) > 0.0 # Should compute some load
 
+        # Test that trailing shortcuts are removed: create an instance with larger horizon
+        commodities3 = [
+            Commodity(;
+                origin_id="A",
+                destination_id="C",
+                quantity=1,
+                departure_date=DateTime(2021, 1, 3),
+                max_delivery_time=Day(3),
+                size=1.0,
+            ),
+        ]
+        instance3 = build_instance(nodes, arcs, commodities3, time_step, LinearArcCost)
+        ttg3 = instance3.travel_time_graph
+        path_nodes3 = [("A", 0), ("B", 1), ("C", 2)]
+        path_codes3 = [MetaGraphsNext.code_for(ttg3.graph, n) for n in path_nodes3]
+        path_with_trailing = vcat(
+            path_codes3, MetaGraphsNext.code_for(ttg3.graph, ("C", 3), ("C", 4), ("C", 5))
+        )
+        sol2 = Solution([path_with_trailing], instance3)
+        # Expect the stored bundle path to equal the cleaned original path
+        @test sol2.bundle_paths[1] == path_codes3
+
         # Test arc_costs dictionary
         @test !isempty(sol.arc_costs)
         @test all(c >= 0.0 for c in values(sol.arc_costs))
@@ -269,5 +291,32 @@ using MetaGraphsNext
         @test cost(sol) == 20.0
         @test bundle_count(instance) == 1
         @test commodity_count(instance) == 1
+
+        # Test that leading shortcuts are removed: create an instance with larger horizon
+        commodities3 = [
+            Commodity(;
+                origin_id="A",
+                destination_id="C",
+                quantity=1,
+                arrival_date=DateTime(2021, 1, 5),
+                max_delivery_time=Day(3),
+                size=1.0,
+            ),
+        ]
+        instance3 = build_instance(nodes, arcs, commodities3, time_step, LinearArcCost)
+        ttg3 = instance3.travel_time_graph
+        path_codes3 = [
+            MetaGraphsNext.code_for(ttg3.graph, ("A", 2)),
+            MetaGraphsNext.code_for(ttg3.graph, ("B", 1)),
+            MetaGraphsNext.code_for(ttg3.graph, ("C", 0)),
+        ]
+        # Prepend an extra leading timed node (A, 3) and expect it to be removed
+        leading_node = MetaGraphsNext.code_for(ttg3.graph, ("A", 3))
+        path_with_leading = vcat(leading_node, path_codes3)
+        sol2 = Solution([path_with_leading], instance3)
+        @test sol2.bundle_paths[1] == path_codes3
+
+        # The cleaned path should be feasible for the instance
+        @test is_feasible(sol2, instance3)
     end
 end

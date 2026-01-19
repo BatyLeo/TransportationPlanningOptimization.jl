@@ -73,22 +73,67 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
             end
         end
 
-        # Check start node
+        # Check start node: if it's exactly the expected code, accept immediately,
+        # otherwise perform tolerant checks comparing spatial IDs and times.
         start_node_code = path[1]
         valid_origin = travel_time_graph.origin_codes[bundle_idx]
         if start_node_code != valid_origin
-            verbose &&
-                @warn "Bundle $(bundle_idx) starts at node $(start_node_code) instead of valid origin $(valid_origin)."
-            return false
+            start_label = MetaGraphsNext.label_for(travel_time_graph.graph, start_node_code)
+            origin_label = MetaGraphsNext.label_for(travel_time_graph.graph, valid_origin)
+            # Spatial must match
+            if start_label[1] != origin_label[1]
+                verbose &&
+                    @warn "Bundle $(bundle_idx) starts at spatial node $(start_label[1]) instead of valid origin $(origin_label[1])."
+                return false
+            end
+            # Time must be in a sensible range and respect semantics
+            if is_date_arrival(travel_time_graph)
+                # start τ must be <= origin τ (max duration)
+                if start_label[2] > origin_label[2] || start_label[2] < 0
+                    verbose &&
+                        @warn "Bundle $(bundle_idx) starts at invalid time τ=$(start_label[2]) for arrival-mode origin (max τ=$(origin_label[2]))."
+                    return false
+                end
+            else
+                # elapsed-time: start τ must be >= origin τ (usually 0)
+                if start_label[2] < origin_label[2] ||
+                    start_label[2] > travel_time_graph.max_time_steps
+                    verbose &&
+                        @warn "Bundle $(bundle_idx) starts at invalid time τ=$(start_label[2]) for elapsed-mode origin (min τ=$(origin_label[2]))."
+                    return false
+                end
+            end
         end
 
-        # Check destination node
+        # Check destination node (compare spatial IDs and time range)
         end_node_code = path[end]
         valid_destination = travel_time_graph.destination_codes[bundle_idx]
+        end_label = MetaGraphsNext.label_for(travel_time_graph.graph, end_node_code)
+        destination_label = MetaGraphsNext.label_for(
+            travel_time_graph.graph, valid_destination
+        )
         if end_node_code != valid_destination
-            verbose &&
-                @warn "Bundle $(bundle_idx) ends at node $(end_node_code) instead of valid destination $(valid_destination)."
-            return false
+            # Tolerant check: spatial ID must match and times must be within bounds
+            if end_label[1] != destination_label[1]
+                verbose &&
+                    @warn "Bundle $(bundle_idx) ends at spatial node $(end_label[1]) instead of valid destination $(destination_label[1])."
+                return false
+            end
+            if is_date_arrival(travel_time_graph)
+                # arrival: must end at τ == destination τ (typically 0)
+                if end_label[2] != destination_label[2]
+                    verbose &&
+                        @warn "Bundle $(bundle_idx) ends at time τ=$(end_label[2]) instead of expected $(destination_label[2]) for arrival-mode destination."
+                    return false
+                end
+            else
+                # elapsed: end τ must be <= destination τ (max duration) and >= 0
+                if end_label[2] < 0 || end_label[2] > destination_label[2]
+                    verbose &&
+                        @warn "Bundle $(bundle_idx) ends at invalid time τ=$(end_label[2]) for elapsed-mode destination (max τ=$(destination_label[2]))."
+                    return false
+                end
+            end
         end
     end
     return true
@@ -164,14 +209,72 @@ function project_bundle_path_to_order_paths(sol::Solution, instance::Instance)
 end
 
 """
-    add_bundle_path!(sol::Solution, instance::Instance, bundle_idx::Int, path::Vector{Int})
+$TYPEDSIGNATURES
 
 Incrementally add a path (sequence of TTG node codes) for a bundle and update the solution.
 This updates `bundle_paths`, `commodities_on_arcs`, `bin_assignments`, and `arc_costs`.
 """
+function _is_shortcut_arc(arc::NetworkArc)
+    # By default, network arcs are not shortcuts
+    return false
+end
+
+function _is_shortcut_arc(arc::NetworkArc{ShortcutArcCost,K}) where {K}
+    # A shortcut arc is represented explicitly by `ShortcutArcCost`; ensure it
+    # also has zero travel time.
+    return travel_time_steps(arc) == 0
+end
+
+function _remove_shortcuts_from_path!(path::Vector{Int}, ttg::TravelTimeGraph)
+    # Remove leading shortcuts for arrival-based graphs, trailing for elapsed-time graphs
+    if length(path) < 2
+        return nothing
+    end
+
+    if is_date_arrival(ttg)
+        # Remove destination nodes of starting shortcut edges (keep the first timed node)
+        while length(path) >= 2
+            src, dst = path[1], path[2]
+            u_label = MetaGraphsNext.label_for(ttg.graph, src)
+            v_label = MetaGraphsNext.label_for(ttg.graph, dst)
+            if !haskey(ttg.graph, u_label, v_label)
+                break
+            end
+            arc = ttg.graph[u_label, v_label]
+            # Only remove if the arc is a shortcut AND stays on the same spatial node
+            if _is_shortcut_arc(arc) && u_label[1] == v_label[1]
+                # Remove the leading node so the path starts at the first valid timed
+                # node (consistent with existing `remove_shortcuts!` behaviour)
+                deleteat!(path, 1)
+            else
+                break
+            end
+        end
+    else
+        # Remove destination nodes of trailing shortcut edges (pop trailing shortcut nodes)
+        while length(path) >= 2
+            src, dst = path[end - 1], path[end]
+            u_label = MetaGraphsNext.label_for(ttg.graph, src)
+            v_label = MetaGraphsNext.label_for(ttg.graph, dst)
+            if !haskey(ttg.graph, u_label, v_label)
+                break
+            end
+            arc = ttg.graph[u_label, v_label]
+            if _is_shortcut_arc(arc) && u_label[1] == v_label[1]
+                pop!(path) # remove trailing shortcut node
+            else
+                break
+            end
+        end
+    end
+    return nothing
+end
+
 function add_bundle_path!(
     sol::Solution{C}, instance::Instance, bundle_idx::Int, path::Vector{Int}
 ) where {C}
+    # Remove potential shortcut edges before storing the path — TTG may contain shortcuts
+    _remove_shortcuts_from_path!(path, instance.travel_time_graph)
     sol.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
     tsg = instance.time_space_graph
@@ -227,7 +330,11 @@ function Solution(
     # Project paths to TimeSpaceGraph and collect commodities per arc
     commodities_on_arcs = Dict{Tuple{Int,Int},Vector{C}}()
 
-    for (bundle_idx, ttg_path) in enumerate(bundle_paths)
+    # Clean paths (remove TTG shortcut edges) before projecting
+    cleaned_paths = [copy(p) for p in bundle_paths]
+    for (bundle_idx, ttg_path) in enumerate(cleaned_paths)
+        # Remove TTG shortcuts that may appear at the beginning or end of the path
+        _remove_shortcuts_from_path!(ttg_path, instance.travel_time_graph)
         bundle = bundles[bundle_idx]
 
         # For each order in the bundle, project the path and collect commodities
@@ -262,6 +369,12 @@ function Solution(
         u_label = MetaGraphsNext.label_for(time_space_graph.graph, u)
         v_label = MetaGraphsNext.label_for(time_space_graph.graph, v)
 
+        # Skip any arc that does not exist in the time-space graph (safety)
+        if !haskey(time_space_graph.graph, u_label, v_label)
+            @warn "Arc ($u_label, $v_label) not found in TimeSpaceGraph"
+            continue
+        end
+
         # Get the arc metadata from the TimeSpaceGraph
         if !haskey(time_space_graph.graph, u_label, v_label)
             @warn "Arc ($u_label, $v_label) not found in TimeSpaceGraph"
@@ -281,7 +394,8 @@ function Solution(
         end
     end
 
-    return Solution{C}(bundle_paths, commodities_on_arcs, bin_assignments, arc_costs)
+    # Use cleaned paths for the solution (shortcuts removed)
+    return Solution{C}(cleaned_paths, commodities_on_arcs, bin_assignments, arc_costs)
 end
 
 """

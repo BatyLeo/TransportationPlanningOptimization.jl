@@ -70,9 +70,15 @@ $TYPEDFIELDS
 end
 
 """
+A small marker cost function used to represent shortcut / wait arcs.
+This makes dispatch and checks explicit instead of relying on numeric values.
+"""
+struct ShortcutArcCost <: AbstractArcCostFunction end
+
+"""
 A predefined `NetworkArc` representing a zero-cost, zero-duration transition (e.g., waiting at a node).
 """
-const SHORTCUT_ARC = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(0.0))
+const SHORTCUT_ARC = NetworkArc(; travel_time_steps=0, cost=ShortcutArcCost())
 
 function Base.show(io::IO, arc::NetworkArc)
     return print(
