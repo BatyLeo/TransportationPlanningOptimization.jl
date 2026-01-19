@@ -85,7 +85,7 @@ using MetaGraphsNext
         path_nodes3 = [("A", 0), ("B", 1), ("C", 2)]
         path_codes3 = [MetaGraphsNext.code_for(ttg3.graph, n) for n in path_nodes3]
         path_with_trailing = vcat(
-            path_codes3, MetaGraphsNext.code_for(ttg3.graph, ("C", 3), ("C", 4), ("C", 5))
+            path_codes3, MetaGraphsNext.code_for(ttg3.graph, ("C", 3))
         )
         sol2 = Solution([path_with_trailing], instance3)
         # Expect the stored bundle path to equal the cleaned original path
