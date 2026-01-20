@@ -2,7 +2,7 @@
 Tests for the tiny inbound logistics instance.
 """
 
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Graphs
 using Test
 

@@ -1,6 +1,6 @@
 using Test
 
-@testset "NetworkDesignOptimization.jl" begin
+@testset "TransportationPlanningOptimization.jl" begin
     @testset "Code quality (Aqua.jl)" begin
         include("code.jl")
     end

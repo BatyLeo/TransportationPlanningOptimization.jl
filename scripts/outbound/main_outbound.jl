@@ -1,4 +1,4 @@
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 includet("Outbound.jl")
 using .Outbound
 
@@ -36,3 +36,10 @@ instance = build_instance(
     group_by=commodity -> (commodity.info.model, commodity.info.is_BTS),
 );
 instance
+
+empty_sol = Solution(instance)
+is_feasible(empty_sol, instance; verbose=true)
+
+greedy_solution = greedy_construction(instance)
+is_feasible(greedy_solution, instance; verbose=true)
+cost(greedy_solution)

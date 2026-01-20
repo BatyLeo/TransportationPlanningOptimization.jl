@@ -1,4 +1,4 @@
-name = "NetworkDesignOptimization"
+name = "TransportationPlanningOptimization"
 uuid = "e92b3169-8dd3-4529-9d46-f74323416df7"
 version = "0.0.1"
 authors = ["Léo Baty and contributors"]

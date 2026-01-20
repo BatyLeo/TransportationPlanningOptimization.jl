@@ -2,7 +2,7 @@
 Tests for Bundle data structures
 """
 
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Test
 
 @testset "Bundle creation" begin

@@ -3,7 +3,7 @@ Tests for Order data structures and consolidation logic
 """
 
 using Dates
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Test
 
 @testset "Order creation" begin

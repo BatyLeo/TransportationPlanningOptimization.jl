@@ -3,7 +3,7 @@ Tests for network graph data structures: NetworkNode and NetworkArc
 """
 
 using Graphs
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Test
 
 @testset "NetworkNode creation" begin

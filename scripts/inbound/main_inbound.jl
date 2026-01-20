@@ -1,9 +1,9 @@
 using Dates
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-instance_name = "tiny"
+instance_name = "small"
 # datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 datadir = joinpath(@__DIR__, "..", "..", "test", "public")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
@@ -19,14 +19,14 @@ eltype(arcs)
 eltype(commodities)
 
 instance = build_instance(
-    nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost); wrap_time=false
+    nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost); wrap_time=true
 );
 instance
 
 empty_sol = Solution(instance)
 is_feasible(empty_sol, instance; verbose=true)
 
-greedy_solution = greedy_construction(instance)
+@profview greedy_solution = greedy_construction(instance);
 is_feasible(greedy_solution, instance; verbose=true)
 cost(greedy_solution)
 

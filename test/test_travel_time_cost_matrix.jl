@@ -1,5 +1,5 @@
 using Test
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Graphs
 using MetaGraphsNext
 using SparseArrays

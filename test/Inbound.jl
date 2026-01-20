@@ -9,7 +9,7 @@ module Inbound
 using CSV
 using DataFrames
 using Dates
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 
 # Node CSV column mappings
 const NODE_ID = :point_account
@@ -33,7 +33,7 @@ const ARC_CARBON_COST = :carbon_cost
 # Commodity CSV column mappings
 const COMMODITY_ORIGIN_ID = :supplier_account
 const COMMODITY_DESTINATION_ID = :customer_account
-const COMMODITY_SIZE = :volume
+const COMMODITY_SIZE = :size
 const COMMODITY_ARRIVAL_DATE = :delivery_date
 const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
@@ -139,7 +139,9 @@ function parse_inbound_instance(
             true
         end
     end, raw_arcs)
-    @warn "$nb_duplicates duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept."
+    if nb_duplicates > 0
+        @warn "$nb_duplicates duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept."
+    end
     # filter!(arc -> arc.info.arc_type in ALLOWED_ARC_TYPES, raw_arcs)
     # arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
 

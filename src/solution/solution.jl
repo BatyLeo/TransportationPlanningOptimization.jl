@@ -54,7 +54,7 @@ Feasibility requires:
 4. Every path must end at the bundle's designated exit node (`destination_codes`).
 """
 function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
-    (; travel_time_graph) = instance
+    (; travel_time_graph, time_space_graph) = instance
     for (bundle_idx, path) in enumerate(sol.bundle_paths)
         if isempty(path)
             verbose && @warn "Bundle $(bundle_idx) has an empty path."
@@ -136,6 +136,43 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
             end
         end
     end
+
+    # Capacity checks ------------------------------------------------------
+    # 1) For bin-packing arcs, ensure no bin exceeds its capacity.
+    for (edge, bins) in sol.bin_assignments
+        for b in bins
+            if b.total_size > b.max_capacity + 1e-8
+                verbose &&
+                    @warn "Bin on edge $(edge) exceeds capacity: $(b.total_size) > $(b.max_capacity)"
+                return false
+            end
+        end
+    end
+
+    # 2) For all time-space arcs, ensure the total commodity size does not exceed
+    #    the arc's declared capacity (if finite).
+    # Check capacity on Time-Space Graph arcs (these edges store capacity metadata)
+    for (edge, commodities) in sol.commodities_on_arcs
+        u, v = edge
+        u_label = MetaGraphsNext.label_for(time_space_graph.graph, u)
+        v_label = MetaGraphsNext.label_for(time_space_graph.graph, v)
+        if MetaGraphsNext.haskey(time_space_graph.graph, u_label, v_label)
+            arc = time_space_graph.graph[u_label, v_label]
+            if arc.capacity != typemax(Int)
+                total_size = sum(c.size for c in commodities; init=0.0)
+                if total_size > arc.capacity + 1e-8
+                    verbose &&
+                        @warn "Arc ($(u_label) -> $(v_label)) exceeds capacity: $(total_size) > $(arc.capacity)"
+                    return false
+                end
+            end
+        else
+            # If the Time-Space Graph does not contain the arc, we cannot check capacity
+            verbose &&
+                @warn "TimeSpaceGraph arc for edge $(edge) not found; cannot check capacity."
+        end
+    end
+
     return true
 end
 

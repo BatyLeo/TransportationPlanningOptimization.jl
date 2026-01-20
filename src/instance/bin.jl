@@ -40,9 +40,9 @@ function compute_bin_assignments(
 
     for c in sorted_commodities
         placed = false
-        # Try to fit in the first available bin
+        # Try to fit in the first available bin (allow a small numerical tolerance)
         for i in eachindex(bin_contents)
-            if bin_rem_caps[i] >= c.size
+            if bin_rem_caps[i] >= c.size - 1e-8
                 push!(bin_contents[i], c)
                 bin_rem_caps[i] -= c.size
                 placed = true
