@@ -11,6 +11,8 @@ struct TimeSpaceGraph{G}
     graph::G
     "length of the time horizon in discrete time steps"
     time_horizon_length::Int
+    "whether time wrapping is enabled for arcs that exceed the time horizon"
+    wrap_time::Bool
 end
 
 function Base.show(io::IO, g::TimeSpaceGraph)
@@ -34,7 +36,7 @@ $TYPEDSIGNATURES
 
 Adds a timed copy of the given network node for each time step in the time horizon.
 """
-function add_network_node!(time_space_graph::TimeSpaceGraph, node::NetworkNode)
+function _add_network_node!(time_space_graph::TimeSpaceGraph, node::NetworkNode)
     for time_step in time_horizon(time_space_graph)
         Graphs.add_vertex!(time_space_graph.graph, (node.id, time_step), node)
     end
@@ -43,19 +45,26 @@ end
 """
 $TYPEDSIGNATURES
 """
-function add_network_arc!(
+function _add_network_arc!(
     time_space_graph::TimeSpaceGraph,
     origin::NetworkNode,
     destination::NetworkNode,
-    arc::NetworkArc,
+    arc::NetworkArc;
 )
-    (; time_horizon_length) = time_space_graph
+    (; time_horizon_length, wrap_time) = time_space_graph
     for t in time_horizon(time_space_graph)
         u_t = (origin.id, t)
         destination_time = t + arc.travel_time_steps
+
+        # Handle time wrapping if enabled
         if destination_time > time_horizon_length
-            destination_time -= time_horizon_length
+            if wrap_time
+                destination_time -= time_horizon_length
+            else
+                break
+            end
         end
+
         v_t = (destination.id, destination_time)
         was_added = Graphs.add_edge!(time_space_graph.graph, u_t, v_t, arc)
         if !was_added
@@ -67,7 +76,15 @@ function add_network_arc!(
     return nothing
 end
 
-function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
+"""
+$TYPEDSIGNATURES
+
+Constructor for `TimeSpaceGraph`.
+Creates timed copies of all nodes and arcs from the `network_graph` for each step in `1:time_horizon_length`.
+"""
+function TimeSpaceGraph(
+    network_graph::NetworkGraph, time_horizon_length::Int; wrap_time::Bool
+)
     # Initialize empty TimeSpaceGraph
     graph = MetaGraph(
         Graphs.DiGraph();
@@ -75,12 +92,14 @@ function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
         vertex_data_type=NetworkNode,
         edge_data_type=NetworkArc,
     )
-    time_space_graph = TimeSpaceGraph(graph, time_horizon_length)
+    time_space_graph = TimeSpaceGraph(graph, time_horizon_length, wrap_time)
 
     # Fill with timed copies of network nodes
     for node_id in MetaGraphsNext.labels(network_graph.graph)
         node = network_graph.graph[node_id]
-        add_network_node!(time_space_graph, node)
+        _add_network_node!(time_space_graph, node)
+
+        # ! If we wanted to add wait arcs, we could do it here !
     end
 
     # Connect timed nodes according to network arcs
@@ -88,7 +107,7 @@ function TimeSpaceGraph(network_graph::NetworkGraph, time_horizon_length::Int)
         u = network_graph.graph[u_id]
         v = network_graph.graph[v_id]
         arc = network_graph.graph[u_id, v_id]
-        add_network_arc!(time_space_graph, u, v, arc)
+        _add_network_arc!(time_space_graph, u, v, arc)
     end
 
     return time_space_graph

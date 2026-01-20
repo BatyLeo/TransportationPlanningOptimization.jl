@@ -1,23 +1,25 @@
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Documenter
 
 DocMeta.setdocmeta!(
-    NetworkDesignOptimization,
+    TransportationPlanningOptimization,
     :DocTestSetup,
-    :(using NetworkDesignOptimization);
+    :(using TransportationPlanningOptimization);
     recursive=true,
 )
 
 makedocs(;
-    modules=[NetworkDesignOptimization],
+    modules=[TransportationPlanningOptimization],
     authors="Léo Baty and contributors",
-    sitename="NetworkDesignOptimization.jl",
+    sitename="TransportationPlanningOptimization.jl",
     format=Documenter.HTML(;
-        canonical="https://BatyLeo.github.io/NetworkDesignOptimization.jl",
+        canonical="https://BatyLeo.github.io/TransportationPlanningOptimization.jl",
         edit_link="main",
         assets=String[],
     ),
     pages=["Home" => "index.md"],
 )
 
-deploydocs(; repo="github.com/BatyLeo/NetworkDesignOptimization.jl", devbranch="main")
+deploydocs(;
+    repo="github.com/BatyLeo/TransportationPlanningOptimization.jl", devbranch="main"
+)

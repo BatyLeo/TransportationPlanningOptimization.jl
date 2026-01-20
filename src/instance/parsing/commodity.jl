@@ -8,9 +8,11 @@ Once all commodities are loaded, they are consolidated into optimized internal s
 (Commodity, Order, Bundle) based on problem-specific consolidation rules.
 
 # Type Parameters
-- `is_date_arrival::Bool`: `true` if `date` represents arrival, `false` if departure
-- `ID`: Type for node identifiers (e.g., String, Int)
-- `I`: Type for additional problem-specific information
+- `is_date_arrival::Bool`: 
+    - `true`: `date` represents the **arrival deadline** at the destination.
+    - `false`: `date` represents the **earliest departure time** (release) from the origin.
+- `ID`: Type for node identifiers (e.g., String, Int).
+- `I`: Type for additional problem-specific information.
 
 # Fields
 $TYPEDFIELDS

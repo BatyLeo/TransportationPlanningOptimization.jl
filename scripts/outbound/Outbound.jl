@@ -4,7 +4,7 @@ using CSV
 using DataFrames
 using Dates
 using Statistics
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 
 include("outbound_parser.jl")
 

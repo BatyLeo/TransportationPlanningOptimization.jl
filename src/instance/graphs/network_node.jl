@@ -1,3 +1,12 @@
+"""
+$TYPEDEF
+
+A node in the spatial network graph.
+Nodes represent physical locations and can serve as origins or destinations for commodities.
+
+# Fields
+$TYPEDFIELDS
+"""
 struct NetworkNode{J}
     id::String
     node_type::Symbol
@@ -17,6 +26,15 @@ struct NetworkNode{J}
     end
 end
 
+"""
+$TYPEDSIGNATURES
+
+Constructor for `NetworkNode`.
+# Node Types (Symbol)
+- `:origin`: A entry point for commodities.
+- `:destination`: An exit point for commodities.
+- `:other`: An intermediate or transhipment point.
+"""
 function NetworkNode(;
     id::String,
     node_type::Symbol,

@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = NetworkDesignOptimization
+CurrentModule = TransportationPlanningOptimization
 ```
 
-# NetworkDesignOptimization
+# TransportationPlanningOptimization
 
-Documentation for [NetworkDesignOptimization](https://github.com/BatyLeo/NetworkDesignOptimization.jl).
+Documentation for [TransportationPlanningOptimization](https://github.com/BatyLeo/TransportationPlanningOptimization.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [NetworkDesignOptimization]
+Modules = [TransportationPlanningOptimization]
 ```

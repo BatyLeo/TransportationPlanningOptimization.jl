@@ -1,0 +1,17 @@
+,Unnamed: 0,supplier_account,customer_account,point_account,point_number,point_type,point_index,supplier_index,customer_index,bundle_id
+0,0,O1,D1,O1,4,supplier,1.0,1.0,20.0,1.0
+1,1,O1,D1,P1,3,platform,10.0,1.0,20.0,1.0
+2,2,O1,D1,P3,2,platform,12.0,1.0,20.0,1.0
+3,3,O1,D1,D1,1,plant,20.0,1.0,20.0,1.0
+4,4,O2,D2,O2,4,supplier,2.0,2.0,21.0,2.0
+5,5,O2,D2,P2,3,platform,11.0,2.0,21.0,2.0
+6,6,O2,D2,P4,2,platform,13.0,2.0,21.0,2.0
+7,7,O2,D2,D2,1,plant,21.0,2.0,21.0,2.0
+8,8,O1,D2,O1,4,supplier,1.0,1.0,21.0,3.0
+9,9,O1,D2,P1,3,platform,10.0,1.0,21.0,3.0
+10,10,O1,D2,P3,2,platform,12.0,1.0,21.0,3.0
+11,11,O1,D2,D2,1,plant,21.0,1.0,21.0,3.0
+12,12,O2,D1,O2,4,supplier,2.0,2.0,20.0,4.0
+13,13,O2,D1,P1,3,platform,10.0,2.0,20.0,4.0
+14,14,O2,D1,P3,2,platform,12.0,2.0,20.0,4.0
+15,15,O2,D1,D1,1,plant,20.0,2.0,20.0,4.0

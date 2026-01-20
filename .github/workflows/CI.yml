@@ -72,6 +72,6 @@ jobs:
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
-          using NetworkDesignOptimization
-          DocMeta.setdocmeta!(NetworkDesignOptimization, :DocTestSetup, :(using NetworkDesignOptimization); recursive=true)
-          doctest(NetworkDesignOptimization)
+          using TransportationPlanningOptimization
+          DocMeta.setdocmeta!(TransportationPlanningOptimization, :DocTestSetup, :(using TransportationPlanningOptimization); recursive=true)
+          doctest(TransportationPlanningOptimization)

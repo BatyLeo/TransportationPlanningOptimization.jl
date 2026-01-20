@@ -4,7 +4,7 @@ Tests for Instance creation and integration using Inbound test application
 
 using CSV
 using Dates
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Test
 
 include("Inbound.jl")

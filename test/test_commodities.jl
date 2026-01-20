@@ -3,7 +3,7 @@ Tests for Commodity and LightCommodity data structures
 """
 
 using Dates
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Test
 
 @testset "Commodity and LightCommodity creation" begin

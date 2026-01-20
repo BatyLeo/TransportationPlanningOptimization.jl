@@ -1,6 +1,6 @@
 using Test
 using Dates
-using NetworkDesignOptimization: period_steps
+using TransportationPlanningOptimization: period_steps
 
 @testset "period_steps with TIME_STEP=Week(1)" begin
     # Day to Week conversion

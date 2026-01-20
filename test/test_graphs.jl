@@ -3,7 +3,7 @@ Tests for network graph data structures: NetworkNode and NetworkArc
 """
 
 using Graphs
-using NetworkDesignOptimization
+using TransportationPlanningOptimization
 using Test
 
 @testset "NetworkNode creation" begin
@@ -157,46 +157,60 @@ end
 end
 
 @testset "TimeSpaceGraph creation" begin
-    @test begin
-        nodes = [
-            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
-            NetworkNode(;
-                id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing
-            ),
-        ]
-        arcs = [
-            (
-                "A",
-                "B",
-                NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing),
-            ),
-        ]
-        network_graph = NetworkGraph(nodes, arcs)
-        time_horizon_length = 3
-        tsg = TimeSpaceGraph(network_graph, time_horizon_length)
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
+        NetworkNode(; id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing),
+    ]
+    arcs = [(
+        "A", "B", NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing)
+    )]
+    network_graph = NetworkGraph(nodes, arcs)
+    time_horizon_length = 3
+    tsg = TimeSpaceGraph(network_graph, time_horizon_length; wrap_time=true)
+    tsg_unwrapped = TimeSpaceGraph(network_graph, time_horizon_length; wrap_time=false)
 
-        # Basic creation checks
-        tsg isa TimeSpaceGraph &&
-            time_horizon(tsg) == 1:3 &&
-            Graphs.nv(tsg.graph) == 6 &&  # 2 nodes * 3 time steps
-            Graphs.ne(tsg.graph) == 3 &&   # 1 arc * 3 time steps
+    # Basic creation checks
+    @test tsg isa TimeSpaceGraph &&
+        time_horizon(tsg) == 1:3 &&
+        Graphs.nv(tsg.graph) == 6 &&  # 2 nodes * 3 time steps
+        Graphs.ne(tsg.graph) == 3 &&   # 1 arc * 3 time steps
 
-            # Vertex labels and data
-            haskey(tsg.graph, ("A", 1)) &&
-            haskey(tsg.graph, ("A", 2)) &&
-            haskey(tsg.graph, ("A", 3)) &&
-            haskey(tsg.graph, ("B", 1)) &&
-            haskey(tsg.graph, ("B", 2)) &&
-            haskey(tsg.graph, ("B", 3)) &&
-            tsg.graph[("A", 1)].id == "A" &&
-            tsg.graph[("B", 1)].id == "B" &&
+        # Vertex labels and data
+        haskey(tsg.graph, ("A", 1)) &&
+        haskey(tsg.graph, ("A", 2)) &&
+        haskey(tsg.graph, ("A", 3)) &&
+        haskey(tsg.graph, ("B", 1)) &&
+        haskey(tsg.graph, ("B", 2)) &&
+        haskey(tsg.graph, ("B", 3)) &&
+        tsg.graph[("A", 1)].id == "A" &&
+        tsg.graph[("B", 1)].id == "B" &&
 
-            # Edge labels and data (including wrapping)
-            haskey(tsg.graph, ("A", 1), ("B", 2)) &&
-            haskey(tsg.graph, ("A", 2), ("B", 3)) &&
-            haskey(tsg.graph, ("A", 3), ("B", 1)) &&  # wrapping: 3+1=4 >3, 4-3=1
-            tsg.graph[("A", 1), ("B", 2)].travel_time_steps == 1
-    end
+        # Edge labels and data (including wrapping)
+        haskey(tsg.graph, ("A", 1), ("B", 2)) &&
+        haskey(tsg.graph, ("A", 2), ("B", 3)) &&
+        haskey(tsg.graph, ("A", 3), ("B", 1)) &&  # wrapping: 3+1=4 >3, 4-3=1
+        tsg.graph[("A", 1), ("B", 2)].travel_time_steps == 1
+
+    @test tsg_unwrapped isa TimeSpaceGraph &&
+        time_horizon(tsg_unwrapped) == 1:3 &&
+        Graphs.nv(tsg_unwrapped.graph) == 6 &&  # 2 nodes * 3 time steps
+        Graphs.ne(tsg_unwrapped.graph) == 2 &&   # 1 arc * 2 time steps (no wrapping)
+
+        # Vertex labels and data
+        haskey(tsg_unwrapped.graph, ("A", 1)) &&
+        haskey(tsg_unwrapped.graph, ("A", 2)) &&
+        haskey(tsg_unwrapped.graph, ("A", 3)) &&
+        haskey(tsg_unwrapped.graph, ("B", 1)) &&
+        haskey(tsg_unwrapped.graph, ("B", 2)) &&
+        haskey(tsg_unwrapped.graph, ("B", 3)) &&
+        tsg_unwrapped.graph[("A", 1)].id == "A" &&
+        tsg_unwrapped.graph[("B", 1)].id == "B" &&
+
+        # Edge labels and data (no wrapping)
+        haskey(tsg_unwrapped.graph, ("A", 1), ("B", 2)) &&
+        haskey(tsg_unwrapped.graph, ("A", 2), ("B", 3)) &&
+        !haskey(tsg_unwrapped.graph, ("A", 3), ("B", 1)) &&  # no wrapping
+        tsg_unwrapped.graph[("A", 1), ("B", 2)].travel_time_steps == 1
 end
 
 @testset "TravelTimeGraph creation and data" begin
@@ -226,8 +240,8 @@ end
                     is_date_arrival=true,
                 ),
             ],
-            delivery_time_step=1,
-            max_delivery_time_step=2,
+            time_step=1,
+            max_transit_steps=2,
         )
         bundle = Bundle(; orders=[order], origin_id="O", destination_id="D")
         bundles = [bundle]
@@ -236,22 +250,23 @@ end
         # Basic creation checks
         ttg isa TravelTimeGraph &&
             time_horizon(ttg) == 0:2 &&
-            Graphs.nv(ttg.graph) == 4 &&  # O0,O1,O2,D0
-            Graphs.ne(ttg.graph) == 3 &&   # O0->O1, O1->O2, O1->D0
+            Graphs.nv(ttg.graph) == 4 &&  # O0,O1,O2, D0
+            Graphs.ne(ttg.graph) == 3 &&   # 2 shortcuts O, 1 transport arc (O1->D0)
 
             # Vertex labels and data
             haskey(ttg.graph, ("O", 0)) &&
             haskey(ttg.graph, ("O", 1)) &&
             haskey(ttg.graph, ("O", 2)) &&
             haskey(ttg.graph, ("D", 0)) &&
-            !haskey(ttg.graph, ("D", 1)) &&  # D only at 0
+            !haskey(ttg.graph, ("D", 1)) &&
             ttg.graph[("O", 0)].id == "O" &&
             ttg.graph[("D", 0)].id == "D" &&
 
-            # Edge labels and data
-            haskey(ttg.graph, ("O", 0), ("O", 1)) &&  # shortcut
-            haskey(ttg.graph, ("O", 1), ("O", 2)) &&  # shortcut
+            # Edge labels and data (Count Down)
+            haskey(ttg.graph, ("O", 2), ("O", 1)) &&  # wait origin
+            haskey(ttg.graph, ("O", 1), ("O", 0)) &&  # wait origin
             haskey(ttg.graph, ("O", 1), ("D", 0)) &&  # transport arc
+            !haskey(ttg.graph, ("O", 2), ("D", 1)) &&  # D1 doesn't exist
             !haskey(ttg.graph, ("O", 0), ("D", 0)) &&  # no edge from O0 to D0
             ttg.graph[("O", 1), ("D", 0)].travel_time_steps == 1
     end
