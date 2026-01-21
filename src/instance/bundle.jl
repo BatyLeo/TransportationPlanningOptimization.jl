@@ -11,12 +11,20 @@ struct Bundle{O<:Order}
     orders::Vector{O}
     origin_id::String
     destination_id::String
+    "set of node IDs that are forbidden for this bundle (cannot be traversed)"
+    forbidden_nodes::Set{String}
+    "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle"
+    forbidden_arcs::Set{Tuple{String,String}}
 end
 
 function Bundle(;
-    orders::Vector{O}, origin_id::String, destination_id::String
+    orders::Vector{O},
+    origin_id::String,
+    destination_id::String,
+    forbidden_nodes::Set{String}=Set{String}(),
+    forbidden_arcs::Set{Tuple{String,String}}=Set{Tuple{String,String}}(),
 ) where {O<:Order}
-    return Bundle{O}(orders, origin_id, destination_id)
+    return Bundle{O}(orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs)
 end
 
 """

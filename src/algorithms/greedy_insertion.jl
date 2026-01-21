@@ -87,9 +87,28 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
     bundle = instance.bundles[bundle_idx]
 
     for (u_code, v_code) in ttg.bundle_arcs[bundle_idx]
-        ttg.cost_matrix[u_code, v_code] = compute_ttg_edge_incremental_cost(
-            sol, instance, bundle, u_code, v_code
+        # Get node IDs from TTG labels
+        u_label = MetaGraphsNext.label_for(ttg.graph, u_code)
+        v_label = MetaGraphsNext.label_for(ttg.graph, v_code)
+        u_node_id = u_label[1]
+        v_node_id = v_label[1]
+
+        # Check forbidden constraints (O(1) lookups using Sets)
+        is_arc_forbidden = (
+            (u_node_id, v_node_id) in bundle.forbidden_arcs ||
+            u_node_id in bundle.forbidden_nodes ||
+            v_node_id in bundle.forbidden_nodes
         )
+
+        if is_arc_forbidden
+            # Skip cost computation for forbidden arcs, mark as infeasible
+            ttg.cost_matrix[u_code, v_code] = Inf
+        else
+            # Compute incremental cost only for allowed arcs
+            ttg.cost_matrix[u_code, v_code] = compute_ttg_edge_incremental_cost(
+                sol, instance, bundle, u_code, v_code
+            )
+        end
     end
 
     origin = ttg.origin_codes[bundle_idx]

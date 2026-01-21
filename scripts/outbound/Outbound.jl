@@ -85,7 +85,7 @@ function parse_outbound_instance(
     )
 
     nodes = map(eachrow(df_nodes)) do row
-        list = if ismissing(row[NODE_BTS_CANDIDATES])
+        bts_candidates = if ismissing(row[NODE_BTS_CANDIDATES])
             Int[]
         else
             parse.(Int, split(row[NODE_BTS_CANDIDATES], ";")[1:(end - 1)])
@@ -102,7 +102,7 @@ function parse_outbound_instance(
             id="$(row[NODE_ID])",
             node_type=node_type_symbol,
             cost=0.0,
-            info=OutboundNodeInfo(Symbol(row[NODE_TYPE]), list),
+            info=OutboundNodeInfo(Symbol(row[NODE_TYPE]), bts_candidates),
         )
     end
 
@@ -142,9 +142,6 @@ function parse_outbound_instance(
     end, raw_arcs)
     @warn "$duplicates duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept."
 
-    # Normalize and collect arcs (handles cost types)
-    # arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
-
     model_mapping = Dict{Int,String}(
         row[MODEL_INDEX] => string(row[MODEL_NAME]) for
         row in eachrow(df_model) if row[MODEL_INDEX] > 0
@@ -166,6 +163,22 @@ function parse_outbound_instance(
         monday_week_1 = january_4 - Day(dayofweek(january_4) - 1) # Monday of ISO week 1
         date = DateTime(monday_week_1 + Week(week - 1))
 
+        forbidden_arcs = Tuple{String,String}[]
+        # If BTS commodity, forbid arcs leading to ZG nodes that do not come from BTS list
+        if row[COMMODITY_TYPE_BT] == "BTS"
+            dest_node_id = string(row[COMMODITY_DESTINATION_ID])
+            dest_node = findfirst(n -> n.id == dest_node_id, nodes)
+            @assert dest_node !== nothing "Destination node $dest_node_id not found among parsed nodes."
+            bts_list = nodes[dest_node].info.bts_list
+            for arc in raw_arcs
+                if arc.destination_id == dest_node_id
+                    if !(arc.origin_id in bts_list)
+                        push!(forbidden_arcs, (arc.origin_id, arc.destination_id))
+                    end
+                end
+            end
+        end
+
         Commodity(;
             origin_id="$(row[COMMODITY_ORIGIN_ID])",
             destination_id="$(row[COMMODITY_DESTINATION_ID])",
@@ -173,6 +186,7 @@ function parse_outbound_instance(
             size=size_by_model[row[COMMODITY_MODEL]],
             max_delivery_time=max_delivery_time,
             departure_date=date,
+            forbidden_arcs=forbidden_arcs,
             info=OutBoundCommodityInfo(
                 row[COMMODITY_MODEL], row[COMMODITY_TYPE_BT] == "BTS"
             ),

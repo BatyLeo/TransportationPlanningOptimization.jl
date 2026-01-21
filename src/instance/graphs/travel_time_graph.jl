@@ -34,7 +34,7 @@ end
 function Base.show(io::IO, g::TravelTimeGraph{is_date_arrival}) where {is_date_arrival}
     return println(
         io,
-        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs (is_date_arrival=$is_date_arrival)",
+        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
     )
 end
 
