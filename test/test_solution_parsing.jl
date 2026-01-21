@@ -29,9 +29,7 @@ using DataFrames
             size=1.0,
         ),
     ]
-    instance = build_instance(
-        nodes, [arc_ab, arc_bc], commodities, time_step, LinearArcCost
-    )
+    instance = Instance(nodes, [arc_ab, arc_bc], commodities, time_step)
 
     # Generate a solution
     sol = greedy_construction(instance)

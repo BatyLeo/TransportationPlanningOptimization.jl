@@ -37,7 +37,7 @@ using MetaGraphsNext
         ),
     ]
 
-    instance = build_instance(nodes, arcs_linear, commodities, time_step, LinearArcCost)
+    instance = Instance(nodes, arcs_linear, commodities, time_step)
 
     # Helper to find bundle index by origin/destination
     function find_bundle_idx(inst, org, dst)
@@ -115,9 +115,7 @@ using MetaGraphsNext
         ),
     ]
 
-    instance_bp = build_instance(
-        nodes, arcs_bp, vcat(comms_bp_1, comms_bp_2), time_step, BinPackingArcCost
-    )
+    instance_bp = Instance(nodes, arcs_bp, vcat(comms_bp_1, comms_bp_2), time_step)
 
     @testset "Incremental Insertion (BinPackingArcCost)" begin
         sol = Solution(instance_bp)

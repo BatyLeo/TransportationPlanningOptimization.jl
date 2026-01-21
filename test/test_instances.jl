@@ -37,7 +37,7 @@ using .Inbound
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
+        instance = Instance(nodes, arcs, commodities, Week(1))
         length(instance.bundles) > 0
     end
 end
@@ -56,9 +56,7 @@ end
     (; nodes, arcs, commodities) = parse_inbound_instance(
         nodes_file, legs_file, commodities_file
     )
-    instance = build_instance(
-        nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
-    )
+    instance = Instance(nodes, arcs, commodities, Week(1))
     nb_bundles = length(instance.bundles)
     nb_orders = sum(length(bundle.orders) for bundle in instance.bundles)
     nb_commodities = sum(
@@ -120,7 +118,7 @@ end
                 max_delivery_time=Week(2),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
+        instance = Instance(nodes, arcs, commodities, Week(1))
         # Should create 2 bundles: A->B and B->C
         length(instance.bundles) == 2
     end
@@ -153,7 +151,7 @@ end
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
+        instance = Instance(nodes, arcs, commodities, Week(1))
         instance.bundles[1].origin_id == "1" && instance.bundles[1].destination_id == "2"
     end
 end
@@ -185,7 +183,7 @@ end
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, Week(1), (BinPackingArcCost,))
+        instance = Instance(nodes, arcs, commodities, Week(1))
         length(instance.bundles) == 1
     end
 end
@@ -233,9 +231,7 @@ end
                 max_delivery_time=Week(1),
             ),
         ]
-        instance = build_instance(
-            nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost)
-        )
+        instance = Instance(nodes, arcs, commodities, Week(1))
         length(instance.bundles) == 2
     end
 end
@@ -268,8 +264,8 @@ end
             ),
         ]
         # Test with different time periods
-        instance_week = build_instance(nodes, arcs, commodities, Week(1), (LinearArcCost,))
-        instance_day = build_instance(nodes, arcs, commodities, Day(1), (LinearArcCost,))
+        instance_week = Instance(nodes, arcs, commodities, Week(1))
+        instance_day = Instance(nodes, arcs, commodities, Day(1))
         length(instance_week.bundles) == 1 && length(instance_day.bundles) == 1
     end
 end
@@ -315,12 +311,10 @@ end
             ),
         ]
         # Default group_by: both in one bundle
-        instance_default = build_instance(
-            nodes, arcs, commodities, Week(1), (LinearArcCost,)
-        )
+        instance_default = Instance(nodes, arcs, commodities, Week(1))
         # Custom group_by: separate bundles by model
-        instance_grouped = build_instance(
-            nodes, arcs, commodities, Week(1), (LinearArcCost,); group_by=c -> c.info.model
+        instance_grouped = Instance(
+            nodes, arcs, commodities, Week(1); group_by=c -> c.info.model
         )
         length(instance_default.bundles) == 1 && length(instance_grouped.bundles) == 2
     end

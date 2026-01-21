@@ -35,7 +35,6 @@ include("algorithms/greedy_insertion.jl")
 export LightCommodity
 export Instance, Bundle, Order, Commodity
 export bundle_count, order_count, commodity_count, total_size
-export build_instance
 export write_solution_csv, read_solution_csv
 export NetworkNode, NetworkArc, Arc
 export NetworkGraph

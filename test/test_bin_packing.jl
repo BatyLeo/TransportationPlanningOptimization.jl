@@ -26,14 +26,7 @@ using .Inbound
         (nodes, arcs, commodities) = parse_inbound_instance(
             nodes_file, legs_file, commodities_file
         )
-        instance = build_instance(
-            nodes,
-            arcs,
-            commodities,
-            Week(1),
-            (LinearArcCost, BinPackingArcCost);
-            wrap_time=true,
-        )
+        instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
         @test_throws DomainError greedy_construction(instance)
     end
@@ -48,14 +41,7 @@ using .Inbound
         (nodes, arcs, commodities) = parse_inbound_instance(
             nodes_file, legs_file, commodities_file
         )
-        instance = build_instance(
-            nodes,
-            arcs,
-            commodities,
-            Week(1),
-            (LinearArcCost, BinPackingArcCost);
-            wrap_time=true,
-        )
+        instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
         sol = Solution(instance)
         # set a simple bundle path directly (origin -> destination in TTG)
