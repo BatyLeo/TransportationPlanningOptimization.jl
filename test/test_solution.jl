@@ -51,7 +51,7 @@ using MetaGraphsNext
                 size=1.0,
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, time_step, LinearArcCost)
+        instance = Instance(nodes, arcs, commodities, time_step)
 
         # 2. Check graph structure to find valid bundle paths
         @test bundle_count(instance) == 1
@@ -80,7 +80,7 @@ using MetaGraphsNext
                 size=1.0,
             ),
         ]
-        instance3 = build_instance(nodes, arcs, commodities3, time_step, LinearArcCost)
+        instance3 = Instance(nodes, arcs, commodities3, time_step)
         ttg3 = instance3.travel_time_graph
         path_nodes3 = [("A", 0), ("B", 1), ("C", 2)]
         path_codes3 = [MetaGraphsNext.code_for(ttg3.graph, n) for n in path_nodes3]
@@ -147,7 +147,7 @@ using MetaGraphsNext
                 size=6.0,
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, time_step, BinPackingArcCost)
+        instance = Instance(nodes, arcs, commodities, time_step)
 
         ttg = instance.travel_time_graph
         path_nodes = [("A", 0), ("B", 1)]
@@ -222,7 +222,7 @@ using MetaGraphsNext
                 size=3.0,
             ),
         ]
-        instance = build_instance(nodes, arcs, commodities, time_step, LinearArcCost)
+        instance = Instance(nodes, arcs, commodities, time_step)
 
         ttg = instance.travel_time_graph
         path_nodes = [("A", 0), ("B", 1), ("C", 2)]
@@ -273,7 +273,7 @@ using MetaGraphsNext
             ),
         ]
 
-        instance = build_instance(nodes, arcs, commodities, time_step, LinearArcCost)
+        instance = Instance(nodes, arcs, commodities, time_step)
 
         # In Arrival setting (countdown mode):
         # We have 2 days max duration (max_transit_steps = 2).
@@ -303,7 +303,7 @@ using MetaGraphsNext
                 size=1.0,
             ),
         ]
-        instance3 = build_instance(nodes, arcs, commodities3, time_step, LinearArcCost)
+        instance3 = Instance(nodes, arcs, commodities3, time_step)
         ttg3 = instance3.travel_time_graph
         path_codes3 = [
             MetaGraphsNext.code_for(ttg3.graph, ("A", 2)),

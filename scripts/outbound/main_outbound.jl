@@ -27,13 +27,13 @@ load_factor_file = joinpath(data_dir, "load_factor_min_estimated.csv")
     max_delivery_time=Week(36),
 );
 
-instance = build_instance(
+instance = Instance(
     nodes,
     arcs,
     commodities,
-    Week(1000),
-    (LinearArcCost, BinPackingArcCost);
+    Week(1000);
     group_by=commodity -> (commodity.info.model, commodity.info.is_BTS),
+    wrap_time=false,
 );
 instance
 

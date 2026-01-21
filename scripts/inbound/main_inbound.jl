@@ -18,9 +18,7 @@ eltype(nodes)
 eltype(arcs)
 eltype(commodities)
 
-instance = build_instance(
-    nodes, arcs, commodities, Week(1), (LinearArcCost, BinPackingArcCost); wrap_time=true
-);
+instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true);
 instance
 
 empty_sol = Solution(instance)

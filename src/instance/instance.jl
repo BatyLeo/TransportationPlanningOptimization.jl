@@ -109,20 +109,25 @@ end
 """
 $TYPEDSIGNATURES
 
-Build an `Instance` from raw problem data.
+Build an `Instance` from normalized inputs.
 
-# Arguments
-- `nodes::Vector{<:NetworkNode}`: List of nodes in the spatial network.
-- `arcs::Vector{<:Tuple{String,String,<:NetworkArc}}`: Arcs in the spatial network as `(origin_id, destination_id, arc_data)`.
-- `commodities::Vector{Commodity}`: User-facing commodity specifications.
-- `time_step::Period`: The discrete time step size (e.g., `Hour(1)`, `Day(1)`).
-- `group_by`: Optional function to group commodities into `Order`s (default: no additional grouping).
+This function expects `nodes` and `arcs` already in `NetworkGraph` form (i.e., `arcs` are tuples `(origin_id, destination_id, NetworkArc)`), and `commodities` are user-facing `Commodity` objects. In brief, it:
 
-# Discretization and Normalization
-1. **Start Date**: The time horizon starts at the earliest release date (for departure-based) or the earliest possible start (for arrival-based).
-2. **Time Steps**: Dates and periods are converted to discrete steps using `period_steps`.
-3. **Consolidation**: Commodities with the same origin, destination, and delivery step are grouped into `Order`s. Orders with the same origin and destination are grouped into `Bundle`s for routing.
-4. **Graphs**: Both `TimeSpaceGraph` (absolute time) and `TravelTimeGraph` (relative time) are constructed.
+- Determines the instance start date (arrival- or departure-based) and converts dates into discrete time step indices using `period_steps`.
+- Expands each `Commodity` into `LightCommodity` items and groups them into `Order`s (by time step, origin, destination and `group_by`) and `Bundle`s (by origin, destination and group).
+- Computes `time_horizon_length` (accounting for `max_delivery_time` unless `wrap_time=true`), constructs `TimeSpaceGraph` and `TravelTimeGraph`, and returns a populated `Instance`.
+
+Arguments:
+- `nodes::Vector{<:NetworkNode}`
+- `arcs::Vector{<:Tuple{String,String,<:NetworkArc}}`
+- `commodities::Vector{Commodity}`
+- `time_step::Period`
+
+Keywords:
+- `group_by` (default: `_default_group_by`): function grouping commodities into orders
+- `wrap_time` (default: false): whether the time horizon wraps (cyclic)
+
+See also: the `Instance` constructor which accepts `Arc` inputs and performs automatic cost-type inference.
 """
 function build_instance(
     nodes::Vector{<:NetworkNode},
@@ -238,22 +243,83 @@ end
 """
 $TYPEDSIGNATURES
 
-Build an `Instance` using the `Arc` interface. This is the recommended constructor.
-Automatically converts `Arc` (with time periods) into `NetworkArc` (with time steps) using `collect_arcs`.
+Infer the cost types present in a vector of arcs by scanning their actual cost function types.
+Returns a tuple of unique cost types found in the arcs.
+
+This is a runtime operation that enables automatic cost type detection, but the result
+can be passed to type-stable inner functions via function barriers.
+"""
+function infer_cost_types(arcs::Vector{<:Arc})
+    if isempty(arcs)
+        return ()
+    end
+    # Collect unique cost types
+    types = unique(typeof(arc.cost) for arc in arcs)
+    return Tuple(types)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Build an `Instance` from `raw_arcs::Vector{<:Arc}` with explicit `arc_cost_types` for type stability.
+
+This variant converts `raw_arcs` into `NetworkArc`s using `collect_arcs(arc_cost_types, raw_arcs, time_step)` and then delegates to `build_instance(nodes, arcs, commodities, time_step; group_by, wrap_time)`.
 """
 function build_instance(
     nodes::Vector{<:NetworkNode},
     raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
-    arc_cost_types;
+    arc_cost_types::Tuple;
     group_by=_default_group_by,
     wrap_time=false,
 ) where {is_date_arrival,ID,I}
-    # If arc_cost_types is a single type, wrap it in a tuple for collect_arcs
-    types = arc_cost_types isa Type ? (arc_cost_types,) : arc_cost_types
-    arcs = collect_arcs(types, raw_arcs, time_step)
+    arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
     return build_instance(
         nodes, arcs, commodities, time_step; group_by=group_by, wrap_time=wrap_time
+    )
+end
+
+"""
+    Instance(
+        nodes::Vector{<:NetworkNode},
+        arcs::Vector{<:Arc},
+        commodities::Vector{Commodity{is_date_arrival,ID,I}},
+        time_step::Period;
+        group_by=_default_group_by,
+        wrap_time=false,
+    ) where {is_date_arrival,ID,I}
+
+Construct an `Instance` from high-level `Arc` inputs by automatically inferring cost function types.
+
+# Arguments
+- `nodes::Vector{<:NetworkNode}`: List of nodes in the spatial network.
+- `arcs::Vector{<:Tuple{String,String,<:NetworkArc}}`: Arcs in the spatial network as `(origin_id, destination_id, arc_data)`.
+- `commodities::Vector{Commodity}`: User-facing commodity specifications.
+- `time_step::Period`: The discrete time step size (e.g., `Hour(1)`, `Day(1)`).
+
+Keywords:
+- `group_by` (default: `_default_group_by`): Optional function to group commodities into `Order`s (default: no additional grouping).
+- `wrap_time` (default: false): whether the time horizon should wrap (cyclic)
+
+# Discretization and Normalization
+1. **Start Date**: The time horizon starts at the earliest release date (for departure-based) or the earliest possible start (for arrival-based).
+2. **Time Steps**: Dates and periods are converted to discrete steps using `period_steps`.
+3. **Consolidation**: Commodities with the same origin, destination, and delivery step are grouped into `Order`s. Orders with the same origin and destination are grouped into `Bundle`s for routing.
+4. **Graphs**: Both `TimeSpaceGraph` (absolute time) and `TravelTimeGraph` (relative time) are constructed.
+"""
+function Instance(
+    nodes::Vector{<:NetworkNode},
+    raw_arcs::Vector{<:Arc},
+    commodities::Vector{Commodity{is_date_arrival,ID,I}},
+    time_step::Period;
+    group_by=_default_group_by,
+    wrap_time=false,
+) where {is_date_arrival,ID,I}
+    # Infer cost types from the arcs
+    cost_types = infer_cost_types(raw_arcs)
+    # Delegate to the type-stable version
+    return build_instance(
+        nodes, raw_arcs, commodities, time_step, cost_types; group_by, wrap_time
     )
 end

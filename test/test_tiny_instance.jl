@@ -17,23 +17,9 @@ using Test
         nodes_file, legs_file, commodities_file
     )
 
-    wrapped_instance = build_instance(
-        nodes,
-        arcs,
-        commodities,
-        Week(1),
-        (LinearArcCost, BinPackingArcCost);
-        wrap_time=true,
-    )
+    wrapped_instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
-    unwrapped_instance = build_instance(
-        nodes,
-        arcs,
-        commodities,
-        Week(1),
-        (LinearArcCost, BinPackingArcCost);
-        wrap_time=false,
-    )
+    unwrapped_instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=false)
 
     @test bundle_count(wrapped_instance) == 4
     @test order_count(wrapped_instance) == 6
