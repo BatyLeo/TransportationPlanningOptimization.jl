@@ -3,9 +3,9 @@ using TransportationPlanningOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-instance_name = "small"
-# datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
-datadir = joinpath(@__DIR__, "..", "..", "test", "public")
+instance_name = "world"
+datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
+# datadir = joinpath(@__DIR__, "..", "..", "test", "public")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
