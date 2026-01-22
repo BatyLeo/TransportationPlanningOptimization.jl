@@ -28,7 +28,7 @@ using .Inbound
         )
         instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
-        @test_throws DomainError greedy_construction(instance)
+        @test_throws DomainError greedy_heuristic(instance)
     end
 
     @testset "is_feasible detects oversized bins" begin

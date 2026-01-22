@@ -1,4 +1,5 @@
 using TransportationPlanningOptimization
+using TransportationPlanningOptimization: insert_bundle!
 using Test
 using Dates
 using MetaGraphsNext
@@ -64,7 +65,7 @@ using MetaGraphsNext
     end
 
     @testset "Greedy Construction (LinearArcCost)" begin
-        sol = greedy_construction(instance)
+        sol = greedy_heuristic(instance)
         @test cost(sol) == 20.0
         @test is_feasible(sol, instance)
     end

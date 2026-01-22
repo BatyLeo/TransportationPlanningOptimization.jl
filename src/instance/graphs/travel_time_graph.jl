@@ -34,7 +34,7 @@ end
 function Base.show(io::IO, g::TravelTimeGraph{is_date_arrival}) where {is_date_arrival}
     return println(
         io,
-        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs (is_date_arrival=$is_date_arrival)",
+        "Travel-Time Graph with $(Graphs.nv(g.graph)) nodes and $(Graphs.ne(g.graph)) arcs",
     )
 end
 
@@ -304,7 +304,9 @@ function _compute_bundle_arcs(
         nodes_on_paths = intersect(reachable_from_origin, can_reach_destination)
 
         # Collect all arcs where both endpoints are on paths
+        # Pre-allocate to reduce allocations
         arcs = Tuple{Int,Int}[]
+        sizehint!(arcs, length(nodes_on_paths) * 3)  # Estimate avg out-degree
         for u in nodes_on_paths
             for v in Graphs.outneighbors(graph, u)
                 if v in nodes_on_paths
