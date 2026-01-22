@@ -17,6 +17,6 @@ commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
 instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true);
 instance
 
-greedy_solution = greedy_construction(instance);
+greedy_solution = greedy_heuristic(instance);
 is_feasible(greedy_solution, instance; verbose=true)
 cost(greedy_solution)

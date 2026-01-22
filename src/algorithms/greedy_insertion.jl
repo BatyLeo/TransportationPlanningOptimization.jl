@@ -126,12 +126,12 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
 end
 
 """
-    greedy_construction(instance)
+$TYPEDSIGNATURES
 
 Construct a solution by inserting bundles one by one into an initially empty solution.
 Bundles are processed in the order they appear in the instance.
 """
-function greedy_construction(instance::Instance)
+function greedy_heuristic(instance::Instance)
     sol = Solution(instance)
     # Get bundle indices sorted by decreasing total size
     sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)

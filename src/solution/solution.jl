@@ -63,12 +63,37 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
 
         bundle = instance.bundles[bundle_idx]
 
-        # Check connectivity
+        # Check connectivity and forbidden constraints
         for i in 1:(length(path) - 1)
             u, v = path[i], path[i + 1]
             if !Graphs.has_edge(travel_time_graph.graph, u, v)
                 verbose &&
                     @warn "Arc ($(u), $(v)) in bundle $(bundle_idx) path does not exist."
+                return false
+            end
+            
+            # Check forbidden nodes (intermediate nodes only, origin/destination already validated)
+            u_label = MetaGraphsNext.label_for(travel_time_graph.graph, u)
+            v_label = MetaGraphsNext.label_for(travel_time_graph.graph, v)
+            u_node_id = u_label[1]
+            v_node_id = v_label[1]
+            
+            # Check if intermediate nodes are forbidden (skip origin and destination)
+            if i > 1 && u_node_id in bundle.forbidden_nodes
+                verbose &&
+                    @warn "Bundle $(bundle_idx) path uses forbidden node $(u_node_id) at position $(i)."
+                return false
+            end
+            if i < length(path) - 1 && v_node_id in bundle.forbidden_nodes
+                verbose &&
+                    @warn "Bundle $(bundle_idx) path uses forbidden node $(v_node_id) at position $(i+1)."
+                return false
+            end
+            
+            # Check forbidden arcs
+            if (u_node_id, v_node_id) in bundle.forbidden_arcs
+                verbose &&
+                    @warn "Bundle $(bundle_idx) path uses forbidden arc ($(u_node_id), $(v_node_id))."
                 return false
             end
         end

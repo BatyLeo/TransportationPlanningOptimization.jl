@@ -164,20 +164,20 @@ function parse_outbound_instance(
         date = DateTime(monday_week_1 + Week(week - 1))
 
         forbidden_arcs = Tuple{String,String}[]
-        # If BTS commodity, forbid arcs leading to ZG nodes that do not come from BTS list
-        if row[COMMODITY_TYPE_BT] == "BTS"
-            dest_node_id = string(row[COMMODITY_DESTINATION_ID])
-            dest_node = findfirst(n -> n.id == dest_node_id, nodes)
-            @assert dest_node !== nothing "Destination node $dest_node_id not found among parsed nodes."
-            bts_list = nodes[dest_node].info.bts_list
-            for arc in raw_arcs
-                if arc.destination_id == dest_node_id
-                    if !(arc.origin_id in bts_list)
-                        push!(forbidden_arcs, (arc.origin_id, arc.destination_id))
-                    end
-                end
-            end
-        end
+        # # If BTS commodity, forbid arcs leading to ZG nodes that do not come from BTS list
+        # if row[COMMODITY_TYPE_BT] == "BTS"
+        #     dest_node_id = string(row[COMMODITY_DESTINATION_ID])
+        #     dest_node = findfirst(n -> n.id == dest_node_id, nodes)
+        #     @assert dest_node !== nothing "Destination node $dest_node_id not found among parsed nodes."
+        #     bts_list = nodes[dest_node].info.bts_list
+        #     for arc in raw_arcs
+        #         if arc.destination_id == dest_node_id
+        #             if !(arc.origin_id in bts_list)
+        #                 push!(forbidden_arcs, (arc.origin_id, arc.destination_id))
+        #             end
+        #         end
+        #     end
+        # end
 
         Commodity(;
             origin_id="$(row[COMMODITY_ORIGIN_ID])",

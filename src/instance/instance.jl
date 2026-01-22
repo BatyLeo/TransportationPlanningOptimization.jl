@@ -202,7 +202,11 @@ function build_instance(
     network_graph = NetworkGraph(nodes, arcs)
 
     # Wrapping commodities into light commodities
+    # Pre-allocate with total quantity to avoid reallocations
+    total_quantity = sum(c.quantity for c in commodities)
     full_commodities = LightCommodity{is_date_arrival,I}[]
+    sizehint!(full_commodities, total_quantity)
+    
     # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_time_steps)
     first_key = (
         1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
@@ -214,19 +218,24 @@ function build_instance(
     start_date = _compute_start_date(commodities, wrap_time)
 
     for commodity in commodities
-        to_append = [
-            LightCommodity(;
-                origin_id=commodity.origin_id,
-                destination_id=commodity.destination_id,
-                size=commodity.size,
-                info=commodity.info,
-                is_date_arrival=is_date_arrival,
-            ) for _ in 1:(commodity.quantity)
-        ]
+        # Create light commodity once, then push multiple times to avoid repeated property access
+        light_commodity = LightCommodity(;
+            origin_id=commodity.origin_id,
+            destination_id=commodity.destination_id,
+            size=commodity.size,
+            info=commodity.info,
+            is_date_arrival=is_date_arrival,
+        )
+        
+        light_commodities_start_idx = length(full_commodities) + 1
+        for _ in 1:(commodity.quantity)
+            push!(full_commodities, light_commodity)
+        end
+        light_commodities_end_idx = length(full_commodities)
+        
         max_transit_steps = period_steps(
             commodity.max_delivery_time, time_step; roundup=floor
         )
-        append!(full_commodities, to_append)
         # time_step_idx relative to the earliest arrival_date (discretized by time_step)
         time_step_idx =
             period_steps(
@@ -239,12 +248,16 @@ function build_instance(
             group_by(commodity),
         )
 
+        # Reference the slice we just added
+        to_append = view(full_commodities, light_commodities_start_idx:light_commodities_end_idx)
+        
         if haskey(order_dict, key)
             commodities_list, min_steps = order_dict[key]
+            # Append by pushing indices (commodities_list is already part of full_commodities)
             append!(commodities_list, to_append)
             order_dict[key] = (commodities_list, min(min_steps, max_transit_steps))
         else
-            order_dict[key] = (to_append, max_transit_steps)
+            order_dict[key] = (collect(to_append), max_transit_steps)
         end
     end
 

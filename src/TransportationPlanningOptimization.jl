@@ -50,6 +50,6 @@ export TimeSpaceGraph, TravelTimeGraph
 export time_horizon
 
 export Solution, is_feasible, cost, add_bundle_path!
-export greedy_construction, insert_bundle!
+export greedy_heuristic
 
 end

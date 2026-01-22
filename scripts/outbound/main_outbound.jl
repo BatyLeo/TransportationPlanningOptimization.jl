@@ -27,16 +27,28 @@ load_factor_file = joinpath(data_dir, "load_factor_min_estimated.csv")
     max_delivery_time=Week(36),
 );
 
-instance = Instance(
+function group_by_function(commodity::Commodity)
+    return (commodity.info.model, commodity.info.is_BTS)
+end
+
+@profview instance = Instance(
     nodes,
     arcs,
     commodities,
     Week(1000);
-    group_by=commodity -> (commodity.info.model, commodity.info.is_BTS),
+    group_by=group_by_function,
+    wrap_time=false,
+);
+@time instance = Instance(
+    nodes,
+    arcs,
+    commodities,
+    Week(1000);
+    group_by=group_by_function,
     wrap_time=false,
 );
 instance
 
-greedy_solution = greedy_construction(instance)
+greedy_solution = greedy_heuristic(instance)
 is_feasible(greedy_solution, instance; verbose=true)
 cost(greedy_solution)
