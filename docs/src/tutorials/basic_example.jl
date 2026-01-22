@@ -52,7 +52,9 @@ arcs = [
     Arc(; origin_id="A1", destination_id="B1", cost=LinearArcCost(5.0), travel_time=Day(1)),
     Arc(; origin_id="A1", destination_id="B2", cost=LinearArcCost(7.0), travel_time=Day(1)),
     Arc(; origin_id="A2", destination_id="B4", cost=LinearArcCost(6.0), travel_time=Day(1)),
-    Arc(; origin_id="A2", destination_id="C2", cost=LinearArcCost(12.0), travel_time=Day(2)),
+    Arc(;
+        origin_id="A2", destination_id="C2", cost=LinearArcCost(12.0), travel_time=Day(2)
+    ),
     Arc(; origin_id="B1", destination_id="B3", cost=LinearArcCost(3.0), travel_time=Day(1)),
     Arc(; origin_id="B2", destination_id="C1", cost=LinearArcCost(4.0), travel_time=Day(1)),
     Arc(; origin_id="B2", destination_id="B4", cost=LinearArcCost(2.0), travel_time=Day(1)),

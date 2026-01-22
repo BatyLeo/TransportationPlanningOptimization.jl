@@ -9,9 +9,7 @@ tutorials_build_dir = joinpath(@__DIR__, "src", "tutorials")
 for file in readdir(tutorials_src_dir)
     if endswith(file, ".jl")
         Literate.markdown(
-            joinpath(tutorials_src_dir, file),
-            tutorials_build_dir;
-            documenter=true
+            joinpath(tutorials_src_dir, file), tutorials_build_dir; documenter=true
         )
     end
 end
@@ -35,9 +33,7 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Getting Started" => "getting_started.md",
-        "Tutorials" => [
-            "Basic Example" => "tutorials/basic_example.md",
-        ],
+        "Tutorials" => ["Basic Example" => "tutorials/basic_example.md"],
         "Guides" => [
             "Cost Functions" => "guides/cost_functions.md",
             "Forbidden Constraints" => "guides/forbidden_constraints.md",
