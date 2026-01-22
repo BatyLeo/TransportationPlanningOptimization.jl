@@ -206,7 +206,7 @@ function build_instance(
     total_quantity = sum(c.quantity for c in commodities)
     full_commodities = LightCommodity{is_date_arrival,I}[]
     sizehint!(full_commodities, total_quantity)
-    
+
     # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_time_steps)
     first_key = (
         1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
@@ -226,13 +226,13 @@ function build_instance(
             info=commodity.info,
             is_date_arrival=is_date_arrival,
         )
-        
+
         light_commodities_start_idx = length(full_commodities) + 1
         for _ in 1:(commodity.quantity)
             push!(full_commodities, light_commodity)
         end
         light_commodities_end_idx = length(full_commodities)
-        
+
         max_transit_steps = period_steps(
             commodity.max_delivery_time, time_step; roundup=floor
         )
@@ -249,8 +249,10 @@ function build_instance(
         )
 
         # Reference the slice we just added
-        to_append = view(full_commodities, light_commodities_start_idx:light_commodities_end_idx)
-        
+        to_append = view(
+            full_commodities, light_commodities_start_idx:light_commodities_end_idx
+        )
+
         if haskey(order_dict, key)
             commodities_list, min_steps = order_dict[key]
             # Append by pushing indices (commodities_list is already part of full_commodities)

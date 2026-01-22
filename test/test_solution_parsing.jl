@@ -32,7 +32,7 @@ using DataFrames
     instance = Instance(nodes, [arc_ab, arc_bc], commodities, time_step)
 
     # Generate a solution
-    sol = greedy_construction(instance)
+    sol = greedy_heuristic(instance)
     original_cost = cost(sol)
     @test is_feasible(sol, instance)
 

@@ -72,6 +72,7 @@ function parse_outbound_instance(
     model_file,
     load_factor_file;
     max_delivery_time=Day(365),
+    all_linear=false,
 )
     df_nodes = DataFrame(CSV.File(node_file))
     df_legs = DataFrame(CSV.File(leg_file))
@@ -110,7 +111,7 @@ function parse_outbound_instance(
         arc_type = Symbol(row[ARC_TYPE])
 
         # Route arcs have bin packing costs, others have linear costs
-        cost = if arc_type == :R
+        cost = if arc_type == :R && !all_linear
             BinPackingArcCost(row[ARC_COST], 1.0)
         else
             LinearArcCost(row[ARC_COST])

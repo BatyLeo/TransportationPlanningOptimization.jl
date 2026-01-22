@@ -25,30 +25,19 @@ load_factor_file = joinpath(data_dir, "load_factor_min_estimated.csv")
     model_file,
     load_factor_file;
     max_delivery_time=Week(36),
+    all_linear=false,
 );
 
 function group_by_function(commodity::Commodity)
     return (commodity.info.model, commodity.info.is_BTS)
 end
 
-@profview instance = Instance(
-    nodes,
-    arcs,
-    commodities,
-    Week(1000);
-    group_by=group_by_function,
-    wrap_time=false,
-);
 @time instance = Instance(
-    nodes,
-    arcs,
-    commodities,
-    Week(1000);
-    group_by=group_by_function,
-    wrap_time=false,
+    nodes, arcs, commodities, Week(1000); group_by=group_by_function, wrap_time=false
 );
 instance
 
 greedy_solution = greedy_heuristic(instance)
 is_feasible(greedy_solution, instance; verbose=true)
+cost(greedy_solution)
 cost(greedy_solution)

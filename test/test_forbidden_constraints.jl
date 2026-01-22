@@ -190,7 +190,7 @@ using MetaGraphsNext
         ]
 
         instance = Instance(nodes, arcs, commodities, time_step)
-        solution = greedy_construction(instance)
+        solution = greedy_heuristic(instance)
 
         # Solution should exist and be feasible
         @test solution !== nothing
