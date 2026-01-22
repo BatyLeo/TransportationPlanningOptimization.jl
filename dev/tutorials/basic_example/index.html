@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Basic Example · TransportationPlanningOptimization.jl</title><meta name="title" content="Basic Example · TransportationPlanningOptimization.jl"/><meta property="og:title" content="Basic Example · TransportationPlanningOptimization.jl"/><meta property="twitter:title" content="Basic Example · TransportationPlanningOptimization.jl"/><meta name="description" content="Documentation for TransportationPlanningOptimization.jl."/><meta property="og:description" content="Documentation for TransportationPlanningOptimization.jl."/><meta property="twitter:description" content="Documentation for TransportationPlanningOptimization.jl."/><meta property="og:url" content="https://BatyLeo.github.io/TransportationPlanningOptimization.jl/tutorials/basic_example/"/><meta property="twitter:url" content="https://BatyLeo.github.io/TransportationPlanningOptimization.jl/tutorials/basic_example/"/><link rel="canonical" href="https://BatyLeo.github.io/TransportationPlanningOptimization.jl/tutorials/basic_example/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">TransportationPlanningOptimization.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Tutorials</span><ul><li class="is-active"><a class="tocitem" href>Basic Example</a><ul class="internal"><li><a class="tocitem" href="#Problem-Setup"><span>Problem Setup</span></a></li><li><a class="tocitem" href="#Load-the-Package"><span>Load the Package</span></a></li><li><a class="tocitem" href="#Define-Network-Nodes"><span>Define Network Nodes</span></a></li><li><a class="tocitem" href="#Define-Transportation-Arcs"><span>Define Transportation Arcs</span></a></li><li><a class="tocitem" href="#Define-Commodities"><span>Define Commodities</span></a></li><li><a class="tocitem" href="#Create-the-Instance"><span>Create the Instance</span></a></li><li><a class="tocitem" href="#Solve-with-Greedy-Heuristic"><span>Solve with Greedy Heuristic</span></a></li><li><a class="tocitem" href="#Validate-and-Evaluate-the-Solution"><span>Validate and Evaluate the Solution</span></a></li></ul></li></ul></li><li><span class="tocitem">Guides</span><ul><li><a class="tocitem" href="../../guides/cost_functions/">Cost Functions</a></li><li><a class="tocitem" href="../../guides/forbidden_constraints/">Forbidden Constraints</a></li></ul></li><li><a class="tocitem" href="../../api/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Basic Example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Basic Example</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/BatyLeo/TransportationPlanningOptimization.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/BatyLeo/TransportationPlanningOptimization.jl/blob/main/docs/src/tutorials/basic_example.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Basic-Example-Tutorial"><a class="docs-heading-anchor" href="#Basic-Example-Tutorial">Basic Example Tutorial</a><a id="Basic-Example-Tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Example-Tutorial" title="Permalink"></a></h1><p>This tutorial demonstrates how to create and solve a simple transportation planning problem from scratch using TransportationPlanningOptimization.jl.</p><h2 id="Problem-Setup"><a class="docs-heading-anchor" href="#Problem-Setup">Problem Setup</a><a id="Problem-Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Problem-Setup" title="Permalink"></a></h2><p>We&#39;ll build a small network with:</p><ul><li>2 origin nodes (A1, A2)</li><li>4 intermediate nodes (B1, B2, B3, B4)</li><li>2 destination nodes (C1, C2)</li></ul><p>The network topology looks like this:</p><pre><code class="nohighlight hljs">       ┌──→ B1 ──→ B3 ───┐
+       │                 ↓
+   A1 ─┤              ┌─→ C1
+       │              │
+       └──→ B2 ──┬───→┘
+                 │
+       ┌──→ B4 ──┘    ┌─→ C2
+       │              │
+   A2 ─┴──────────────┘</code></pre><h2 id="Load-the-Package"><a class="docs-heading-anchor" href="#Load-the-Package">Load the Package</a><a id="Load-the-Package-1"></a><a class="docs-heading-anchor-permalink" href="#Load-the-Package" title="Permalink"></a></h2><pre><code class="language-julia hljs">using TransportationPlanningOptimization
+using Dates</code></pre><h2 id="Define-Network-Nodes"><a class="docs-heading-anchor" href="#Define-Network-Nodes">Define Network Nodes</a><a id="Define-Network-Nodes-1"></a><a class="docs-heading-anchor-permalink" href="#Define-Network-Nodes" title="Permalink"></a></h2><p>Create nodes with unique IDs and appropriate node types:</p><pre><code class="language-julia hljs">nodes = [
+    NetworkNode(; id=&quot;A1&quot;, node_type=:origin),
+    NetworkNode(; id=&quot;A2&quot;, node_type=:origin),
+    NetworkNode(; id=&quot;B1&quot;, node_type=:other),
+    NetworkNode(; id=&quot;B2&quot;, node_type=:other),
+    NetworkNode(; id=&quot;B3&quot;, node_type=:other),
+    NetworkNode(; id=&quot;B4&quot;, node_type=:other),
+    NetworkNode(; id=&quot;C1&quot;, node_type=:destination),
+    NetworkNode(; id=&quot;C2&quot;, node_type=:destination),
+]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">8-element Vector{NetworkNode{Nothing}}:
+ NetworkNode(id=A1, node_type=origin, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=A2, node_type=origin, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=B1, node_type=other, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=B2, node_type=other, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=B3, node_type=other, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=B4, node_type=other, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=C1, node_type=destination, cost=0.0, capacity=∞, info=nothing)
+ NetworkNode(id=C2, node_type=destination, cost=0.0, capacity=∞, info=nothing)</code></pre><h2 id="Define-Transportation-Arcs"><a class="docs-heading-anchor" href="#Define-Transportation-Arcs">Define Transportation Arcs</a><a id="Define-Transportation-Arcs-1"></a><a class="docs-heading-anchor-permalink" href="#Define-Transportation-Arcs" title="Permalink"></a></h2><p>Create arcs with linear costs (proportional to volume transported):</p><pre><code class="language-julia hljs">arcs = [
+    Arc(; origin_id=&quot;A1&quot;, destination_id=&quot;B1&quot;, cost=LinearArcCost(5.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;A1&quot;, destination_id=&quot;B2&quot;, cost=LinearArcCost(7.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;A2&quot;, destination_id=&quot;B4&quot;, cost=LinearArcCost(6.0), travel_time=Day(1)),
+    Arc(;
+        origin_id=&quot;A2&quot;, destination_id=&quot;C2&quot;, cost=LinearArcCost(12.0), travel_time=Day(2)
+    ),
+    Arc(; origin_id=&quot;B1&quot;, destination_id=&quot;B3&quot;, cost=LinearArcCost(3.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;B2&quot;, destination_id=&quot;C1&quot;, cost=LinearArcCost(4.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;B2&quot;, destination_id=&quot;B4&quot;, cost=LinearArcCost(2.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;B3&quot;, destination_id=&quot;C1&quot;, cost=LinearArcCost(5.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;B4&quot;, destination_id=&quot;C1&quot;, cost=LinearArcCost(4.0), travel_time=Day(1)),
+    Arc(; origin_id=&quot;B4&quot;, destination_id=&quot;C2&quot;, cost=LinearArcCost(6.0), travel_time=Day(1)),
+]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">10-element Vector{Arc{LinearArcCost, Nothing, Dates.Day}}:
+ Arc(origin_id=A1, destination_id=B1, capacity=∞, cost=LinearArcCost(5.0), info=nothing)
+ Arc(origin_id=A1, destination_id=B2, capacity=∞, cost=LinearArcCost(7.0), info=nothing)
+ Arc(origin_id=A2, destination_id=B4, capacity=∞, cost=LinearArcCost(6.0), info=nothing)
+ Arc(origin_id=A2, destination_id=C2, capacity=∞, cost=LinearArcCost(12.0), info=nothing)
+ Arc(origin_id=B1, destination_id=B3, capacity=∞, cost=LinearArcCost(3.0), info=nothing)
+ Arc(origin_id=B2, destination_id=C1, capacity=∞, cost=LinearArcCost(4.0), info=nothing)
+ Arc(origin_id=B2, destination_id=B4, capacity=∞, cost=LinearArcCost(2.0), info=nothing)
+ Arc(origin_id=B3, destination_id=C1, capacity=∞, cost=LinearArcCost(5.0), info=nothing)
+ Arc(origin_id=B4, destination_id=C1, capacity=∞, cost=LinearArcCost(4.0), info=nothing)
+ Arc(origin_id=B4, destination_id=C2, capacity=∞, cost=LinearArcCost(6.0), info=nothing)</code></pre><h2 id="Define-Commodities"><a class="docs-heading-anchor" href="#Define-Commodities">Define Commodities</a><a id="Define-Commodities-1"></a><a class="docs-heading-anchor-permalink" href="#Define-Commodities" title="Permalink"></a></h2><p>Create commodities to transport through the network:</p><pre><code class="language-julia hljs">base_date = DateTime(2025, 1, 1)
+
+commodities = [
+    Commodity(;  #src From A1 to C1, size 10, must arrive by day 3
+        origin_id=&quot;A1&quot;,
+        destination_id=&quot;C1&quot;,
+        arrival_date=base_date + Day(3),
+        max_delivery_time=Day(3),
+        size=10.0,
+    ),
+    Commodity(;  #src From A1 to C1, size 5, must arrive by day 3 (same bundle as above)
+        origin_id=&quot;A1&quot;,
+        destination_id=&quot;C1&quot;,
+        arrival_date=base_date + Day(3),
+        max_delivery_time=Day(3),
+        size=5.0,
+    ),
+    Commodity(;  #src From A2 to C2, size 8, must arrive by day 2
+        origin_id=&quot;A2&quot;,
+        destination_id=&quot;C2&quot;,
+        arrival_date=base_date + Day(2),
+        max_delivery_time=Day(2),
+        size=8.0,
+    ),
+]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element Vector{Commodity{true, String, Nothing}}:
+ Commodity{is_date_arrival=true}:
+  Origin ID: A1
+  Destination ID: C1
+  Arrival Date: 2025-01-04T00:00:00
+  Quantity: 1
+  Size: 10.0
+  Max Delivery Time: 3 days
+  Forbidden Node IDs: String[]
+  Forbidden Arcs: Tuple{String, String}[]
+  Info: nothing
+
+ Commodity{is_date_arrival=true}:
+  Origin ID: A1
+  Destination ID: C1
+  Arrival Date: 2025-01-04T00:00:00
+  Quantity: 1
+  Size: 5.0
+  Max Delivery Time: 3 days
+  Forbidden Node IDs: String[]
+  Forbidden Arcs: Tuple{String, String}[]
+  Info: nothing
+
+ Commodity{is_date_arrival=true}:
+  Origin ID: A2
+  Destination ID: C2
+  Arrival Date: 2025-01-03T00:00:00
+  Quantity: 1
+  Size: 8.0
+  Max Delivery Time: 2 days
+  Forbidden Node IDs: String[]
+  Forbidden Arcs: Tuple{String, String}[]
+  Info: nothing
+</code></pre><h2 id="Create-the-Instance"><a class="docs-heading-anchor" href="#Create-the-Instance">Create the Instance</a><a id="Create-the-Instance-1"></a><a class="docs-heading-anchor-permalink" href="#Create-the-Instance" title="Permalink"></a></h2><p>Build the complete optimization instance with daily time steps:</p><pre><code class="language-julia hljs">instance = Instance(nodes, arcs, commodities, Day(1))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Instance Summary:
+  • Horizon: 4 time steps (1 day per step)
+  • Commodities: 3
+  • Orders:      2
+  • Bundles:     2
+  • Network Graph with 8 nodes and 10 arcs
+  • Time-Space Graph with 32 nodes and 29 arcs
+  • Travel-Time Graph with 25 nodes and 24 arcs
+</code></pre><h2 id="Solve-with-Greedy-Heuristic"><a class="docs-heading-anchor" href="#Solve-with-Greedy-Heuristic">Solve with Greedy Heuristic</a><a id="Solve-with-Greedy-Heuristic-1"></a><a class="docs-heading-anchor-permalink" href="#Solve-with-Greedy-Heuristic" title="Permalink"></a></h2><p>Apply the greedy insertion heuristic to find a solution:</p><pre><code class="language-julia hljs">solution = greedy_heuristic(instance)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Solution(num_trucks=0, bin_assignments=Dict{Tuple{Int64, Int64}, Vector{Bin{LightCommodity{true, Nothing}}}}())</code></pre><h2 id="Validate-and-Evaluate-the-Solution"><a class="docs-heading-anchor" href="#Validate-and-Evaluate-the-Solution">Validate and Evaluate the Solution</a><a id="Validate-and-Evaluate-the-Solution-1"></a><a class="docs-heading-anchor-permalink" href="#Validate-and-Evaluate-the-Solution" title="Permalink"></a></h2><p>Check if the solution is feasible:</p><pre><code class="language-julia hljs">is_feasible(solution, instance; verbose=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><p>Calculate the total cost:</p><pre><code class="language-julia hljs">cost(solution)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">261.0</code></pre><p>The solution routes commodities through the network to minimize transportation costs while respecting delivery deadlines and network capacity constraints.</p><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../getting_started/">« Getting Started</a><a class="docs-footer-nextpage" href="../../guides/cost_functions/">Cost Functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Thursday 22 January 2026 13:54">Thursday 22 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
