@@ -7,7 +7,7 @@ using Dates
 using TransportationPlanningOptimization
 using Test
 
-include("Inbound.jl")
+isdefined(Main, :Inbound) || include("Inbound.jl")
 using .Inbound
 
 @testset "Instance creation" begin

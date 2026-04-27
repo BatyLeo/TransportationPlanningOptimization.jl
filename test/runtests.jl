@@ -1,5 +1,8 @@
 using Test
 
+include("Inbound.jl")
+using .Inbound
+
 @testset "TransportationPlanningOptimization.jl" begin
     @testset "Code quality (Aqua.jl)" begin
         include("code.jl")
@@ -31,6 +34,12 @@ using Test
         end
         @testset "Tiny instance" begin
             include("test_tiny_instance.jl")
+        end
+        @testset "Forbidden constraints" begin
+            include("test_forbidden_constraints.jl")
+        end
+        @testset "Bin packing checks" begin
+            include("test_bin_packing.jl")
         end
     end
 end
