@@ -2,31 +2,43 @@ using Test
 using Dates
 using TransportationPlanningOptimization
 
-include("Inbound.jl")
+isdefined(Main, :Inbound) || include("Inbound.jl")
 using .Inbound
 
-@testset "oversized commodity detection" begin
+@testset "Oversized commodity detection" begin
     arc = NetworkArc(;
         travel_time_steps=1, capacity=typemax(Int), cost=BinPackingArcCost(10.0, 65)
     )
-    big = LightCommodity(; origin_id="a", destination_id="b", size=124.02)
+    big = LightCommodity(; origin_id="a", destination_id="b", size=66.0)
     @test_throws DomainError TransportationPlanningOptimization.compute_bin_assignments(
         arc.cost, [big]
     )
 end
 
-@testset "greedy fails on input with oversized items" begin
-    instance_name = "small"
-    datadir = joinpath(@__DIR__, "public")
-    nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
-    legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
-    commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
-
-    (nodes, arcs, commodities) = parse_inbound_instance(
-        nodes_file, legs_file, commodities_file
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-
+@testset "Greedy fails on input with oversized items" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=BinPackingArcCost(10.0, 65),
+            travel_time=Day(1),
+        ),
+    ]
+    base_date = DateTime(2025, 11, 20)
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            arrival_date=base_date + Day(1),
+            size=124.02,
+            max_delivery_time=Day(1),
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
     @test_throws DomainError greedy_heuristic(instance)
 end
 

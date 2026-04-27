@@ -1,5 +1,8 @@
 using Test
 
+include("Inbound.jl")
+using .Inbound
+
 @testset "TransportationPlanningOptimization.jl" begin
     @testset "Code quality (Aqua.jl)" begin
         include("code.jl")

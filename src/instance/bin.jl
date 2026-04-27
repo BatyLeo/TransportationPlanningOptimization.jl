@@ -34,6 +34,16 @@ function compute_bin_assignments(
     # Sort commodities in non-increasing order of size
     sorted_commodities = sort(commodities; by=c -> c.size, rev=true)
 
+    # Check for oversized commodities after sorting (in case of numerical issues)
+    if sorted_commodities[1].size > arc_f.bin_capacity + 1e-8
+        throw(
+            DomainError(
+                sorted_commodities[1],
+                "Commodity size $(sorted_commodities[1].size) exceeds bin capacity $(arc_f.bin_capacity)",
+            ),
+        )
+    end
+
     # Temporary storage for bin contents and remaining capacities
     bin_contents = Vector{C}[]
     bin_rem_caps = Float64[]
