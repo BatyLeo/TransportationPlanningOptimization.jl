@@ -52,4 +52,17 @@ export time_horizon
 export Solution, is_feasible, cost, add_bundle_path!
 export greedy_heuristic
 
+"""
+    gurobi_optimizer()
+
+Return a JuMP-compatible Gurobi optimizer instance using a cached `Gurobi.Env`.
+Requires `Gurobi.jl` to be loaded (activates
+`TransportationPlanningOptimizationGurobiExt`).
+
+Pass as a factory to JuMP: `Model(gurobi_optimizer)`.
+"""
+function gurobi_optimizer end
+
+export gurobi_optimizer
+
 end
