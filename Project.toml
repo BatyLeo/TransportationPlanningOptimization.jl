@@ -16,12 +16,19 @@ MetaGraphsNext = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
+[weakdeps]
+Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
+
+[extensions]
+TransportationPlanningOptimizationGurobiExt = "Gurobi"
+
 [compat]
 CSV = "0.10.15"
 DataFrames = "1.7.1"
 Dates = "1.11.0"
 DocStringExtensions = "0.9.5"
 Graphs = "1"
+Gurobi = "1"
 MetaGraphsNext = "0.7.4"
 ProgressMeter = "1.11.0"
 SparseArrays = "1"
