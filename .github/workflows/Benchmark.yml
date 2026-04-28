@@ -29,6 +29,9 @@ jobs:
             export_markdown("benchmark_result.md", result)
             println(sprint(show, result))
           '
+      - name: Publish results to job summary
+        if: always()
+        run: cat benchmark_result.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: benchmark-result
