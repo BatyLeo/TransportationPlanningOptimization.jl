@@ -37,6 +37,6 @@ instance = Instance(
 );
 instance
 
-# greedy_solution = greedy_heuristic(instance)
-# is_feasible(greedy_solution, instance; verbose=true)
-# cost(greedy_solution)
+greedy_solution = greedy_heuristic(instance)
+is_feasible(greedy_solution, instance; verbose=true)
+cost(greedy_solution)
