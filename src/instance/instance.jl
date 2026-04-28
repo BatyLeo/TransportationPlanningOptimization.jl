@@ -85,7 +85,7 @@ function time_horizon(instance::Instance)
 end
 
 # By default, group by origin and destination IDs
-function _default_group_by(commodity::Commodity)
+function _default_group_by(::Commodity)
     return nothing
 end
 

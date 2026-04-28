@@ -14,18 +14,13 @@ abstract type AbstractArcCostFunction end
 $TYPEDEF
 
 A linear cost function where the cost is directly proportional to the total size/load on the arc.
+
 # Fields
 $TYPEDFIELDS
 """
 struct LinearArcCost <: AbstractArcCostFunction
     "Unit cost per unit of size (e.g. m³, kg, etc.)"
     cost_per_unit_size::Float64
-end
-
-struct LinearArcCostPerBin <: AbstractArcCostFunction
-    "Unit cost per unit of size (e.g. m³, kg, etc.)"
-    cost_per_unit_size::Float64
-    capacity_per_bin::Float64
 end
 
 """
@@ -135,8 +130,18 @@ end
 """
 $TYPEDSIGNATURES
 
-Fallback evaluate for unknown cost function types.
+Evaluate the cost of a shortcut (wait) arc: always zero.
 """
-function evaluate(arc_f::AbstractArcCostFunction, commodities::Vector{<:LightCommodity})
-    return 0.0
+evaluate(::ShortcutArcCost, ::Vector{<:LightCommodity}) = 0.0
+
+"""
+$TYPEDSIGNATURES
+
+Fallback for cost function types that have not yet implemented `evaluate`.
+Throws to prevent silently incorrect (zero) costs during development.
+"""
+function evaluate(arc_f::AbstractArcCostFunction, ::Vector{<:LightCommodity})
+    return throw(
+        ArgumentError("evaluate not implemented for cost function of type $(typeof(arc_f))")
+    )
 end
