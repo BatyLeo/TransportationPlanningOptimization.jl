@@ -49,7 +49,7 @@ using MetaGraphsNext
         sol = Solution(instance)
         @test bundle_count(instance) == 1
         @test isempty(sol.bundle_paths[1])
-        @test isempty(sol.commodities_on_arcs)
+        @test isempty(sol.assignments)
         @test cost(sol) == 0.0
     end
 

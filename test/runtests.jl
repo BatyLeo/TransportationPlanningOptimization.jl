@@ -23,6 +23,7 @@ using .Inbound
         @testset "Graphs" begin
             include("test_graphs.jl")
             include("test_travel_time_cost_matrix.jl")
+            include("test_multi_modal.jl")
             include("test_solution.jl")
             include("test_solution_parsing.jl")
         end

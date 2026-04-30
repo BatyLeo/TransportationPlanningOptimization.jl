@@ -37,6 +37,7 @@ makedocs(;
         "Guides" => [
             "Cost Functions" => "guides/cost_functions.md",
             "Forbidden Constraints" => "guides/forbidden_constraints.md",
+            "Multi-Modal Arcs" => "guides/multi_modal_arcs.md",
         ],
         "API Reference" => "api.md",
     ],

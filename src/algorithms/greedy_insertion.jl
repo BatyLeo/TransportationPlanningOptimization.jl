@@ -21,6 +21,34 @@ function incremental_cost(
     return arc_f.cost_per_unit_size * total_new_size
 end
 
+function _edge_incremental_cost(
+    arc::NetworkArc, existing::Nothing, new_comms::Vector{C}
+) where {C<:LightCommodity}
+    return incremental_cost(arc.cost, C[], new_comms)
+end
+
+function _edge_incremental_cost(
+    arc::NetworkArc, existing::AbstractArcAssignment{C}, new_comms::Vector{C}
+) where {C<:LightCommodity}
+    return incremental_cost(arc.cost, commodities_of(existing), new_comms)
+end
+
+function _edge_incremental_cost(
+    arc::MultiModalArc, existing::Nothing, new_comms::Vector{C}
+) where {C<:LightCommodity}
+    return minimum(incremental_cost(mode.cost, C[], new_comms) for mode in arc.modes)
+end
+
+function _edge_incremental_cost(
+    arc::MultiModalArc, existing::MultiAssignment{C}, new_comms::Vector{C}
+) where {C<:LightCommodity}
+    return minimum(
+        incremental_cost(
+            arc.modes[i].cost, commodities_of(existing.per_mode[i]), new_comms
+        ) for i in eachindex(arc.modes)
+    )
+end
+
 """
     compute_ttg_edge_incremental_cost(sol, instance, bundle, u_ttg_label, v_ttg_label)
 
@@ -67,9 +95,8 @@ function compute_ttg_edge_incremental_cost(
         end
 
         arc = tsg.graph[u_tsg_label, v_tsg_label]
-        existing_comms = get(sol.commodities_on_arcs, edge, C[])
-
-        inc = incremental_cost(arc.cost, existing_comms, new_comms)
+        existing_assignment = get(sol.assignments, edge, nothing)
+        inc = _edge_incremental_cost(arc, existing_assignment, new_comms)
         total_incremental_cost += inc
     end
 
