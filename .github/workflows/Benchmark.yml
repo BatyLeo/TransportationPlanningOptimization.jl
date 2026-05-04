@@ -32,7 +32,7 @@ jobs:
       - name: Publish results to job summary
         if: always()
         run: cat benchmark_result.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: benchmark-result
           path: benchmark_result.md
