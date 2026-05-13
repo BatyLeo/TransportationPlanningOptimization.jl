@@ -66,7 +66,7 @@ end
 ```
 
 !!! note
-    `:fill_then_spill` currently applies to case 2 only (modes with the same transit time that share a `MultiModalArc` edge). For case 1 (distinct transit times), Dijkstra naturally routes bundles to the cheapest available mode, so capacity-aware splitting across modes with different transit times is a planned future extension.
+    `:fill_then_spill` only splits a bundle across modes that share the same transit time (and therefore the same `MultiModalArc` edge in the time-expanded graphs). Splitting across modes with different transit times is intentionally disallowed, since the two modes occupy separate edges with independent per-edge capacities, and mixing would create an inconsistent capacity accounting. When transit times differ, mode selection still happens at the bundle level via Dijkstra: as the cheaper mode's incremental cost rises with utilization, later bundles route via the other mode.
 
 ## Per-Mode Capacity
 
