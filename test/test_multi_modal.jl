@@ -180,3 +180,112 @@ end
     sol = greedy_heuristic(instance)
     @test !is_feasible(sol, instance; verbose=false)
 end
+
+# ── fill_then_spill mode selection (case 2) ──────────────────────────────────
+
+@testset "fill_then_spill assigns to cheapest then spills" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=1,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(10.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=2,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    sol = greedy_heuristic(instance; mode_selection=:fill_then_spill)
+
+    @test is_feasible(sol, instance)
+    # 1 unit on cheap mode (5.0) + 1 unit on expensive mode (10.0) = 15.0
+    @test cost(sol) == 15.0
+
+    assignment = only(values(sol.assignments))
+    @test assignment isa MultiAssignment
+    @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 2
+end
+
+@testset "fill_then_spill matches cheapest when capacity is sufficient" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=100,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(10.0),
+            travel_time=Day(1),
+            capacity=100,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=3,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    sol = greedy_heuristic(instance; mode_selection=:fill_then_spill)
+
+    @test is_feasible(sol, instance)
+    @test cost(sol) == 15.0
+    assignment = only(values(sol.assignments))
+    @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 1
+end
+
+@testset "invalid mode_selection throws ArgumentError" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(5.0), travel_time=Day(1)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    @test_throws ArgumentError greedy_heuristic(instance; mode_selection=:invalid)
+end

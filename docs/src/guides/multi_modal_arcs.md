@@ -43,11 +43,15 @@ For case 1, use different `travel_time` values (e.g. `Day(1)` for truck and `Day
 
 ## Cost Evaluation and Mode Selection
 
-During `greedy_heuristic`, the insertion cost for a multi-modal edge is `minimum(incremental_cost(mode) for mode in modes)`. After Dijkstra selects the path, `add_bundle_path!` assigns commodities to the mode with the lowest incremental cost at that moment.
+The `greedy_heuristic` accepts a `mode_selection` keyword that controls how commodities are distributed across modes on a multi-modal edge. Two strategies are available:
+
+- **`:cheapest`** (default): all commodities go to the single cheapest mode. Fast and simple, but can overflow a mode's capacity while others remain empty.
+- **`:fill_then_spill`**: fill the cheapest mode up to its capacity, then spill overflow to the next-cheapest mode, and so on. Produces feasible solutions when capacity constraints are tight.
 
 ```julia
-sol = greedy_heuristic(instance)
-cost(sol)  # 3 units × 5.0/unit = 15.0 (train chosen)
+sol = greedy_heuristic(instance)                                    # :cheapest (default)
+sol = greedy_heuristic(instance; mode_selection=:fill_then_spill)   # capacity-aware
+cost(sol)
 ```
 
 Inspect the per-mode breakdown via the `MultiAssignment` stored in `sol.assignments`:
@@ -61,19 +65,24 @@ for (i, slot) in enumerate(assignment.per_mode)
 end
 ```
 
+!!! note
+    `:fill_then_spill` currently applies to case 2 only (modes with the same transit time that share a `MultiModalArc` edge). For case 1 (distinct transit times), Dijkstra naturally routes bundles to the cheapest available mode, so capacity-aware splitting across modes with different transit times is a planned future extension.
+
 ## Per-Mode Capacity
 
-Each mode's `capacity` field is checked independently by `is_feasible`. Because the greedy rule always picks the cheapest mode, it is possible to overflow one mode's capacity while the other remains empty. This is by design: the greedy solver is mode-greedy, not load-balancing. If feasibility matters, either raise the cheap mode's capacity or add a post-processing rebalancing step.
+Each mode's `capacity` field is checked independently by `is_feasible`. With the default `:cheapest` strategy, it is possible to overflow one mode's capacity while the other remains empty. Use `:fill_then_spill` to distribute commodities across modes respecting per-mode capacity.
 
 ```julia
 arc_tight = Arc(; origin_id="A", destination_id="B",
                    cost=LinearArcCost(5.0), travel_time=Day(1), capacity=1)
 arc_loose = Arc(; origin_id="A", destination_id="B",
                    cost=LinearArcCost(10.0), travel_time=Day(1), capacity=100)
-# If 3 units arrive and the cheap mode has capacity 1, greedy fills it to 3 → infeasible
+
+# With :cheapest, 3 units all go to the cheap mode → infeasible (capacity=1)
+# With :fill_then_spill, 1 unit fills cheap mode, 2 spill to expensive mode → feasible
 ```
 
 ## See Also
 
-- [Cost functions](@ref) for `LinearArcCost` and `BinPackingArcCost` details.
+- [Cost functions](@ref cost_functions_guide) for `LinearArcCost` and `BinPackingArcCost` details.
 - A future capacity-shape guide will cover step-bin-packing and min/max capacity constraints.

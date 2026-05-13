@@ -281,11 +281,68 @@ function _update_single_assignment_cost!(
     return nothing
 end
 
+function _fill_then_spill_partition(
+    arc::MultiModalArc, existing_per_mode::Vector{Vector{C}}, new_comms::Vector{C}
+) where {C<:LightCommodity}
+    mode_costs = [
+        incremental_cost(arc.modes[i].cost, existing_per_mode[i], new_comms) for
+        i in eachindex(arc.modes)
+    ]
+    sorted_indices = sortperm(mode_costs)
+
+    per_mode_new = [C[] for _ in eachindex(arc.modes)]
+    remaining = copy(new_comms)
+
+    for mode_idx in sorted_indices
+        isempty(remaining) && break
+        mode = arc.modes[mode_idx]
+        existing_size = sum(c.size for c in existing_per_mode[mode_idx]; init=0.0)
+        cap_left = Float64(mode.capacity) - existing_size
+
+        placed = C[]
+        still_remaining = C[]
+        placed_size = 0.0
+
+        for c in remaining
+            if placed_size + c.size <= cap_left + 1e-8
+                push!(placed, c)
+                placed_size += c.size
+            else
+                push!(still_remaining, c)
+            end
+        end
+
+        per_mode_new[mode_idx] = placed
+        remaining = still_remaining
+    end
+
+    if !isempty(remaining)
+        append!(per_mode_new[sorted_indices[end]], remaining)
+    end
+
+    return per_mode_new
+end
+
+function _fill_then_spill_assign!(
+    arc::MultiModalArc, assignment::MultiAssignment{C}, new_commodities::Vector{C}
+) where {C<:LightCommodity}
+    existing_per_mode = [commodities_of(slot) for slot in assignment.per_mode]
+    partition = _fill_then_spill_partition(arc, existing_per_mode, new_commodities)
+    for (i, placed) in enumerate(partition)
+        isempty(placed) && continue
+        slot = assignment.per_mode[i]
+        append!(slot.commodities, placed)
+        _update_single_assignment_cost!(slot, arc.modes[i].cost)
+    end
+    return nothing
+end
+
 function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
     arc::NetworkArc,
-    new_commodities::Vector{C},
+    new_commodities::Vector{C};
+    mode_selection::Symbol=:cheapest,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         SingleAssignment{C}()
@@ -299,19 +356,24 @@ function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
-    new_commodities::Vector{C},
+    new_commodities::Vector{C};
+    mode_selection::Symbol=:cheapest,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
-    best_mode_idx = argmin(
-        incremental_cost(
-            arc.modes[i].cost, commodities_of(assignment.per_mode[i]), new_commodities
-        ) for i in eachindex(arc.modes)
-    )
-    slot = assignment.per_mode[best_mode_idx]
-    append!(slot.commodities, new_commodities)
-    _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
+    if mode_selection == :fill_then_spill
+        _fill_then_spill_assign!(arc, assignment, new_commodities)
+    else
+        best_mode_idx = argmin(
+            incremental_cost(
+                arc.modes[i].cost, commodities_of(assignment.per_mode[i]), new_commodities
+            ) for i in eachindex(arc.modes)
+        )
+        slot = assignment.per_mode[best_mode_idx]
+        append!(slot.commodities, new_commodities)
+        _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
+    end
     return nothing
 end
 
@@ -391,7 +453,11 @@ function _remove_shortcuts_from_path!(path::Vector{Int}, ttg::TravelTimeGraph)
 end
 
 function add_bundle_path!(
-    sol::Solution{C}, instance::Instance, bundle_idx::Int, path::Vector{Int}
+    sol::Solution{C},
+    instance::Instance,
+    bundle_idx::Int,
+    path::Vector{Int};
+    mode_selection::Symbol=:cheapest,
 ) where {C}
     # Remove potential shortcut edges before storing the path — TTG may contain shortcuts
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
@@ -410,20 +476,24 @@ function add_bundle_path!(
             u_label = MetaGraphsNext.label_for(tsg.graph, u)
             v_label = MetaGraphsNext.label_for(tsg.graph, v)
             arc = tsg.graph[u_label, v_label]
-            _add_order_to_assignment!(sol.assignments, edge, arc, order.commodities)
+            _add_order_to_assignment!(
+                sol.assignments, edge, arc, order.commodities; mode_selection
+            )
         end
     end
     return nothing
 end
 
 """
-    Solution(bundle_paths, instance)
+    Solution(bundle_paths, instance; mode_selection=:cheapest)
 
 Construct a `Solution` from bundle paths and an instance.
 This constructor precomputes commodity distributions on arcs, bin-packing results, and total cost.
 """
 function Solution(
-    bundle_paths::Vector{Vector{Int}}, instance::Instance{Bundle{Order{IDA,I}}}
+    bundle_paths::Vector{Vector{Int}},
+    instance::Instance{Bundle{Order{IDA,I}}};
+    mode_selection::Symbol=:cheapest,
 ) where {IDA,I}
     (; time_space_graph, bundles) = instance
 
@@ -452,7 +522,9 @@ function Solution(
                     continue
                 end
                 arc = time_space_graph.graph[u_label, v_label]
-                _add_order_to_assignment!(assignments, edge, arc, order.commodities)
+                _add_order_to_assignment!(
+                    assignments, edge, arc, order.commodities; mode_selection
+                )
             end
         end
     end

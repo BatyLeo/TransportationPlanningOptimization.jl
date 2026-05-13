@@ -61,12 +61,14 @@ function write_solution_csv(filename::String, sol::Solution, instance::Instance)
 end
 
 """
-    read_solution_csv(filename::String, instance::Instance)
+    read_solution_csv(filename::String, instance::Instance; mode_selection=:cheapest)
 
 Read a solution from a CSV file and reconstruct the `Solution` object.
 Assumes the CSV follows the format: `route_id,origin_id,destination_id,node_id,point_number,point_type`.
 """
-function read_solution_csv(filename::String, instance::Instance)
+function read_solution_csv(
+    filename::String, instance::Instance; mode_selection::Symbol=:cheapest
+)
     # Read CSV, forcing ID columns to be strings to avoid inference issues with numeric IDs
     df = CSV.read(
         filename,
@@ -187,5 +189,5 @@ function read_solution_csv(filename::String, instance::Instance)
         bundle_paths[bidx] = ttg_path
     end
 
-    return Solution(bundle_paths, instance)
+    return Solution(bundle_paths, instance; mode_selection)
 end

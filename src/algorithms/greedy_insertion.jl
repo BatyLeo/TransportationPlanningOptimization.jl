@@ -22,26 +22,58 @@ function incremental_cost(
 end
 
 function _edge_incremental_cost(
-    arc::NetworkArc, existing::Nothing, new_comms::Vector{C}
+    arc::NetworkArc,
+    existing::Nothing,
+    new_comms::Vector{C};
+    mode_selection::Symbol=:cheapest,
 ) where {C<:LightCommodity}
     return incremental_cost(arc.cost, C[], new_comms)
 end
 
 function _edge_incremental_cost(
-    arc::NetworkArc, existing::AbstractArcAssignment{C}, new_comms::Vector{C}
+    arc::NetworkArc,
+    existing::AbstractArcAssignment{C},
+    new_comms::Vector{C};
+    mode_selection::Symbol=:cheapest,
 ) where {C<:LightCommodity}
     return incremental_cost(arc.cost, commodities_of(existing), new_comms)
 end
 
-function _edge_incremental_cost(
-    arc::MultiModalArc, existing::Nothing, new_comms::Vector{C}
+function _fill_then_spill_incremental_cost(
+    arc::MultiModalArc, existing_per_mode::Vector{Vector{C}}, new_comms::Vector{C}
 ) where {C<:LightCommodity}
+    partition = _fill_then_spill_partition(arc, existing_per_mode, new_comms)
+    total = 0.0
+    for i in eachindex(arc.modes)
+        isempty(partition[i]) && continue
+        total += incremental_cost(arc.modes[i].cost, existing_per_mode[i], partition[i])
+    end
+    return total
+end
+
+function _edge_incremental_cost(
+    arc::MultiModalArc,
+    existing::Nothing,
+    new_comms::Vector{C};
+    mode_selection::Symbol=:cheapest,
+) where {C<:LightCommodity}
+    if mode_selection == :fill_then_spill
+        empty = [C[] for _ in eachindex(arc.modes)]
+        return _fill_then_spill_incremental_cost(arc, empty, new_comms)
+    end
     return minimum(incremental_cost(mode.cost, C[], new_comms) for mode in arc.modes)
 end
 
 function _edge_incremental_cost(
-    arc::MultiModalArc, existing::MultiAssignment{C}, new_comms::Vector{C}
+    arc::MultiModalArc,
+    existing::MultiAssignment{C},
+    new_comms::Vector{C};
+    mode_selection::Symbol=:cheapest,
 ) where {C<:LightCommodity}
+    if mode_selection == :fill_then_spill
+        existing_per_mode = [commodities_of(s) for s in existing.per_mode]
+        return _fill_then_spill_incremental_cost(arc, existing_per_mode, new_comms)
+    end
     return minimum(
         incremental_cost(
             arc.modes[i].cost, commodities_of(existing.per_mode[i]), new_comms
@@ -56,7 +88,12 @@ Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
 function compute_ttg_edge_incremental_cost(
-    sol::Solution{C}, instance::Instance, bundle::Bundle, u_ttg_code, v_ttg_code
+    sol::Solution{C},
+    instance::Instance,
+    bundle::Bundle,
+    u_ttg_code,
+    v_ttg_code;
+    mode_selection::Symbol=:cheapest,
 ) where {C}
     tsg = instance.time_space_graph
 
@@ -96,7 +133,7 @@ function compute_ttg_edge_incremental_cost(
 
         arc = tsg.graph[u_tsg_label, v_tsg_label]
         existing_assignment = get(sol.assignments, edge, nothing)
-        inc = _edge_incremental_cost(arc, existing_assignment, new_comms)
+        inc = _edge_incremental_cost(arc, existing_assignment, new_comms; mode_selection)
         total_incremental_cost += inc
     end
 
@@ -109,7 +146,9 @@ end
 Find the cheapest path for a bundle in the TravelTimeGraph (considering incremental costs)
 and add it to the solution.
 """
-function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
+function insert_bundle!(
+    sol::Solution, instance::Instance, bundle_idx::Int; mode_selection::Symbol=:cheapest
+)
     ttg = instance.travel_time_graph
     bundle = instance.bundles[bundle_idx]
 
@@ -133,7 +172,7 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
         else
             # Compute incremental cost only for allowed arcs
             ttg.cost_matrix[u_code, v_code] = compute_ttg_edge_incremental_cost(
-                sol, instance, bundle, u_code, v_code
+                sol, instance, bundle, u_code, v_code; mode_selection
             )
         end
     end
@@ -148,7 +187,7 @@ function insert_bundle!(sol::Solution, instance::Instance, bundle_idx::Int)
         throw(ArgumentError("No feasible path found for bundle $bundle_idx, ($path)"))
     end
 
-    add_bundle_path!(sol, instance, bundle_idx, path)
+    add_bundle_path!(sol, instance, bundle_idx, path; mode_selection)
     return nothing
 end
 
@@ -158,12 +197,18 @@ $TYPEDSIGNATURES
 Construct a solution by inserting bundles one by one into an initially empty solution.
 Bundles are processed in the order they appear in the instance.
 """
-function greedy_heuristic(instance::Instance)
+function greedy_heuristic(instance::Instance; mode_selection::Symbol=:cheapest)
+    if mode_selection ∉ (:cheapest, :fill_then_spill)
+        throw(
+            ArgumentError(
+                "mode_selection must be :cheapest or :fill_then_spill, got :$mode_selection"
+            ),
+        )
+    end
     sol = Solution(instance)
-    # Get bundle indices sorted by decreasing total size
     sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
     @showprogress for i in sorted_indices
-        insert_bundle!(sol, instance, i)
+        insert_bundle!(sol, instance, i; mode_selection)
     end
     return sol
 end
