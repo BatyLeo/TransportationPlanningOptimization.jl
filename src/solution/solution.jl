@@ -16,9 +16,12 @@ struct Solution{C<:LightCommodity}
 end
 
 function Base.show(io::IO, sol::Solution)
-    nb_trucks = sum(length(bins_of(a)) for a in values(sol.assignments); init=0)
+    nb_trucks = sum(_bin_count(a) for a in values(sol.assignments); init=0)
     return print(io, "Solution(num_trucks=$(nb_trucks), assignments=$(sol.assignments))")
 end
+
+_bin_count(a::SingleAssignment) = length(a.bins)
+_bin_count(a::MultiAssignment) = sum(length(slot.bins) for slot in a.per_mode; init=0)
 
 """
     Solution(instance::Instance)
@@ -176,7 +179,7 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
             end
         else
             verbose &&
-                @warn "TimeSpaceGraph arc for edge $(edge) not found; cannot check capacity."
+                @warn "TimeSpaceGraph arc for edge $(edge) not found, cannot check capacity."
         end
     end
 
@@ -281,6 +284,18 @@ function _update_single_assignment_cost!(
     return nothing
 end
 
+"""
+$TYPEDSIGNATURES
+
+Partition `new_comms` across the modes of `arc` in cheapest-first order, filling
+each mode up to its remaining capacity before moving to the next.
+
+Returns `(partition, overflow)` where `partition[i]` is the subset of
+`new_comms` assigned to `arc.modes[i]`, and `overflow` is `true` if the combined
+remaining capacity across all modes is insufficient to absorb `new_comms`. When
+`overflow` is `true`, `partition` contains only the items that could legitimately
+be placed (the leftover is not stuffed onto any mode).
+"""
 function _fill_then_spill_partition(
     arc::MultiModalArc, existing_per_mode::Vector{Vector{C}}, new_comms::Vector{C}
 ) where {C<:LightCommodity}
@@ -316,18 +331,27 @@ function _fill_then_spill_partition(
         remaining = still_remaining
     end
 
-    if !isempty(remaining)
-        append!(per_mode_new[sorted_indices[end]], remaining)
-    end
-
-    return per_mode_new
+    overflow = !isempty(remaining)
+    return per_mode_new, overflow
 end
 
 function _fill_then_spill_assign!(
-    arc::MultiModalArc, assignment::MultiAssignment{C}, new_commodities::Vector{C}
+    edge::Tuple{Int,Int},
+    arc::MultiModalArc,
+    assignment::MultiAssignment{C},
+    new_commodities::Vector{C},
 ) where {C<:LightCommodity}
-    existing_per_mode = [commodities_of(slot) for slot in assignment.per_mode]
-    partition = _fill_then_spill_partition(arc, existing_per_mode, new_commodities)
+    existing_per_mode = [slot.commodities for slot in assignment.per_mode]
+    partition, overflow = _fill_then_spill_partition(
+        arc, existing_per_mode, new_commodities
+    )
+    if overflow
+        throw(
+            ArgumentError(
+                "No combination of modes on edge $(edge) has enough capacity for the new commodities under FillThenSpillMode",
+            ),
+        )
+    end
     for (i, placed) in enumerate(partition)
         isempty(placed) && continue
         slot = assignment.per_mode[i]
@@ -341,8 +365,8 @@ function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
     arc::NetworkArc,
-    new_commodities::Vector{C};
-    mode_selection::Symbol=:cheapest,
+    new_commodities::Vector{C},
+    ::AbstractModeSelector,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         SingleAssignment{C}()
@@ -356,40 +380,48 @@ function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
-    new_commodities::Vector{C};
-    mode_selection::Symbol=:cheapest,
+    new_commodities::Vector{C},
+    ::CheapestMode,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
-    if mode_selection == :fill_then_spill
-        _fill_then_spill_assign!(arc, assignment, new_commodities)
-    else
-        mode_costs = [
-            if _mode_has_capacity(
-                arc.modes[i], commodities_of(assignment.per_mode[i]), new_commodities
+    mode_costs = [
+        if _mode_has_capacity(
+            arc.modes[i], assignment.per_mode[i].commodities, new_commodities
+        )
+            incremental_cost(
+                arc.modes[i].cost, assignment.per_mode[i].commodities, new_commodities
             )
-                incremental_cost(
-                    arc.modes[i].cost,
-                    commodities_of(assignment.per_mode[i]),
-                    new_commodities,
-                )
-            else
-                Inf
-            end for i in eachindex(arc.modes)
-        ]
-        best_mode_idx = argmin(mode_costs)
-        if isinf(mode_costs[best_mode_idx])
-            throw(
-                ArgumentError(
-                    "No mode on edge $(edge) has enough capacity for the new commodities under :cheapest",
-                ),
-            )
-        end
-        slot = assignment.per_mode[best_mode_idx]
-        append!(slot.commodities, new_commodities)
-        _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
+        else
+            Inf
+        end for i in eachindex(arc.modes)
+    ]
+    best_mode_idx = argmin(mode_costs)
+    if isinf(mode_costs[best_mode_idx])
+        throw(
+            ArgumentError(
+                "No mode on edge $(edge) has enough capacity for the new commodities under CheapestMode",
+            ),
+        )
     end
+    slot = assignment.per_mode[best_mode_idx]
+    append!(slot.commodities, new_commodities)
+    _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
+    return nothing
+end
+
+function _add_order_to_assignment!(
+    assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
+    edge::Tuple{Int,Int},
+    arc::MultiModalArc,
+    new_commodities::Vector{C},
+    ::FillThenSpillMode,
+) where {C<:LightCommodity}
+    assignment = get!(assignments, edge) do
+        MultiAssignment{C}(length(arc.modes))
+    end::MultiAssignment{C}
+    _fill_then_spill_assign!(edge, arc, assignment, new_commodities)
     return nothing
 end
 
@@ -416,13 +448,11 @@ function _capacity_feasible(
 end
 
 function _capacity_feasible(
-    arc::MultiModalArc, assignment::AbstractArcAssignment, arc_labels; verbose::Bool
+    arc::MultiModalArc, assignment::MultiAssignment, arc_labels; verbose::Bool
 )
-    # Per-mode capacity can only be checked when per-mode slots are available.
-    assignment isa MultiAssignment || return true
     for (i, (mode, slot)) in enumerate(zip(arc.modes, assignment.per_mode))
         mode.capacity == typemax(Int) && continue
-        total_size = sum(c.size for c in commodities_of(slot); init=0.0)
+        total_size = sum(c.size for c in slot.commodities; init=0.0)
         if total_size > mode.capacity + 1e-8
             verbose &&
                 @warn "Arc $(arc_labels) mode $(i) exceeds capacity: $(total_size) > $(mode.capacity)"
@@ -482,35 +512,39 @@ function add_bundle_path!(
     instance::Instance,
     bundle_idx::Int,
     path::Vector{Int};
-    mode_selection::Symbol=:cheapest,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {C}
-    # Remove potential shortcut edges before storing the path — TTG may contain shortcuts
+    # Remove potential shortcut edges before storing the path (TTG may contain shortcuts).
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
     sol.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
     tsg = instance.time_space_graph
 
-    # For each order in the bundle, project and update
+    # Bucket all the bundle's commodities by their projected TSG edge, so that
+    # mode selection at placement time sees the same combined load that Dijkstra
+    # used when scoring the path.
+    tsg_edge_to_new_commodities = Dict{Tuple{Int,Int},Vector{C}}()
     for order in bundle.orders
         tsg_path = [
             project_to_time_space_graph(node_code, order, instance) for node_code in path
         ]
         for i in 1:(length(tsg_path) - 1)
-            u, v = tsg_path[i], tsg_path[i + 1]
-            edge = (u, v)
-            u_label = MetaGraphsNext.label_for(tsg.graph, u)
-            v_label = MetaGraphsNext.label_for(tsg.graph, v)
-            arc = tsg.graph[u_label, v_label]
-            _add_order_to_assignment!(
-                sol.assignments, edge, arc, order.commodities; mode_selection
-            )
+            edge = (tsg_path[i], tsg_path[i + 1])
+            append!(get!(tsg_edge_to_new_commodities, edge, C[]), order.commodities)
         end
+    end
+
+    for (edge, new_comms) in tsg_edge_to_new_commodities
+        u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
+        v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
+        arc = tsg.graph[u_label, v_label]
+        _add_order_to_assignment!(sol.assignments, edge, arc, new_comms, mode_selector)
     end
     return nothing
 end
 
 """
-    Solution(bundle_paths, instance; mode_selection=:cheapest)
+    Solution(bundle_paths, instance; mode_selector=CheapestMode())
 
 Construct a `Solution` from bundle paths and an instance.
 This constructor precomputes commodity distributions on arcs, bin-packing results, and total cost.
@@ -518,7 +552,7 @@ This constructor precomputes commodity distributions on arcs, bin-packing result
 function Solution(
     bundle_paths::Vector{Vector{Int}},
     instance::Instance{Bundle{Order{IDA,I}}};
-    mode_selection::Symbol=:cheapest,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {IDA,I}
     (; time_space_graph, bundles) = instance
 
@@ -531,26 +565,29 @@ function Solution(
         _remove_shortcuts_from_path!(ttg_path, instance.travel_time_graph)
         bundle = bundles[bundle_idx]
 
+        # Same bucketing as in `add_bundle_path!`: combine all the bundle's
+        # commodities per TSG edge before consulting the mode selector.
+        tsg_edge_to_new_commodities = Dict{Tuple{Int,Int},Vector{C}}()
         for order in bundle.orders
             tsg_path = [
                 project_to_time_space_graph(node_code, order, instance) for
                 node_code in ttg_path
             ]
-
             for i in 1:(length(tsg_path) - 1)
-                u, v = tsg_path[i], tsg_path[i + 1]
-                edge = (u, v)
-                u_label = MetaGraphsNext.label_for(time_space_graph.graph, u)
-                v_label = MetaGraphsNext.label_for(time_space_graph.graph, v)
-                if !MetaGraphsNext.haskey(time_space_graph.graph, u_label, v_label)
-                    @warn "Arc ($u_label, $v_label) not found in TimeSpaceGraph"
-                    continue
-                end
-                arc = time_space_graph.graph[u_label, v_label]
-                _add_order_to_assignment!(
-                    assignments, edge, arc, order.commodities; mode_selection
-                )
+                edge = (tsg_path[i], tsg_path[i + 1])
+                append!(get!(tsg_edge_to_new_commodities, edge, C[]), order.commodities)
             end
+        end
+
+        for (edge, new_comms) in tsg_edge_to_new_commodities
+            u_label = MetaGraphsNext.label_for(time_space_graph.graph, edge[1])
+            v_label = MetaGraphsNext.label_for(time_space_graph.graph, edge[2])
+            if !MetaGraphsNext.haskey(time_space_graph.graph, u_label, v_label)
+                @warn "Arc ($u_label, $v_label) not found in TimeSpaceGraph"
+                continue
+            end
+            arc = time_space_graph.graph[u_label, v_label]
+            _add_order_to_assignment!(assignments, edge, arc, new_comms, mode_selector)
         end
     end
 

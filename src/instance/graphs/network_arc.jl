@@ -85,12 +85,20 @@ are grouped by `travel_time_steps`:
 - Modes with distinct transit times land at different timed vertices and each emit a plain
   `NetworkArc` edge (case 1).
 - Modes sharing the same transit time collapse to a single `MultiModalArc` edge per timed
-  pair, carrying just that subset of modes (case 2). The greedy heuristic's `:cheapest`
-  strategy picks the cheapest mode whose remaining capacity can absorb the new commodities;
-  modes that would overflow are skipped, and an edge whose every mode would overflow is
-  treated as infeasible (Inf cost) during Dijkstra. See `mode_selection` on
-  `greedy_heuristic` for the alternative `:fill_then_spill` strategy that splits an order
-  across modes.
+  pair, carrying just that subset of modes (case 2). The greedy heuristic's
+  [`CheapestMode`](@ref) selector picks the cheapest mode whose remaining capacity can
+  absorb the new commodities. Modes that would overflow are skipped, and an edge whose
+  every mode would overflow is treated as infeasible (Inf cost) during Dijkstra. See the
+  `mode_selector` keyword on [`greedy_heuristic`](@ref) for the alternative
+  [`FillThenSpillMode`](@ref) strategy that splits an order across modes.
+
+!!! note
+    The type parameter `T` is concrete only when every mode shares the same
+    `NetworkArc{C,K}` parameterisation. Mixing modes with different cost functions
+    (for example one `LinearArcCost` and one `BinPackingArcCost`) falls back to
+    `T = NetworkArc` (abstract), which removes dispatch specialisation on the inner
+    cost type at the call sites that read mode data. Behaviour is unchanged, but
+    performance-sensitive instances should keep mode cost functions homogeneous.
 
 # Fields
 $TYPEDFIELDS

@@ -371,12 +371,14 @@ Construct a `TravelTimeGraph` from a `NetworkGraph` and a set of `Bundle`s.
 function TravelTimeGraph(
     network_graph::NetworkGraph, bundles::Vector{<:Bundle{<:Order{is_date_arrival,I}}}
 ) where {is_date_arrival,I}
-    # Initialize empty TimeTravelGraph
+    # Initialize empty TimeTravelGraph, mirroring the NetworkGraph's edge data
+    # type (extended with the shortcut-arc concrete type) so that arc lookups
+    # benefit from union-splitting when the input is concretely typed.
     graph = MetaGraph(
         Graphs.DiGraph();
         label_type=Tuple{String,Int},
         vertex_data_type=NetworkNode,
-        edge_data_type=AbstractNetworkArc,
+        edge_data_type=_ttg_edge_type(network_graph),
         default_weight=Inf,
     )
 

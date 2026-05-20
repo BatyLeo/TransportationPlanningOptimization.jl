@@ -29,6 +29,7 @@ include("instance/graphs/travel_time_graph.jl")
 include("instance/instance.jl")
 
 include("solution/arc_assignment.jl")
+include("algorithms/mode_selector.jl")
 include("solution/solution.jl")
 include("solution/parsing.jl")
 include("algorithms/greedy_insertion.jl")
@@ -53,6 +54,7 @@ export time_horizon
 export Solution, is_feasible, cost, add_bundle_path!
 export AbstractArcAssignment, SingleAssignment, MultiAssignment
 export commodities_of, bins_of, cost_of
+export AbstractModeSelector, CheapestMode, FillThenSpillMode
 export greedy_heuristic
 
 """

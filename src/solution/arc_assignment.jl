@@ -59,7 +59,7 @@ Assignment payload for a multi-modal edge. Each slot in `per_mode` is a
 # Fields
 $TYPEDFIELDS
 """
-struct MultiAssignment{C<:LightCommodity} <: AbstractArcAssignment{C}
+mutable struct MultiAssignment{C<:LightCommodity} <: AbstractArcAssignment{C}
     "one slot per mode, parallel to `MultiModalArc.modes`"
     per_mode::Vector{SingleAssignment{C}}
 end
@@ -76,19 +76,21 @@ end
 """
 $TYPEDSIGNATURES
 
-Commodities routed across the edge represented by `a` (concatenated across all modes).
+Lazy iterator over commodities routed across the edge represented by `a`,
+flattened across all modes. Use `collect` to materialize into a `Vector`.
 """
-function commodities_of(a::MultiAssignment{C}) where {C}
-    return reduce(vcat, commodities_of(s) for s in a.per_mode; init=C[])
+function commodities_of(a::MultiAssignment)
+    return Iterators.flatten(slot.commodities for slot in a.per_mode)
 end
 
 """
 $TYPEDSIGNATURES
 
-Bin assignments across all modes on the edge represented by `a`.
+Lazy iterator over bin assignments across all modes on the edge represented by `a`.
+Use `collect` to materialize into a `Vector`.
 """
-function bins_of(a::MultiAssignment{C}) where {C}
-    return reduce(vcat, bins_of(s) for s in a.per_mode; init=Bin{C}[])
+function bins_of(a::MultiAssignment)
+    return Iterators.flatten(slot.bins for slot in a.per_mode)
 end
 
 """

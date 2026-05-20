@@ -30,6 +30,17 @@ _metagraph_edge_type(ng::NetworkGraph) = _metagraph_edge_type(ng.graph)
 """
 $TYPEDSIGNATURES
 
+Edge data type used by `TravelTimeGraph`. Widens the `NetworkGraph` edge type
+with the shortcut-arc concrete type so the TTG can store both the network's
+own arcs and the zero-duration shortcut arcs it adds during construction.
+"""
+function _ttg_edge_type(ng::NetworkGraph)
+    return Union{_metagraph_edge_type(ng),typeof(SHORTCUT_ARC)}
+end
+
+"""
+$TYPEDSIGNATURES
+
 Constructor for `NetworkGraph`.
 
 Ensures node IDs are unique. Multiple arcs between the same `(origin_id, destination_id)`

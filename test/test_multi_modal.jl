@@ -259,7 +259,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
-    sol = greedy_heuristic(instance; mode_selection=:fill_then_spill)
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
     @test is_feasible(sol, instance)
     # 1 unit on cheap mode (5.0) + 1 unit on expensive mode (10.0) = 15.0
@@ -302,7 +302,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
-    sol = greedy_heuristic(instance; mode_selection=:fill_then_spill)
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
     @test is_feasible(sol, instance)
     @test cost(sol) == 15.0
@@ -310,7 +310,7 @@ end
     @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 1
 end
 
-@testset "invalid mode_selection throws ArgumentError" begin
+@testset "Symbol selector is rejected by the typed kwarg" begin
     nodes = [
         NetworkNode(; id="A", node_type=:origin),
         NetworkNode(; id="B", node_type=:destination),
@@ -331,5 +331,181 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
-    @test_throws ArgumentError greedy_heuristic(instance; mode_selection=:invalid)
+    @test_throws Union{TypeError,MethodError} greedy_heuristic(
+        instance; mode_selector=:cheapest
+    )
+end
+
+# ── FillThenSpillMode silent-infeasibility regression ─────────────────────────
+
+@testset "FillThenSpillMode rejects when combined capacity is insufficient" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    # Combined capacity = 1 + 2 = 3, but the commodity needs 5 units.
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=1,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(10.0),
+            travel_time=Day(1),
+            capacity=2,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=5,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    @test_throws ArgumentError greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+end
+
+# ── Case-1 end-to-end greedy ──────────────────────────────────────────────────
+
+@testset "Greedy picks cheaper mode in case 1 (distinct transit times)" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    # Fast+expensive truck and slow+cheap train, both within max_delivery_time.
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(5.0), travel_time=Day(2)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(2),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    sol = greedy_heuristic(instance)
+    @test is_feasible(sol, instance)
+    # Cheap train wins: 1 unit * 5.0 = 5.0
+    @test cost(sol) == 5.0
+end
+
+# ── Heterogeneous cost functions on the same MultiModalArc ───────────────────
+
+@testset "MultiModalArc with heterogeneous cost functions on one edge" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    # Same transit time so the two modes collapse to one MultiModalArc edge,
+    # but the cost functions are of different concrete types.
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=BinPackingArcCost(100.0, 10),
+            travel_time=Day(1),
+            capacity=100,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=2,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    sol = greedy_heuristic(instance)
+    @test is_feasible(sol, instance)
+    # Linear: 2 units * 5.0 = 10. Bin-packing: 1 bin (capacity 10) * 100.0 = 100.
+    # Linear is cheaper, so all commodities go there.
+    @test cost(sol) == 10.0
+end
+
+# ── Order-bucketing under wrap_time (case 2 collision on a single TSG edge) ──
+
+@testset "wrap_time bucketing keeps placement consistent with Dijkstra estimate" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    # Two parallel modes with same transit time (case 2). Cheap mode is too
+    # small for the combined wrap-collided load but big enough for either order
+    # alone, which is exactly the case where per-order placement diverged from
+    # the per-bundle Dijkstra estimate prior to the bucketing fix.
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=1,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(10.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+    ]
+    # Two commodities with different departure dates in the same A->B bundle.
+    # With wrap_time, they may project to the same TSG (B, t).
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2024, 1, 4),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1); wrap_time=true)
+
+    sol = greedy_heuristic(instance)
+    @test is_feasible(sol, instance)
+    # Whatever the realized cost is, calling cost(sol) (sum of per-edge costs)
+    # must match the cost of reconstructing the solution from the stored paths.
+    # Pre-fix, these could diverge because placement and Dijkstra used different
+    # per-mode accounting on the wrap-collided TSG edge.
+    reconstructed = Solution(deepcopy(sol.bundle_paths), instance)
+    @test is_feasible(reconstructed, instance)
+    @test cost(sol) == cost(reconstructed)
 end

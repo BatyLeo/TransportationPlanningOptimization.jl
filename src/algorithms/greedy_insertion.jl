@@ -21,46 +21,27 @@ function incremental_cost(
     return arc_f.cost_per_unit_size * total_new_size
 end
 
+# `_edge_incremental_cost` accepts a mode selector for uniform calling at the
+# Dijkstra cost-evaluation site. For `NetworkArc` edges the selector is
+# irrelevant (one mode) and the methods just forward to `incremental_cost`.
 function _edge_incremental_cost(
-    arc::NetworkArc,
-    existing::Nothing,
-    new_comms::Vector{C};
-    mode_selection::Symbol=:cheapest,
+    arc::NetworkArc, existing::Nothing, new_comms::Vector{C}, ::AbstractModeSelector
 ) where {C<:LightCommodity}
     return incremental_cost(arc.cost, C[], new_comms)
 end
 
 function _edge_incremental_cost(
     arc::NetworkArc,
-    existing::AbstractArcAssignment{C},
-    new_comms::Vector{C};
-    mode_selection::Symbol=:cheapest,
+    existing::SingleAssignment{C},
+    new_comms::Vector{C},
+    ::AbstractModeSelector,
 ) where {C<:LightCommodity}
-    return incremental_cost(arc.cost, commodities_of(existing), new_comms)
-end
-
-function _fill_then_spill_incremental_cost(
-    arc::MultiModalArc, existing_per_mode::Vector{Vector{C}}, new_comms::Vector{C}
-) where {C<:LightCommodity}
-    partition = _fill_then_spill_partition(arc, existing_per_mode, new_comms)
-    total = 0.0
-    for i in eachindex(arc.modes)
-        isempty(partition[i]) && continue
-        total += incremental_cost(arc.modes[i].cost, existing_per_mode[i], partition[i])
-    end
-    return total
+    return incremental_cost(arc.cost, existing.commodities, new_comms)
 end
 
 function _edge_incremental_cost(
-    arc::MultiModalArc,
-    existing::Nothing,
-    new_comms::Vector{C};
-    mode_selection::Symbol=:cheapest,
+    arc::MultiModalArc, existing::Nothing, new_comms::Vector{C}, ::CheapestMode
 ) where {C<:LightCommodity}
-    if mode_selection == :fill_then_spill
-        empty = [C[] for _ in eachindex(arc.modes)]
-        return _fill_then_spill_incremental_cost(arc, empty, new_comms)
-    end
     return minimum(
         if _mode_has_capacity(mode, C[], new_comms)
             incremental_cost(mode.cost, C[], new_comms)
@@ -71,26 +52,48 @@ function _edge_incremental_cost(
 end
 
 function _edge_incremental_cost(
-    arc::MultiModalArc,
-    existing::MultiAssignment{C},
-    new_comms::Vector{C};
-    mode_selection::Symbol=:cheapest,
+    arc::MultiModalArc, existing::MultiAssignment{C}, new_comms::Vector{C}, ::CheapestMode
 ) where {C<:LightCommodity}
-    if mode_selection == :fill_then_spill
-        existing_per_mode = [commodities_of(s) for s in existing.per_mode]
-        return _fill_then_spill_incremental_cost(arc, existing_per_mode, new_comms)
-    end
     return minimum(
-        if _mode_has_capacity(
-            arc.modes[i], commodities_of(existing.per_mode[i]), new_comms
-        )
+        if _mode_has_capacity(arc.modes[i], existing.per_mode[i].commodities, new_comms)
             incremental_cost(
-                arc.modes[i].cost, commodities_of(existing.per_mode[i]), new_comms
+                arc.modes[i].cost, existing.per_mode[i].commodities, new_comms
             )
         else
             Inf
         end for i in eachindex(arc.modes)
     )
+end
+
+function _edge_incremental_cost(
+    arc::MultiModalArc, existing::Nothing, new_comms::Vector{C}, ::FillThenSpillMode
+) where {C<:LightCommodity}
+    empty_existing = [C[] for _ in eachindex(arc.modes)]
+    partition, overflow = _fill_then_spill_partition(arc, empty_existing, new_comms)
+    overflow && return Inf
+    total = 0.0
+    for i in eachindex(arc.modes)
+        isempty(partition[i]) && continue
+        total += incremental_cost(arc.modes[i].cost, empty_existing[i], partition[i])
+    end
+    return total
+end
+
+function _edge_incremental_cost(
+    arc::MultiModalArc,
+    existing::MultiAssignment{C},
+    new_comms::Vector{C},
+    ::FillThenSpillMode,
+) where {C<:LightCommodity}
+    existing_per_mode = [slot.commodities for slot in existing.per_mode]
+    partition, overflow = _fill_then_spill_partition(arc, existing_per_mode, new_comms)
+    overflow && return Inf
+    total = 0.0
+    for i in eachindex(arc.modes)
+        isempty(partition[i]) && continue
+        total += incremental_cost(arc.modes[i].cost, existing_per_mode[i], partition[i])
+    end
+    return total
 end
 
 """
@@ -104,8 +107,8 @@ function compute_ttg_edge_incremental_cost(
     instance::Instance,
     bundle::Bundle,
     u_ttg_code,
-    v_ttg_code;
-    mode_selection::Symbol=:cheapest,
+    v_ttg_code,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {C}
     tsg = instance.time_space_graph
 
@@ -145,7 +148,7 @@ function compute_ttg_edge_incremental_cost(
 
         arc = tsg.graph[u_tsg_label, v_tsg_label]
         existing_assignment = get(sol.assignments, edge, nothing)
-        inc = _edge_incremental_cost(arc, existing_assignment, new_comms; mode_selection)
+        inc = _edge_incremental_cost(arc, existing_assignment, new_comms, mode_selector)
         total_incremental_cost += inc
     end
 
@@ -159,7 +162,10 @@ Find the cheapest path for a bundle in the TravelTimeGraph (considering incremen
 and add it to the solution.
 """
 function insert_bundle!(
-    sol::Solution, instance::Instance, bundle_idx::Int; mode_selection::Symbol=:cheapest
+    sol::Solution,
+    instance::Instance,
+    bundle_idx::Int,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     ttg = instance.travel_time_graph
     bundle = instance.bundles[bundle_idx]
@@ -184,7 +190,7 @@ function insert_bundle!(
         else
             # Compute incremental cost only for allowed arcs
             ttg.cost_matrix[u_code, v_code] = compute_ttg_edge_incremental_cost(
-                sol, instance, bundle, u_code, v_code; mode_selection
+                sol, instance, bundle, u_code, v_code, mode_selector
             )
         end
     end
@@ -199,7 +205,7 @@ function insert_bundle!(
         throw(ArgumentError("No feasible path found for bundle $bundle_idx, ($path)"))
     end
 
-    add_bundle_path!(sol, instance, bundle_idx, path; mode_selection)
+    add_bundle_path!(sol, instance, bundle_idx, path; mode_selector)
     return nothing
 end
 
@@ -211,32 +217,24 @@ Bundles are processed in decreasing order of total size, so the heaviest bundles
 their preferred paths first.
 
 # Keyword arguments
-- `mode_selection::Symbol = :cheapest`: how to distribute a bundle's commodities across
-  modes of a `MultiModalArc` (only relevant when several modes share the same transit
-  time and therefore collapse to one edge).
-  - `:cheapest` places each order on the cheapest mode whose remaining capacity can
-    absorb it. Modes that would overflow are skipped, and an edge whose every mode would
-    overflow is treated as infeasible (Inf cost) during Dijkstra.
-  - `:fill_then_spill` fills the cheapest mode up to its capacity, then spills overflow
-    to the next-cheapest mode on the same edge.
+- `mode_selector::AbstractModeSelector = CheapestMode()`: strategy that decides how
+  a bundle's commodities are distributed across modes of a [`MultiModalArc`](@ref)
+  (only relevant when several modes share the same transit time and therefore
+  collapse to one edge). See [`CheapestMode`](@ref) and [`FillThenSpillMode`](@ref).
 
 # Errors
-Throws `ArgumentError` if `mode_selection` is anything other than `:cheapest` or
-`:fill_then_spill`, or if `:cheapest` cannot place an order because no mode on the chosen
-edge has enough remaining capacity.
+Throws `ArgumentError` if no feasible path exists for a bundle. With
+[`CheapestMode`](@ref), this can happen when no single mode on a required edge
+has enough remaining capacity. With [`FillThenSpillMode`](@ref), it happens when
+the combined capacity across all modes on a required edge is below the load.
 """
-function greedy_heuristic(instance::Instance; mode_selection::Symbol=:cheapest)
-    if mode_selection ∉ (:cheapest, :fill_then_spill)
-        throw(
-            ArgumentError(
-                "mode_selection must be :cheapest or :fill_then_spill, got :$mode_selection"
-            ),
-        )
-    end
+function greedy_heuristic(
+    instance::Instance; mode_selector::AbstractModeSelector=CheapestMode()
+)
     sol = Solution(instance)
     sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
     @showprogress for i in sorted_indices
-        insert_bundle!(sol, instance, i; mode_selection)
+        insert_bundle!(sol, instance, i, mode_selector)
     end
     return sol
 end
