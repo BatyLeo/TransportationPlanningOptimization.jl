@@ -143,12 +143,12 @@ end
 
 # ── Per-mode capacity (case 2) ────────────────────────────────────────────────
 
-@testset "is_feasible detects per-mode capacity overflow in case 2" begin
+@testset ":cheapest skips modes lacking capacity in case 2" begin
     nodes = [
         NetworkNode(; id="A", node_type=:origin),
         NetworkNode(; id="B", node_type=:destination),
     ]
-    # Cheap mode capacity=1; expensive mode capacity=10
+    # Cheap mode capacity=1 (cannot fit 2 units); expensive mode capacity=10
     arcs = [
         Arc(;
             origin_id="A",
@@ -165,7 +165,6 @@ end
             capacity=10,
         ),
     ]
-    # 2 units: greedy always picks the cheap mode, overflowing its capacity
     commodities = [
         Commodity(;
             origin_id="A",
@@ -178,7 +177,52 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
     sol = greedy_heuristic(instance)
-    @test !is_feasible(sol, instance; verbose=false)
+
+    @test is_feasible(sol, instance)
+    # Cheap mode infeasible (cap=1, need=2): expensive mode wins => 2 × 10.0
+    @test cost(sol) == 20.0
+
+    assignment = only(values(sol.assignments))
+    @test assignment isa MultiAssignment
+    # Only the expensive mode (modes[2]) carries commodities
+    @test isempty(commodities_of(assignment.per_mode[1]))
+    @test length(commodities_of(assignment.per_mode[2])) == 2
+end
+
+@testset ":cheapest path becomes infeasible when no mode has capacity" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    # Both modes too small for 3 units
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=1,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(10.0),
+            travel_time=Day(1),
+            capacity=2,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=3,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    @test_throws ArgumentError greedy_heuristic(instance)
 end
 
 # ── fill_then_spill mode selection (case 2) ──────────────────────────────────

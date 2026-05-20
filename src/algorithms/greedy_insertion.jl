@@ -61,7 +61,13 @@ function _edge_incremental_cost(
         empty = [C[] for _ in eachindex(arc.modes)]
         return _fill_then_spill_incremental_cost(arc, empty, new_comms)
     end
-    return minimum(incremental_cost(mode.cost, C[], new_comms) for mode in arc.modes)
+    return minimum(
+        if _mode_has_capacity(mode, C[], new_comms)
+            incremental_cost(mode.cost, C[], new_comms)
+        else
+            Inf
+        end for mode in arc.modes
+    )
 end
 
 function _edge_incremental_cost(
@@ -75,9 +81,15 @@ function _edge_incremental_cost(
         return _fill_then_spill_incremental_cost(arc, existing_per_mode, new_comms)
     end
     return minimum(
-        incremental_cost(
-            arc.modes[i].cost, commodities_of(existing.per_mode[i]), new_comms
-        ) for i in eachindex(arc.modes)
+        if _mode_has_capacity(
+            arc.modes[i], commodities_of(existing.per_mode[i]), new_comms
+        )
+            incremental_cost(
+                arc.modes[i].cost, commodities_of(existing.per_mode[i]), new_comms
+            )
+        else
+            Inf
+        end for i in eachindex(arc.modes)
     )
 end
 
@@ -195,7 +207,23 @@ end
 $TYPEDSIGNATURES
 
 Construct a solution by inserting bundles one by one into an initially empty solution.
-Bundles are processed in the order they appear in the instance.
+Bundles are processed in decreasing order of total size, so the heaviest bundles claim
+their preferred paths first.
+
+# Keyword arguments
+- `mode_selection::Symbol = :cheapest`: how to distribute a bundle's commodities across
+  modes of a `MultiModalArc` (only relevant when several modes share the same transit
+  time and therefore collapse to one edge).
+  - `:cheapest` places each order on the cheapest mode whose remaining capacity can
+    absorb it. Modes that would overflow are skipped, and an edge whose every mode would
+    overflow is treated as infeasible (Inf cost) during Dijkstra.
+  - `:fill_then_spill` fills the cheapest mode up to its capacity, then spills overflow
+    to the next-cheapest mode on the same edge.
+
+# Errors
+Throws `ArgumentError` if `mode_selection` is anything other than `:cheapest` or
+`:fill_then_spill`, or if `:cheapest` cannot place an order because no mode on the chosen
+edge has enough remaining capacity.
 """
 function greedy_heuristic(instance::Instance; mode_selection::Symbol=:cheapest)
     if mode_selection ∉ (:cheapest, :fill_then_spill)

@@ -6,7 +6,7 @@ A multi-modal arc models a physical leg (a pair of locations) that can be served
 
 **Case 1 — distinct transit times.** Modes land at different timed vertices in the time-expanded graphs, so each mode becomes its own edge in the `TimeSpaceGraph` and `TravelTimeGraph`. No special handling is required in the solution layer.
 
-**Case 2 — same transit time.** Both modes arrive at the same `(node, t)` vertex. The time-expanded graphs collapse them into a single `MultiModalArc` edge. The greedy heuristic then picks the cheapest mode per bundle insertion.
+**Case 2 — same transit time.** Both modes arrive at the same `(node, t)` vertex. The time-expanded graphs collapse them into a single `MultiModalArc` edge. The greedy heuristic then picks the cheapest mode with sufficient remaining capacity per bundle insertion.
 
 ## Declaring Multi-Modal Arcs
 
@@ -45,8 +45,8 @@ For case 1, use different `travel_time` values (e.g. `Day(1)` for truck and `Day
 
 The `greedy_heuristic` accepts a `mode_selection` keyword that controls how commodities are distributed across modes on a multi-modal edge. Two strategies are available:
 
-- **`:cheapest`** (default): all commodities go to the single cheapest mode. Fast and simple, but can overflow a mode's capacity while others remain empty.
-- **`:fill_then_spill`**: fill the cheapest mode up to its capacity, then spill overflow to the next-cheapest mode, and so on. Produces feasible solutions when capacity constraints are tight.
+- **`:cheapest`** (default): each bundle's order is placed entirely on the cheapest mode whose remaining capacity can absorb it. Modes that would overflow are skipped; if no mode on an edge has enough capacity, the edge is treated as infeasible (Inf cost) and Dijkstra routes around it. If no feasible path exists, `greedy_heuristic` throws `ArgumentError`.
+- **`:fill_then_spill`**: fill the cheapest mode up to its capacity, then spill overflow to the next-cheapest mode on the same edge, and so on. Unlike `:cheapest`, this can split a single order's commodities across modes that share the same transit time.
 
 ```julia
 sol = greedy_heuristic(instance)                                    # :cheapest (default)
@@ -70,7 +70,7 @@ end
 
 ## Per-Mode Capacity
 
-Each mode's `capacity` field is checked independently by `is_feasible`. With the default `:cheapest` strategy, it is possible to overflow one mode's capacity while the other remains empty. Use `:fill_then_spill` to distribute commodities across modes respecting per-mode capacity.
+Each mode's `capacity` field is checked independently by `is_feasible`, and both `:cheapest` and `:fill_then_spill` respect it during insertion. The two strategies differ in how they react to a too-small mode.
 
 ```julia
 arc_tight = Arc(; origin_id="A", destination_id="B",
@@ -78,9 +78,15 @@ arc_tight = Arc(; origin_id="A", destination_id="B",
 arc_loose = Arc(; origin_id="A", destination_id="B",
                    cost=LinearArcCost(10.0), travel_time=Day(1), capacity=100)
 
-# With :cheapest, 3 units all go to the cheap mode → infeasible (capacity=1)
-# With :fill_then_spill, 1 unit fills cheap mode, 2 spill to expensive mode → feasible
+# With :cheapest, 3 units cannot fit the cheap mode (capacity=1),
+#   so the whole order goes to the expensive mode → cost = 3 × 10 = 30.0
+# With :fill_then_spill, 1 unit fills the cheap mode and 2 spill to the
+#   expensive mode → cost = 1 × 5 + 2 × 10 = 25.0
 ```
+
+`:fill_then_spill` can therefore produce strictly cheaper solutions whenever an order is larger than the cheapest mode but smaller than the combined capacity on a single edge. `:cheapest` is preferable when you want to keep each order intact on a single mode (e.g. for traceability or to avoid mid-leg transfers).
+
+If *no* mode on an edge has enough capacity for an order, `:cheapest` cannot place that order at all and `greedy_heuristic` throws `ArgumentError`. Switch to `:fill_then_spill` (which can distribute the order across multiple modes on the same edge) or relax the input capacities.
 
 ## See Also
 

@@ -85,8 +85,12 @@ are grouped by `travel_time_steps`:
 - Modes with distinct transit times land at different timed vertices and each emit a plain
   `NetworkArc` edge (case 1).
 - Modes sharing the same transit time collapse to a single `MultiModalArc` edge per timed
-  pair, carrying just that subset of modes (case 2). The greedy heuristic then picks the
-  cheapest mode per insertion via `argmin` of the per-mode incremental cost.
+  pair, carrying just that subset of modes (case 2). The greedy heuristic's `:cheapest`
+  strategy picks the cheapest mode whose remaining capacity can absorb the new commodities;
+  modes that would overflow are skipped, and an edge whose every mode would overflow is
+  treated as infeasible (Inf cost) during Dijkstra. See `mode_selection` on
+  `greedy_heuristic` for the alternative `:fill_then_spill` strategy that splits an order
+  across modes.
 
 # Fields
 $TYPEDFIELDS

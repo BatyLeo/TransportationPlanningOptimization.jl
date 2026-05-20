@@ -365,16 +365,41 @@ function _add_order_to_assignment!(
     if mode_selection == :fill_then_spill
         _fill_then_spill_assign!(arc, assignment, new_commodities)
     else
-        best_mode_idx = argmin(
-            incremental_cost(
-                arc.modes[i].cost, commodities_of(assignment.per_mode[i]), new_commodities
-            ) for i in eachindex(arc.modes)
-        )
+        mode_costs = [
+            if _mode_has_capacity(
+                arc.modes[i], commodities_of(assignment.per_mode[i]), new_commodities
+            )
+                incremental_cost(
+                    arc.modes[i].cost,
+                    commodities_of(assignment.per_mode[i]),
+                    new_commodities,
+                )
+            else
+                Inf
+            end for i in eachindex(arc.modes)
+        ]
+        best_mode_idx = argmin(mode_costs)
+        if isinf(mode_costs[best_mode_idx])
+            throw(
+                ArgumentError(
+                    "No mode on edge $(edge) has enough capacity for the new commodities under :cheapest",
+                ),
+            )
+        end
         slot = assignment.per_mode[best_mode_idx]
         append!(slot.commodities, new_commodities)
         _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
     end
     return nothing
+end
+
+function _mode_has_capacity(
+    mode::NetworkArc, existing::Vector{C}, new_comms::Vector{C}
+) where {C<:LightCommodity}
+    mode.capacity == typemax(Int) && return true
+    existing_size = sum(c.size for c in existing; init=0.0)
+    new_size = sum(c.size for c in new_comms; init=0.0)
+    return existing_size + new_size <= mode.capacity + 1e-8
 end
 
 function _capacity_feasible(
