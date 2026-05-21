@@ -260,6 +260,48 @@ end
 """
 $TYPEDSIGNATURES
 
+Project a `MultiModalArc` into the travel-time graph. Modes are grouped by
+`travel_time_steps`. Each singleton group emits a plain `NetworkArc` edge.
+Groups of two or more modes with the same transit time emit a single
+`MultiModalArc` edge carrying just that subset (case 2).
+"""
+function _add_network_arc_to_travel_time_graph!(
+    g::MetaGraph,
+    origin::NetworkNode,
+    destination::NetworkNode,
+    arc::MultiModalArc,
+    max_time_steps::Int,
+    is_date_arrival::Bool,
+)
+    T = eltype(arc.modes)
+    groups = Dict{Int,Vector{T}}()
+    for mode in arc.modes
+        push!(get!(groups, mode.travel_time_steps, T[]), mode)
+    end
+
+    for (transit_time, group_modes) in groups
+        if length(group_modes) == 1
+            _add_network_arc_to_travel_time_graph!(
+                g, origin, destination, only(group_modes), max_time_steps, is_date_arrival
+            )
+        else
+            sub_arc = MultiModalArc(group_modes)
+            for τ_u in 0:max_time_steps
+                u = (origin.id, τ_u)
+                τ_v = is_date_arrival ? τ_u - transit_time : τ_u + transit_time
+                v = (destination.id, τ_v)
+                if haskey(g, u) && haskey(g, v)
+                    Graphs.add_edge!(g, u, v, sub_arc)
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute usable arcs for each bundle by finding all arcs that lie on paths
 from the bundle's origin to its destination in the travel-time graph.
 """
@@ -329,12 +371,14 @@ Construct a `TravelTimeGraph` from a `NetworkGraph` and a set of `Bundle`s.
 function TravelTimeGraph(
     network_graph::NetworkGraph, bundles::Vector{<:Bundle{<:Order{is_date_arrival,I}}}
 ) where {is_date_arrival,I}
-    # Initialize empty TimeTravelGraph
+    # Initialize empty TimeTravelGraph, mirroring the NetworkGraph's edge data
+    # type (extended with the shortcut-arc concrete type) so that arc lookups
+    # benefit from union-splitting when the input is concretely typed.
     graph = MetaGraph(
         Graphs.DiGraph();
         label_type=Tuple{String,Int},
         vertex_data_type=NetworkNode,
-        edge_data_type=NetworkArc,
+        edge_data_type=_ttg_edge_type(network_graph),
         default_weight=Inf,
     )
 

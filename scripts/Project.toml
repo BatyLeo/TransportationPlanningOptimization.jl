@@ -5,6 +5,7 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 MetaGraphsNext = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+ShipperTransportationPlanning = "3c6a3ad8-7161-46d3-acc7-0d276dae7e7d"
 TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 
 [sources]

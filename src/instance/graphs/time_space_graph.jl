@@ -49,7 +49,7 @@ function _add_network_arc!(
     time_space_graph::TimeSpaceGraph,
     origin::NetworkNode,
     destination::NetworkNode,
-    arc::NetworkArc;
+    arc::NetworkArc,
 )
     (; time_horizon_length, wrap_time) = time_space_graph
     for t in time_horizon(time_space_graph)
@@ -79,18 +79,70 @@ end
 """
 $TYPEDSIGNATURES
 
+Project a `MultiModalArc` into the time-space graph. Modes are grouped by
+`travel_time_steps`. Each singleton group emits a plain `NetworkArc` edge.
+Groups of two or more modes with the same transit time emit a single
+`MultiModalArc` edge carrying just that subset (case 2).
+"""
+function _add_network_arc!(
+    time_space_graph::TimeSpaceGraph,
+    origin::NetworkNode,
+    destination::NetworkNode,
+    arc::MultiModalArc,
+)
+    T = eltype(arc.modes)
+    groups = Dict{Int,Vector{T}}()
+    for mode in arc.modes
+        push!(get!(groups, mode.travel_time_steps, T[]), mode)
+    end
+
+    for (transit_time, group_modes) in groups
+        if length(group_modes) == 1
+            _add_network_arc!(time_space_graph, origin, destination, only(group_modes))
+        else
+            sub_arc = MultiModalArc(group_modes)
+            (; time_horizon_length, wrap_time) = time_space_graph
+            for t in time_horizon(time_space_graph)
+                u_t = (origin.id, t)
+                destination_time = t + transit_time
+                if destination_time > time_horizon_length
+                    if wrap_time
+                        destination_time -= time_horizon_length
+                    else
+                        break
+                    end
+                end
+                v_t = (destination.id, destination_time)
+                was_added = Graphs.add_edge!(time_space_graph.graph, u_t, v_t, sub_arc)
+                if !was_added
+                    throw(
+                        ErrorException(
+                            "Unable to add edge from $u_t to $v_t to time-space graph"
+                        ),
+                    )
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
 Constructor for `TimeSpaceGraph`.
 Creates timed copies of all nodes and arcs from the `network_graph` for each step in `1:time_horizon_length`.
 """
 function TimeSpaceGraph(
     network_graph::NetworkGraph, time_horizon_length::Int; wrap_time::Bool
 )
-    # Initialize empty TimeSpaceGraph
+    # Initialize empty TimeSpaceGraph, mirroring the NetworkGraph's edge data type so
+    # that arc lookups benefit from union-splitting when the input is concretely typed.
     graph = MetaGraph(
         Graphs.DiGraph();
         label_type=Tuple{String,Int},
         vertex_data_type=NetworkNode,
-        edge_data_type=NetworkArc,
+        edge_data_type=_metagraph_edge_type(network_graph),
     )
     time_space_graph = TimeSpaceGraph(graph, time_horizon_length, wrap_time)
 

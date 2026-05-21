@@ -61,7 +61,7 @@ end
         instance.travel_time_graph.destination_codes[1],
     ]
     order = instance.bundles[1].orders[1]
-    # project to time-space and populate commodities_on_arcs
+    # project to time-space and populate edge assignments
     tsg_path = [
         TransportationPlanningOptimization.project_to_time_space_graph(
             node, order, instance
@@ -69,10 +69,10 @@ end
     ]
     for i in 1:(length(tsg_path) - 1)
         edge = (tsg_path[i], tsg_path[i + 1])
-        sol.commodities_on_arcs[edge] = order.commodities
-        # insert an oversized bin directly (use the same commodity type as the order)
         C = eltype(order.commodities)
-        sol.bin_assignments[edge] = [Bin{C}(C[], 124.02, 65.0, -59.02)]
+        sol.assignments[edge] = SingleAssignment{C}(
+            collect(order.commodities), [Bin{C}(C[], 124.02, 65.0, -59.02)], 0.0
+        )
     end
     @test !is_feasible(sol, instance; verbose=false)
 end

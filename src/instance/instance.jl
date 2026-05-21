@@ -178,7 +178,7 @@ This function expects `nodes` and `arcs` already in `NetworkGraph` form (i.e., `
 
 Arguments:
 - `nodes::Vector{<:NetworkNode}`
-- `arcs::Vector{<:Tuple{String,String,<:NetworkArc}}`
+- `arcs::Vector{Tuple{String,String,NA}}` where `NA<:NetworkArc`. Multi-modal legs are expressed as multiple `NetworkArc` entries on the same `(origin_id, destination_id)`. Pre-built `MultiModalArc` values are not accepted.
 - `commodities::Vector{Commodity}`
 - `time_step::Period`
 
@@ -191,13 +191,13 @@ See also: the `Instance` constructor which accepts `Arc` inputs and performs aut
 """
 function build_instance(
     nodes::Vector{<:NetworkNode},
-    arcs::Vector{<:Tuple{String,String,<:NetworkArc}},
+    arcs::Vector{Tuple{String,String,NA}},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period;
     group_by=_default_group_by,
     wrap_time=false,
     check_bundle_feasibility=true,
-) where {is_date_arrival,ID,I}
+) where {is_date_arrival,ID,I,NA<:NetworkArc}
     # Building the network graph (arcs are provided as (origin_id,destination_id,NetworkArc))
     network_graph = NetworkGraph(nodes, arcs)
 
@@ -463,7 +463,7 @@ Construct an `Instance` from high-level `Arc` inputs by automatically inferring 
 
 # Arguments
 - `nodes::Vector{<:NetworkNode}`: List of nodes in the spatial network.
-- `arcs::Vector{<:Tuple{String,String,<:NetworkArc}}`: Arcs in the spatial network as `(origin_id, destination_id, arc_data)`.
+- `arcs::Vector{<:Arc}`: Arcs in the spatial network. `Instance` infers cost types and narrows the vector internally via [`collect_arcs`](@ref) before building the `NetworkGraph`.
 - `commodities::Vector{Commodity}`: User-facing commodity specifications.
 - `time_step::Period`: The discrete time step size (e.g., `Hour(1)`, `Day(1)`).
 

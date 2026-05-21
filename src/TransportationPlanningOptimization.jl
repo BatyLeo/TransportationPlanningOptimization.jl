@@ -28,15 +28,19 @@ include("instance/graphs/travel_time_graph.jl")
 
 include("instance/instance.jl")
 
+include("solution/arc_assignment.jl")
+include("algorithms/mode_selector.jl")
 include("solution/solution.jl")
 include("solution/parsing.jl")
-include("algorithms/greedy_insertion.jl")
+
+include("algorithms/cost_matrix_update.jl")
+include("algorithms/greedy_heuristic.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity
 export bundle_count, order_count, commodity_count, total_size
 export write_solution_csv, read_solution_csv
-export NetworkNode, NetworkArc, Arc
+export NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
 export NetworkGraph
 
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
@@ -50,6 +54,9 @@ export TimeSpaceGraph, TravelTimeGraph
 export time_horizon
 
 export Solution, is_feasible, cost, add_bundle_path!
+export AbstractArcAssignment, SingleAssignment, MultiAssignment
+export commodities_of, bins_of, cost_of
+export AbstractModeSelector, CheapestMode, FillThenSpillMode
 export greedy_heuristic
 
 """

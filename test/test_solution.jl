@@ -91,13 +91,12 @@ using MetaGraphsNext
         # Expect the stored bundle path to equal the cleaned original path
         @test sol2.bundle_paths[1] == path_codes3
 
-        # Test arc_costs dictionary
-        @test !isempty(sol.arc_costs)
-        @test all(c >= 0.0 for c in values(sol.arc_costs))
+        # Test arc costs (per-edge values in assignments)
+        @test !isempty(sol.assignments)
+        @test all(cost_of(a) >= 0.0 for a in values(sol.assignments))
 
-        # Test commodities_on_arcs
-        @test !isempty(sol.commodities_on_arcs)
-        total_commodities = sum(length(comms) for comms in values(sol.commodities_on_arcs))
+        # Test commodities recorded on each edge
+        total_commodities = sum(length(commodities_of(a)) for a in values(sol.assignments))
         @test total_commodities == 4  # 2 commodities * 2 arcs = 4
     end
 
@@ -157,19 +156,17 @@ using MetaGraphsNext
 
         @test is_feasible(sol, instance)
 
-        # Test bin assignments with Bin struct
-        @test !isempty(sol.bin_assignments)
-        # Total size = 18, bin capacity = 10, but need 3 bins due to FFD logic
-        @test any(length(bins) == 3 for bins in values(sol.bin_assignments))
+        # Test bin assignments
+        @test any(length(bins_of(a)) == 3 for a in values(sol.assignments))
 
         # Verify bin contents and metrics
-        for bins in values(sol.bin_assignments)
+        for a in values(sol.assignments)
+            bins = bins_of(a)
             @test length(bins) == 3
             all_commodities = vcat([b.commodities for b in bins]...)
             @test length(all_commodities) == 3
             @test all(c.size == 6.0 for c in all_commodities)
 
-            # Verify each bin's metrics
             for bin in bins
                 @test length(bin.commodities) == 1
                 @test bin.total_size == 6.0
@@ -180,9 +177,7 @@ using MetaGraphsNext
 
         # Cost should be 3 bins * 100 = 300
         @test cost(sol) == 300.0
-
-        # Test arc_costs
-        @test any(c == 300.0 for c in values(sol.arc_costs))
+        @test any(cost_of(a) == 300.0 for a in values(sol.assignments))
     end
 
     @testset "Multiple commodities with different sizes" begin
@@ -239,9 +234,10 @@ using MetaGraphsNext
         @test cost(sol) == 40.0
 
         # Verify individual arc costs
-        @test length(sol.arc_costs) == 2
-        @test 25.0 in values(sol.arc_costs)
-        @test 15.0 in values(sol.arc_costs)
+        @test length(sol.assignments) == 2
+        edge_costs = [cost_of(a) for a in values(sol.assignments)]
+        @test 25.0 in edge_costs
+        @test 15.0 in edge_costs
     end
 
     @testset "Solution with Arrival Date Commodities" begin
