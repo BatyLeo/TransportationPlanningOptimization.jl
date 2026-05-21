@@ -47,10 +47,16 @@ Ensures node IDs are unique. Multiple arcs between the same `(origin_id, destina
 pair are accepted: the graph keeps a single edge whose data is auto-promoted to a
 `MultiModalArc` carrying every mode declared for that leg.
 
-When `arcs` is concretely typed as `Vector{Tuple{String,String,NA}}` where
-`NA<:NetworkArc`, the underlying `MetaGraph` uses `Union{NA,MultiModalArc{NA}}` as its
-edge data type, enabling Julia's union-splitting at all dispatch sites that read arc data.
-The fallback (abstractly-typed arcs) uses `AbstractNetworkArc` as before.
+`arcs` must be concretely typed as `Vector{Tuple{String,String,NA}}` for a single
+`NA<:NetworkArc`. The underlying `MetaGraph` then uses `Union{NA,MultiModalArc{NA}}` as
+its edge data type, enabling Julia union-splitting at every dispatch site that reads
+arc data. Pre-built `MultiModalArc` values are not accepted in the input vector:
+multi-modal legs must be expressed as several `NetworkArc` entries sharing the same
+`(origin_id, destination_id)` and the constructor handles promotion.
+
+Callers holding a heterogeneously-typed arc vector (for example, mixed cost functions)
+should narrow it through [`collect_arcs`](@ref) (or an equivalent step) before calling
+this constructor, which is the standard entry path used by [`Instance`](@ref).
 """
 function NetworkGraph(
     nodes::Vector{<:NetworkNode}, arcs::Vector{Tuple{String,String,NA}}
@@ -60,19 +66,6 @@ function NetworkGraph(
         label_type=String,
         vertex_data_type=eltype(nodes),
         edge_data_type=Union{NA,MultiModalArc{NA}},
-    )
-    _fill_network_graph!(network_graph, nodes, arcs)
-    return NetworkGraph(network_graph)
-end
-
-function NetworkGraph(
-    nodes::Vector{<:NetworkNode}, arcs::Vector{<:Tuple{String,String,<:AbstractNetworkArc}}
-)
-    network_graph = MetaGraph(
-        Graphs.DiGraph();
-        label_type=String,
-        vertex_data_type=eltype(nodes),
-        edge_data_type=AbstractNetworkArc,
     )
     _fill_network_graph!(network_graph, nodes, arcs)
     return NetworkGraph(network_graph)

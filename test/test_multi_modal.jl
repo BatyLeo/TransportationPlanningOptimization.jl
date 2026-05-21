@@ -509,3 +509,24 @@ end
     @test is_feasible(reconstructed, instance)
     @test cost(sol) == cost(reconstructed)
 end
+
+@testset "NetworkGraph rejects pre-built MultiModalArc and abstract vectors" begin
+    truck = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
+    train = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
+
+    # Pre-built MultiModalArc is not accepted in the input vector.
+    # Multi-modal legs must be written as multiple NetworkArc entries with the
+    # same (origin_id, destination_id) so the constructor can promote them itself.
+    pre_built = MultiModalArc([truck, train])
+    @test_throws MethodError NetworkGraph(_NODES_AB, [("A", "B", pre_built)])
+
+    # Vectors typed with an abstract element type are likewise rejected. Callers
+    # holding heterogeneous arcs must narrow first (e.g. via collect_arcs).
+    abstract_vec = Tuple{String,String,AbstractNetworkArc}[("A", "B", truck)]
+    @test_throws MethodError NetworkGraph(_NODES_AB, abstract_vec)
+
+    # The supported entry path with two NetworkArc entries on the same leg still
+    # promotes to a MultiModalArc edge inside the graph.
+    ng = NetworkGraph(_NODES_AB, [("A", "B", truck), ("A", "B", train)])
+    @test ng.graph["A", "B"] isa MultiModalArc
+end
