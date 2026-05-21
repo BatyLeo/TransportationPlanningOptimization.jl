@@ -261,7 +261,7 @@ $TYPEDSIGNATURES
 Incrementally add a path (sequence of TTG node codes) for a bundle and update the solution.
 This updates `bundle_paths` and the per-edge entries in `assignments`.
 """
-function _is_shortcut_arc(arc::NetworkArc)
+function _is_shortcut_arc(::NetworkArc)
     return false
 end
 
@@ -462,6 +462,11 @@ function _capacity_feasible(
     return true
 end
 
+"""
+$TYPEDSIGNATURES
+
+Remove leading or trailing shortcut nodes from a TTG path, depending on the graph's time semantics.
+"""
 function _remove_shortcuts_from_path!(path::Vector{Int}, ttg::TravelTimeGraph)
     # Remove leading shortcuts for arrival-based graphs, trailing for elapsed-time graphs
     if length(path) < 2
@@ -507,8 +512,14 @@ function _remove_shortcuts_from_path!(path::Vector{Int}, ttg::TravelTimeGraph)
     return nothing
 end
 
+"""
+$TYPEDSIGNATURES
+
+Add bundle path `path` for bundle `bundle_idx` to the solution `current_solution`.
+This updates the `bundle_paths` and the `assignments` for all arcs along the path.
+"""
 function add_bundle_path!(
-    sol::Solution{C},
+    current_solution::Solution{C},
     instance::Instance,
     bundle_idx::Int,
     path::Vector{Int};
@@ -516,7 +527,7 @@ function add_bundle_path!(
 ) where {C}
     # Remove potential shortcut edges before storing the path (TTG may contain shortcuts).
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
-    sol.bundle_paths[bundle_idx] = path
+    current_solution.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
     tsg = instance.time_space_graph
 
@@ -524,6 +535,7 @@ function add_bundle_path!(
     # mode selection at placement time sees the same combined load that Dijkstra
     # used when scoring the path.
     tsg_edge_to_new_commodities = Dict{Tuple{Int,Int},Vector{C}}()
+    # For each order in the bundle, project the TTG path to a TSG path
     for order in bundle.orders
         tsg_path = [
             project_to_time_space_graph(node_code, order, instance) for node_code in path
@@ -538,7 +550,9 @@ function add_bundle_path!(
         u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
         v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
         arc = tsg.graph[u_label, v_label]
-        _add_order_to_assignment!(sol.assignments, edge, arc, new_comms, mode_selector)
+        _add_order_to_assignment!(
+            current_solution.assignments, edge, arc, new_comms, mode_selector
+        )
     end
     return nothing
 end

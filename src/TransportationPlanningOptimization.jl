@@ -32,7 +32,9 @@ include("solution/arc_assignment.jl")
 include("algorithms/mode_selector.jl")
 include("solution/solution.jl")
 include("solution/parsing.jl")
-include("algorithms/greedy_insertion.jl")
+
+include("algorithms/cost_matrix_update.jl")
+include("algorithms/greedy_heuristic.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity

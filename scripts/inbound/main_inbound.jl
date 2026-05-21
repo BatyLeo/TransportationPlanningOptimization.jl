@@ -3,7 +3,7 @@ using TransportationPlanningOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-instance_name = "small"
+instance_name = "tiny"
 # datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 datadir = joinpath(@__DIR__, "..", "..", "test", "public")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")

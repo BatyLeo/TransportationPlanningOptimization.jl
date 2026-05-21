@@ -1,7 +1,8 @@
 """
-    incremental_cost(arc_f::AbstractArcCostFunction, existing_commodities, new_commodities)
+$TYPEDSIGNATURES
 
-Compute the additional cost of adding `new_commodities` to an arc that already contains `existing_commodities`.
+Compute the additional cost of adding `new_commodities` to an arc that already contains
+`existing_commodities`.
 """
 function incremental_cost(
     arc_f::AbstractArcCostFunction,
@@ -13,23 +14,36 @@ function incremental_cost(
     return evaluate(arc_f, all_commodities) - evaluate(arc_f, existing_commodities)
 end
 
-# Specialized for LinearArcCost for efficiency
+"""
+$TYPEDSIGNATURES
+
+Specialized for LinearArcCost for efficiency.
+"""
 function incremental_cost(
-    arc_f::LinearArcCost, existing_commodities::Vector{C}, new_commodities::Vector{C}
+    arc_f::LinearArcCost, ::Vector{C}, new_commodities::Vector{C}
 ) where {C<:LightCommodity}
     total_new_size = sum(c.size for c in new_commodities; init=0.0)
     return arc_f.cost_per_unit_size * total_new_size
 end
 
-# `_edge_incremental_cost` accepts a mode selector for uniform calling at the
-# Dijkstra cost-evaluation site. For `NetworkArc` edges the selector is
-# irrelevant (one mode) and the methods just forward to `incremental_cost`.
+"""
+$TYPEDSIGNATURES
+
+For `NetworkArc` edges the selector is irrelevant (one mode) and the method just forwards to
+`incremental_cost`.
+"""
 function _edge_incremental_cost(
-    arc::NetworkArc, existing::Nothing, new_comms::Vector{C}, ::AbstractModeSelector
+    arc::NetworkArc, ::Nothing, new_comms::Vector{C}, ::AbstractModeSelector
 ) where {C<:LightCommodity}
     return incremental_cost(arc.cost, C[], new_comms)
 end
 
+"""
+$TYPEDSIGNATURES
+
+For `NetworkArc` edges the selector is irrelevant (one mode) and the method just forwards to
+`incremental_cost`.
+"""
 function _edge_incremental_cost(
     arc::NetworkArc,
     existing::SingleAssignment{C},
@@ -39,8 +53,14 @@ function _edge_incremental_cost(
     return incremental_cost(arc.cost, existing.commodities, new_comms)
 end
 
+"""
+$TYPEDSIGNATURES
+
+For `MultiModalArc` edges and cheapest mode selector, compute the incremental cost of adding
+to the cheapest feasible mode (or `Inf` if no single mode can accommodate the new commodities).
+"""
 function _edge_incremental_cost(
-    arc::MultiModalArc, existing::Nothing, new_comms::Vector{C}, ::CheapestMode
+    arc::MultiModalArc, ::Nothing, new_comms::Vector{C}, ::CheapestMode
 ) where {C<:LightCommodity}
     return minimum(
         if _mode_has_capacity(mode, C[], new_comms)
@@ -51,6 +71,12 @@ function _edge_incremental_cost(
     )
 end
 
+"""
+$TYPEDSIGNATURES
+
+For `MultiModalArc` edges and cheapest mode selector, compute the incremental cost of adding
+to the cheapest feasible mode (or `Inf` if no single mode can accommodate the new commodities).
+"""
 function _edge_incremental_cost(
     arc::MultiModalArc, existing::MultiAssignment{C}, new_comms::Vector{C}, ::CheapestMode
 ) where {C<:LightCommodity}
@@ -65,8 +91,14 @@ function _edge_incremental_cost(
     )
 end
 
+"""
+$TYPEDSIGNATURES
+
+For `MultiModalArc` edges and fill-then-spill mode selector, we allow splitting over multiple modes
+if the cheapest is full. The incremental cost is the sum of the increments on each mode.
+"""
 function _edge_incremental_cost(
-    arc::MultiModalArc, existing::Nothing, new_comms::Vector{C}, ::FillThenSpillMode
+    arc::MultiModalArc, ::Nothing, new_comms::Vector{C}, ::FillThenSpillMode
 ) where {C<:LightCommodity}
     empty_existing = [C[] for _ in eachindex(arc.modes)]
     partition, overflow = _fill_then_spill_partition(arc, empty_existing, new_comms)
@@ -79,6 +111,9 @@ function _edge_incremental_cost(
     return total
 end
 
+"""
+$TYPEDSIGNATURES
+"""
 function _edge_incremental_cost(
     arc::MultiModalArc,
     existing::MultiAssignment{C},
@@ -97,17 +132,17 @@ function _edge_incremental_cost(
 end
 
 """
-    compute_ttg_edge_incremental_cost(sol, instance, bundle, u_ttg_label, v_ttg_label)
+$TYPEDSIGNATURES
 
 Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
 function compute_ttg_edge_incremental_cost(
-    sol::Solution{C},
+    current_solution::Solution{C},
     instance::Instance,
     bundle::Bundle,
-    u_ttg_code,
-    v_ttg_code,
+    u_ttg_code::Int,
+    v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {C}
     tsg = instance.time_space_graph
@@ -147,22 +182,23 @@ function compute_ttg_edge_incremental_cost(
         end
 
         arc = tsg.graph[u_tsg_label, v_tsg_label]
-        existing_assignment = get(sol.assignments, edge, nothing)
-        inc = _edge_incremental_cost(arc, existing_assignment, new_comms, mode_selector)
-        total_incremental_cost += inc
+        existing_assignment = get(current_solution.assignments, edge, nothing)
+        total_incremental_cost += _edge_incremental_cost(
+            arc, existing_assignment, new_comms, mode_selector
+        )
     end
 
     return total_incremental_cost
 end
 
 """
-    insert_bundle!(sol, instance, bundle_idx)
+$TYPEDSIGNATURES
 
-Find the cheapest path for a bundle in the TravelTimeGraph (considering incremental costs)
-and add it to the solution.
+Compute and overwrite the `TravelTimeGraph` cost matrix entries for every arc of bundle
+`bundle_idx`, given the current solution state. Arcs forbidden for the bundle are set to `Inf`.
 """
-function insert_bundle!(
-    sol::Solution,
+function update_bundle_cost_matrix!(
+    current_solution::Solution,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector=CheapestMode(),
@@ -171,70 +207,18 @@ function insert_bundle!(
     bundle = instance.bundles[bundle_idx]
 
     for (u_code, v_code) in ttg.bundle_arcs[bundle_idx]
-        # Get node IDs from TTG labels
-        u_label = MetaGraphsNext.label_for(ttg.graph, u_code)
-        v_label = MetaGraphsNext.label_for(ttg.graph, v_code)
-        u_node_id = u_label[1]
-        v_node_id = v_label[1]
+        u_node_id = MetaGraphsNext.label_for(ttg.graph, u_code)[1]
+        v_node_id = MetaGraphsNext.label_for(ttg.graph, v_code)[1]
 
-        # Check forbidden constraints (O(1) lookups using Sets)
-        is_arc_forbidden = (
-            (u_node_id, v_node_id) in bundle.forbidden_arcs ||
+        if (u_node_id, v_node_id) in bundle.forbidden_arcs ||
             u_node_id in bundle.forbidden_nodes ||
             v_node_id in bundle.forbidden_nodes
-        )
-
-        if is_arc_forbidden
-            # Skip cost computation for forbidden arcs, mark as infeasible
             ttg.cost_matrix[u_code, v_code] = Inf
         else
-            # Compute incremental cost only for allowed arcs
             ttg.cost_matrix[u_code, v_code] = compute_ttg_edge_incremental_cost(
-                sol, instance, bundle, u_code, v_code, mode_selector
+                current_solution, instance, bundle, u_code, v_code, mode_selector
             )
         end
     end
-
-    origin = ttg.origin_codes[bundle_idx]
-    destination = ttg.destination_codes[bundle_idx]
-
-    res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-    path = Graphs.enumerate_paths(res, destination)
-
-    if isempty(path)
-        throw(ArgumentError("No feasible path found for bundle $bundle_idx, ($path)"))
-    end
-
-    add_bundle_path!(sol, instance, bundle_idx, path; mode_selector)
     return nothing
-end
-
-"""
-$TYPEDSIGNATURES
-
-Construct a solution by inserting bundles one by one into an initially empty solution.
-Bundles are processed in decreasing order of total size, so the heaviest bundles claim
-their preferred paths first.
-
-# Keyword arguments
-- `mode_selector::AbstractModeSelector = CheapestMode()`: strategy that decides how
-  a bundle's commodities are distributed across modes of a [`MultiModalArc`](@ref)
-  (only relevant when several modes share the same transit time and therefore
-  collapse to one edge). See [`CheapestMode`](@ref) and [`FillThenSpillMode`](@ref).
-
-# Errors
-Throws `ArgumentError` if no feasible path exists for a bundle. With
-[`CheapestMode`](@ref), this can happen when no single mode on a required edge
-has enough remaining capacity. With [`FillThenSpillMode`](@ref), it happens when
-the combined capacity across all modes on a required edge is below the load.
-"""
-function greedy_heuristic(
-    instance::Instance; mode_selector::AbstractModeSelector=CheapestMode()
-)
-    sol = Solution(instance)
-    sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
-    @showprogress for i in sorted_indices
-        insert_bundle!(sol, instance, i, mode_selector)
-    end
-    return sol
 end
