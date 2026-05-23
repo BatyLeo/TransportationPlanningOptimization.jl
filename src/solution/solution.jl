@@ -352,13 +352,16 @@ function _fill_then_spill_assign!(
             ),
         )
     end
+    cost_delta = 0.0
     for (i, placed) in enumerate(partition)
         isempty(placed) && continue
         slot = assignment.per_mode[i]
+        before = slot.cost
         append!(slot.commodities, placed)
         _update_single_assignment_cost!(slot, arc.modes[i].cost)
+        cost_delta += slot.cost - before
     end
-    return nothing
+    return cost_delta
 end
 
 function _add_order_to_assignment!(
@@ -371,9 +374,10 @@ function _add_order_to_assignment!(
     assignment = get!(assignments, edge) do
         SingleAssignment{C}()
     end::SingleAssignment{C}
+    before = assignment.cost
     append!(assignment.commodities, new_commodities)
     _update_single_assignment_cost!(assignment, arc.cost)
-    return nothing
+    return assignment.cost - before
 end
 
 function _add_order_to_assignment!(
@@ -406,9 +410,10 @@ function _add_order_to_assignment!(
         )
     end
     slot = assignment.per_mode[best_mode_idx]
+    before = slot.cost
     append!(slot.commodities, new_commodities)
     _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
-    return nothing
+    return slot.cost - before
 end
 
 function _add_order_to_assignment!(
@@ -421,8 +426,7 @@ function _add_order_to_assignment!(
     assignment = get!(assignments, edge) do
         MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
-    _fill_then_spill_assign!(edge, arc, assignment, new_commodities)
-    return nothing
+    return _fill_then_spill_assign!(edge, arc, assignment, new_commodities)
 end
 
 function _mode_has_capacity(
@@ -517,6 +521,10 @@ $TYPEDSIGNATURES
 
 Add bundle path `path` for bundle `bundle_idx` to the solution `current_solution`.
 This updates the `bundle_paths` and the `assignments` for all arcs along the path.
+
+Returns the cost increase produced by adding `path` (a non-negative `Float64`).
+The increase is computed as the sum of per-edge cost changes via
+`_update_single_assignment_cost!`.
 """
 function add_bundle_path!(
     current_solution::Solution{C},
@@ -530,6 +538,7 @@ function add_bundle_path!(
     current_solution.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
     tsg = instance.time_space_graph
+    cost_delta = 0.0
 
     # Bucket all the bundle's commodities by their projected TSG edge, so that
     # mode selection at placement time sees the same combined load that Dijkstra
@@ -550,11 +559,147 @@ function add_bundle_path!(
         u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
         v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
         arc = tsg.graph[u_label, v_label]
-        _add_order_to_assignment!(
+        cost_delta += _add_order_to_assignment!(
             current_solution.assignments, edge, arc, new_comms, mode_selector
         )
     end
-    return nothing
+    return cost_delta
+end
+
+"""
+$TYPEDSIGNATURES
+
+Reverse the effect of `add_bundle_path!` for bundle `bundle_idx`. Drops the
+bundle's commodities from every TSG edge along the stored path, then clears
+`bundle_paths[bundle_idx]`. Returns the cost decrease produced by the removal
+(a non-positive `Float64` whose magnitude equals the dropped cost contribution
+of the bundle on its path). Returns `0.0` when the bundle path is already
+empty.
+
+Per-edge details:
+- On `BinPackingArcCost` edges, bins are recomputed from scratch via
+  `compute_bin_assignments`, so the stored `bins` and `cost` reflect the
+  reduced commodity set.
+- On `LinearArcCost` edges, `cost` is recomputed via `evaluate`.
+- Commodities are matched by `==`. By construction (see
+  `build_instance`), two bundles with different `(origin_id, destination_id,
+  group_key)` cannot share `==`-equal commodities, so the match is
+  unambiguous across bundles.
+- For `MultiAssignment` edges, modes are scanned in order. Each commodity is
+  dropped from the first mode that contains it, which is always the mode
+  where `add_bundle_path!` placed it (no other bundle's commodities can
+  alias under `==`).
+
+Assignment dict entries are kept even when their commodity vector goes to
+zero, so subsequent reinsertion can reuse them without re-keying. An entry
+whose commodities are empty contributes `0` to `cost(sol)` via
+`_update_single_assignment_cost!`.
+
+Throws `ArgumentError` if any of the bundle's commodities are not found on
+the expected TSG edges. That should never happen when the bundle's stored
+path is consistent with how it was added.
+"""
+function remove_bundle_path!(
+    current_solution::Solution{C}, instance::Instance, bundle_idx::Int
+) where {C}
+    path = current_solution.bundle_paths[bundle_idx]
+    isempty(path) && return 0.0
+    bundle = instance.bundles[bundle_idx]
+    tsg = instance.time_space_graph
+
+    tsg_edge_to_removed_commodities = Dict{Tuple{Int,Int},Vector{C}}()
+    for order in bundle.orders
+        tsg_path = [
+            project_to_time_space_graph(node_code, order, instance) for node_code in path
+        ]
+        for i in 1:(length(tsg_path) - 1)
+            edge = (tsg_path[i], tsg_path[i + 1])
+            append!(get!(tsg_edge_to_removed_commodities, edge, C[]), order.commodities)
+        end
+    end
+
+    cost_delta = 0.0
+    for (edge, removed_comms) in tsg_edge_to_removed_commodities
+        u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
+        v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
+        arc = tsg.graph[u_label, v_label]
+        assignment = current_solution.assignments[edge]
+        cost_delta += _remove_commodities_from_assignment!(assignment, arc, removed_comms)
+    end
+
+    current_solution.bundle_paths[bundle_idx] = Int[]
+    return cost_delta
+end
+
+function _remove_commodities_from_assignment!(
+    assignment::SingleAssignment{C}, arc::NetworkArc, removed_comms::Vector{C}
+) where {C<:LightCommodity}
+    before = assignment.cost
+    remaining = copy(removed_comms)
+    _drain_first_matches!(assignment.commodities, remaining)
+    if !isempty(remaining)
+        throw(
+            ArgumentError(
+                "remove_bundle_path!: $(length(remaining)) commodities not found in single-mode assignment",
+            ),
+        )
+    end
+    _update_single_assignment_cost!(assignment, arc.cost)
+    return assignment.cost - before
+end
+
+function _remove_commodities_from_assignment!(
+    assignment::MultiAssignment{C}, arc::MultiModalArc, removed_comms::Vector{C}
+) where {C<:LightCommodity}
+    before = sum(slot.cost for slot in assignment.per_mode; init=0.0)
+    remaining = copy(removed_comms)
+    for (i, slot) in enumerate(assignment.per_mode)
+        isempty(remaining) && break
+        dropped = _drain_first_matches!(slot.commodities, remaining)
+        if !isempty(dropped)
+            _update_single_assignment_cost!(slot, arc.modes[i].cost)
+        end
+    end
+    if !isempty(remaining)
+        throw(
+            ArgumentError(
+                "remove_bundle_path!: $(length(remaining)) commodities not found across modes for this edge",
+            ),
+        )
+    end
+    after = sum(slot.cost for slot in assignment.per_mode; init=0.0)
+    return after - before
+end
+
+"""
+$TYPEDSIGNATURES
+
+For each item in `to_remove`, drop its first `==`-matching occurrence in `pool`
+(if any). Items that find a match are removed from both `pool` and `to_remove`,
+so that on return `to_remove` contains exactly the items that were not matched
+in `pool`. Returns the vector of items that were actually dropped.
+
+This dual-mutation contract is convenient when scanning a queue of items across
+several pools (for example, across the modes of a `MultiAssignment`): pass the
+same `to_remove` vector to successive calls and stop when it is empty.
+"""
+function _drain_first_matches!(
+    pool::Vector{C}, to_remove::Vector{C}
+) where {C<:LightCommodity}
+    dropped = C[]
+    i = 1
+    while i <= length(to_remove)
+        c = to_remove[i]
+        idx = findfirst(==(c), pool)
+        if idx === nothing
+            i += 1
+        else
+            push!(dropped, c)
+            deleteat!(pool, idx)
+            deleteat!(to_remove, i)
+        end
+    end
+    return dropped
 end
 
 """

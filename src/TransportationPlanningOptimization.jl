@@ -7,7 +7,7 @@ using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
 using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey, code_for, label_for
 using ProgressMeter: @showprogress
-using SparseArrays: SparseMatrixCSC, sparse
+using SparseArrays: SparseArrays, SparseMatrixCSC, sparse
 
 include("utils.jl")
 
@@ -35,6 +35,10 @@ include("solution/parsing.jl")
 
 include("algorithms/cost_matrix_update.jl")
 include("algorithms/greedy_heuristic.jl")
+include("algorithms/lower_bound.jl")
+include("algorithms/instance_extraction.jl")
+include("algorithms/merge_solutions.jl")
+include("algorithms/local_search.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity
@@ -44,7 +48,7 @@ export NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
 export NetworkGraph
 
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost
-export Bin
+export Bin, tentative_bin_count, tentative_best_fit_count, compute_bin_assignments_bfd
 export collect_arcs
 
 export evaluate
@@ -53,11 +57,15 @@ export TimeSpaceGraph, TravelTimeGraph
 
 export time_horizon
 
-export Solution, is_feasible, cost, add_bundle_path!
+export Solution, is_feasible, cost, add_bundle_path!, remove_bundle_path!
 export AbstractArcAssignment, SingleAssignment, MultiAssignment
 export commodities_of, bins_of, cost_of
 export AbstractModeSelector, CheapestMode, FillThenSpillMode
-export greedy_heuristic
+export greedy_heuristic, lower_bound, lower_bound!
+export lower_bound_filtering, lower_bound_filtering!
+export extract_filtered_instance
+export merge_solutions
+export bin_packing_improvement!, bundle_reinsertion_improvement!, local_search!
 
 """
     gurobi_optimizer()

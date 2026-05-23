@@ -26,12 +26,25 @@ using .Inbound
             include("test_multi_modal.jl")
             include("test_solution.jl")
             include("test_solution_parsing.jl")
+            include("test_lower_bound_cost.jl")
+        end
+        @testset "Solution removal" begin
+            include("test_solution_removal.jl")
         end
         @testset "Instances" begin
             include("test_instances.jl")
         end
         @testset "Greedy Insertion" begin
             include("test_insertion.jl")
+        end
+        @testset "Lower bound" begin
+            include("test_lower_bound.jl")
+        end
+        @testset "Instance extraction" begin
+            include("test_instance_extraction.jl")
+        end
+        @testset "Local search" begin
+            include("test_local_search.jl")
         end
         @testset "Tiny instance" begin
             include("test_tiny_instance.jl")
@@ -41,6 +54,10 @@ using .Inbound
         end
         @testset "Bin packing checks" begin
             include("test_bin_packing.jl")
+            include("test_tentative_bin_packing.jl")
         end
+    end
+    @testset "Cross-package comparison vs ShipperTransportationPlanning" begin
+        include("test_compare_to_shipper.jl")
     end
 end
