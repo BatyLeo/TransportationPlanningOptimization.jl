@@ -7,14 +7,17 @@ Nodes represent physical locations and can serve as origins or destinations for 
 # Fields
 $TYPEDFIELDS
 """
-struct NetworkNode{J}
+struct NetworkNode{J,N<:AbstractNodeCostFunction}
     id::String
     node_type::Symbol
     cost::Float64
     capacity::Int
     info::J
+    node_cost::N
 
-    function NetworkNode{J}(id, node_type, cost, capacity, info) where {J}
+    function NetworkNode{J,N}(
+        id, node_type, cost, capacity, info, node_cost
+    ) where {J,N<:AbstractNodeCostFunction}
         if node_type ∉ (:origin, :destination, :other)
             throw(
                 ArgumentError(
@@ -22,7 +25,7 @@ struct NetworkNode{J}
                 ),
             )
         end
-        return new{J}(id, node_type, cost, capacity, info)
+        return new{J,N}(id, node_type, cost, capacity, info, node_cost)
     end
 end
 
@@ -41,8 +44,11 @@ function NetworkNode(;
     cost::Float64=0.0,
     capacity::Int=typemax(Int),
     info=nothing,
+    node_cost::AbstractNodeCostFunction=NoNodeCost(),
 )
-    return NetworkNode{typeof(info)}(id, node_type, cost, capacity, info)
+    return NetworkNode{typeof(info),typeof(node_cost)}(
+        id, node_type, cost, capacity, info, node_cost
+    )
 end
 
 function Base.show(io::IO, node::NetworkNode)
@@ -53,7 +59,8 @@ function Base.show(io::IO, node::NetworkNode)
         "node_type=$(node.node_type), ",
         "cost=$(node.cost), ",
         "capacity=$(node.capacity == typemax(Int) ? "∞" : string(node.capacity)), ",
-        "info=$(node.info)",
+        "info=$(node.info), ",
+        "node_cost=$(node.node_cost)",
         ")",
     )
 end

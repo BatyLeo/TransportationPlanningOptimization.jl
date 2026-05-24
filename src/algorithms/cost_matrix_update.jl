@@ -253,6 +253,20 @@ function compute_ttg_edge_incremental_cost(
         total_incremental_cost += _edge_incremental_cost(
             arc, existing_assignment, new_comms, mode_selector
         )
+
+        # Destination-node cost. Charged on the spatial destination of each
+        # traversed arc, matching STP's `volume_stock_cost`
+        # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
+        v_node_id = v_tsg_label[1]
+        dst_node = instance.network_graph.graph[v_node_id]
+        existing_at_dst_node = if existing_assignment === nothing
+            C[]
+        else
+            collect(commodities_of(existing_assignment))
+        end
+        total_incremental_cost += incremental_cost(
+            dst_node.node_cost, existing_at_dst_node, new_comms
+        )
     end
 
     return total_incremental_cost
@@ -320,6 +334,20 @@ function compute_ttg_edge_lower_bound_cost(
         arc = tsg.graph[u_label, v_label]
         existing = get(current_solution.assignments, edge, nothing)
         total += _edge_lower_bound_cost(arc, existing, new_comms, mode_selector)
+
+        # Destination-node cost. Charged on the spatial destination of each
+        # traversed arc, matching STP's `volume_stock_cost`
+        # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
+        v_node_id = v_label[1]
+        dst_node = instance.network_graph.graph[v_node_id]
+        existing_at_dst_node = if existing === nothing
+            C[]
+        else
+            collect(commodities_of(existing))
+        end
+        total += lower_bound_incremental_cost(
+            dst_node.node_cost, existing_at_dst_node, new_comms
+        )
     end
     return total
 end
@@ -355,17 +383,33 @@ function _direct_arc_lb_cost(
         end
         arc = tsg.graph[u_label, v_label]
         order_size = sum(c.size for c in order.commodities; init=0.0)
-        total += _direct_arc_order_lb_cost(arc, order_size, mode_selector)
+        total += _direct_arc_order_lb_cost(
+            arc, order_size, order.commodities, mode_selector
+        )
+
+        # Destination-node cost on the direct arc, charged once per order.
+        # Per-order incremental: existing is empty (LB is against empty solution).
+        dst_node = instance.network_graph.graph[v_label[1]]
+        total += lower_bound_incremental_cost(
+            dst_node.node_cost, eltype(order.commodities)[], order.commodities
+        )
     end
     return total
 end
 
 function _direct_arc_order_lb_cost(
-    arc::NetworkArc, order_size::Real, ::AbstractModeSelector
+    arc::NetworkArc,
+    order_size::Real,
+    commodities::Vector{<:LightCommodity},
+    ::AbstractModeSelector,
 )
-    return _direct_arc_order_lb_cost(arc.cost, order_size)
+    return _direct_arc_order_lb_cost(arc.cost, order_size, commodities)
 end
 
+# Two-argument variants kept for direct callers that only need the size-based
+# formula (linear, bin-packing). Auxiliary terms (carbon, stock, etc.) cannot
+# be evaluated without commodities and are only reachable via the
+# three-argument overloads below.
 function _direct_arc_order_lb_cost(cost::BinPackingArcCost, order_size::Real)
     return cost.cost_per_bin * ceil(order_size / cost.bin_capacity)
 end
@@ -374,40 +418,76 @@ function _direct_arc_order_lb_cost(cost::LinearArcCost, order_size::Real)
     return cost.cost_per_unit_size * order_size
 end
 
+# Three-argument overloads dispatched from `_direct_arc_lb_cost`. The
+# size-only terms ignore the commodities vector. Generic
+# `AbstractArcCostFunction` terms fall back to `lower_bound_incremental_cost`
+# against an empty existing-set so SumArcCost terms like CarbonArcCost and
+# StockArcCost can be evaluated using the order's commodities.
 function _direct_arc_order_lb_cost(
-    arc::MultiModalArc, order_size::Real, ::AbstractModeSelector
+    cost::BinPackingArcCost, order_size::Real, ::Vector{<:LightCommodity}
 )
-    return minimum(_direct_arc_order_lb_cost(mode.cost, order_size) for mode in arc.modes)
+    return _direct_arc_order_lb_cost(cost, order_size)
+end
+
+function _direct_arc_order_lb_cost(
+    cost::LinearArcCost, order_size::Real, ::Vector{<:LightCommodity}
+)
+    return _direct_arc_order_lb_cost(cost, order_size)
+end
+
+function _direct_arc_order_lb_cost(
+    cost::AbstractArcCostFunction, ::Real, commodities::Vector{C}
+) where {C<:LightCommodity}
+    return lower_bound_incremental_cost(cost, C[], commodities)
+end
+
+function _direct_arc_order_lb_cost(
+    cost::SumArcCost, order_size::Real, commodities::Vector{<:LightCommodity}
+)
+    return sum(_direct_arc_order_lb_cost(t, order_size, commodities) for t in cost.terms)
+end
+
+function _direct_arc_order_lb_cost(
+    arc::MultiModalArc,
+    order_size::Real,
+    commodities::Vector{<:LightCommodity},
+    ::AbstractModeSelector,
+)
+    return minimum(
+        _direct_arc_order_lb_cost(mode.cost, order_size, commodities) for mode in arc.modes
+    )
 end
 
 """
 $TYPEDSIGNATURES
 
-Compute and overwrite the `TravelTimeGraph` cost matrix entries for every arc of bundle
-`bundle_idx`, given the current solution state. Arcs forbidden for the bundle are set to `Inf`.
+Lower-level overload that accepts a `bundle` and its `bundle_arcs` set
+directly, bypassing the `instance.bundles[bundle_idx]` lookup. Used by
+`two_node_common_incremental!` (Phase 3.7) to compute the cost matrix for a
+virtual merged bundle that has no index in `instance.bundles`.
 
-All edges in the cost matrix are first reset to `Inf` so that Dijkstra cannot follow
-edges outside `bundle_arcs[bundle_idx]` (which would otherwise retain stale values from
-previous bundles' updates, or initial zeros from `TravelTimeGraph` construction).
+All edges in the cost matrix are first reset to `Inf` so that Dijkstra cannot
+follow edges outside `bundle_arcs` (which would otherwise retain stale values
+from previous bundles' updates, or initial zeros from `TravelTimeGraph`
+construction).
 
-The `cost_fn` keyword selects which per-edge cost computation is used. The default,
-`compute_ttg_edge_incremental_cost`, preserves greedy behaviour. Lower-bound callers
-can pass `cost_fn=compute_ttg_edge_lower_bound_cost`.
+The `cost_fn` keyword selects which per-edge cost computation is used. The
+default, `compute_ttg_edge_incremental_cost`, preserves greedy behaviour.
+Lower-bound callers can pass `cost_fn=compute_ttg_edge_lower_bound_cost`.
 """
 function update_bundle_cost_matrix!(
     current_solution::Solution,
     instance::Instance,
-    bundle_idx::Int,
+    bundle::Bundle,
+    bundle_arcs::Vector{Tuple{Int,Int}},
     mode_selector::AbstractModeSelector=CheapestMode();
     cost_fn::Function=compute_ttg_edge_incremental_cost,
 )
     ttg = instance.travel_time_graph
-    bundle = instance.bundles[bundle_idx]
 
-    # Reset all edges to Inf. Restricts Dijkstra to `bundle_arcs[bundle_idx]`.
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
-    for (u_code, v_code) in ttg.bundle_arcs[bundle_idx]
+    for (u_code, v_code) in bundle_arcs
         u_node_id = MetaGraphsNext.label_for(ttg.graph, u_code)[1]
         v_node_id = MetaGraphsNext.label_for(ttg.graph, v_code)[1]
 
@@ -422,4 +502,28 @@ function update_bundle_cost_matrix!(
         end
     end
     return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
+Compute and overwrite the `TravelTimeGraph` cost matrix entries for every arc
+of bundle `bundle_idx`. Forwards to the lower-level overload with the bundle
+and its precomputed `bundle_arcs[bundle_idx]`.
+"""
+function update_bundle_cost_matrix!(
+    current_solution::Solution,
+    instance::Instance,
+    bundle_idx::Int,
+    mode_selector::AbstractModeSelector=CheapestMode();
+    cost_fn::Function=compute_ttg_edge_incremental_cost,
+)
+    return update_bundle_cost_matrix!(
+        current_solution,
+        instance,
+        instance.bundles[bundle_idx],
+        instance.travel_time_graph.bundle_arcs[bundle_idx],
+        mode_selector;
+        cost_fn=cost_fn,
+    )
 end

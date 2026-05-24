@@ -11,6 +11,8 @@ using DataFrames
 using Dates
 using TransportationPlanningOptimization
 
+const TPO = TransportationPlanningOptimization
+
 # Node CSV column mappings
 const NODE_ID = :point_account
 const NODE_COST = :point_m3_cost
@@ -37,6 +39,7 @@ const COMMODITY_SIZE = :size
 const COMMODITY_ARRIVAL_DATE = :delivery_date
 const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
+const COMMODITY_LEAD_TIME_COST = :lead_time_cost
 
 """ 
     InboundNodeInfo
@@ -57,9 +60,93 @@ end
 """
     InboundCommodityInfo
 
-Test data structure for commodity metadata in inbound instances.
+Per-commodity Inbound info. Carries the stock cost read from the
+`lead_time_cost` column of the commodities CSV. Stored on `Commodity.info` and
+read by `StockArcCost.evaluate`.
 """
-struct InboundCommodityInfo end
+struct InboundCommodityInfo
+    stock_cost::Float64
+end
+
+"""
+    CarbonArcCost(carbon_per_unit_volume)
+
+Carbon cost on an arc. STP charges `carbonCost * volume / capacity` per order
+(`Algorithms/Utils/greedy_utils.jl:28`). We precompute the per-unit-volume
+rate `carbon_per_unit_volume = carbonCost / capacity` at parse time so the
+runtime formula is plain `factor * volume`.
+"""
+struct CarbonArcCost <: TPO.AbstractArcCostFunction
+    carbon_per_unit_volume::Float64
+end
+
+function TPO.evaluate(c::CarbonArcCost, comms::Vector{<:TPO.LightCommodity})
+    return c.carbon_per_unit_volume * sum(x.size for x in comms; init=0.0)
+end
+function TPO.incremental_cost(
+    c::CarbonArcCost, _::Vector{C}, new::Vector{C}
+) where {C<:TPO.LightCommodity}
+    return c.carbon_per_unit_volume * sum(x.size for x in new; init=0.0)
+end
+function TPO.lower_bound_incremental_cost(
+    c::CarbonArcCost, e::Vector{C}, n::Vector{C}
+) where {C<:TPO.LightCommodity}
+    return TPO.incremental_cost(c, e, n)
+end
+
+"""
+    StockArcCost(distance)
+
+Stock cost on an arc. STP charges `arcData.distance * order.stockCost` per
+order (`Algorithms/Utils/greedy_utils.jl:34`), where `order.stockCost =
+sum(c.stockCost for c in order.content)`. We carry the arc's distance (km)
+duplicated from the leg CSV and read per-commodity stock cost from
+`commodity.info.stock_cost`.
+
+Requires `Commodity.info` to be an `InboundCommodityInfo` (or any struct
+exposing `stock_cost`). Calling `evaluate` on commodities without that field
+errors at the property access.
+"""
+struct StockArcCost <: TPO.AbstractArcCostFunction
+    distance::Float64
+end
+
+function TPO.evaluate(c::StockArcCost, comms::Vector{<:TPO.LightCommodity})
+    return c.distance * sum(x.info.stock_cost for x in comms; init=0.0)
+end
+function TPO.incremental_cost(
+    c::StockArcCost, _::Vector{C}, new::Vector{C}
+) where {C<:TPO.LightCommodity}
+    return c.distance * sum(x.info.stock_cost for x in new; init=0.0)
+end
+function TPO.lower_bound_incremental_cost(
+    c::StockArcCost, e::Vector{C}, n::Vector{C}
+) where {C<:TPO.LightCommodity}
+    return TPO.incremental_cost(c, e, n)
+end
+
+"""
+Node volume / platform cost charged on the destination node of each
+traversed arc. STP charges `dstData.volumeCost * volume / VOLUME_FACTOR`. TPO
+uses raw m3 so the formula simplifies to `volume_cost * total_size`.
+"""
+struct NodeVolumeCost <: TPO.AbstractNodeCostFunction
+    volume_cost::Float64
+end
+
+function TPO.evaluate(c::NodeVolumeCost, comms::Vector{<:TPO.LightCommodity})
+    return c.volume_cost * sum(x.size for x in comms; init=0.0)
+end
+function TPO.incremental_cost(
+    c::NodeVolumeCost, _::Vector{C}, new::Vector{C}
+) where {C<:TPO.LightCommodity}
+    return c.volume_cost * sum(x.size for x in new; init=0.0)
+end
+function TPO.lower_bound_incremental_cost(
+    c::NodeVolumeCost, e::Vector{C}, n::Vector{C}
+) where {C<:TPO.LightCommodity}
+    return TPO.incremental_cost(c, e, n)
+end
 
 """
     parse_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
@@ -93,8 +180,9 @@ function parse_inbound_instance(
         NetworkNode(;
             id=string(row[NODE_ID]),
             node_type=node_type_symbol,
-            cost=row[NODE_COST],
+            cost=Float64(row[NODE_COST]),
             capacity=Int(row[NODE_CAPACITY]),
+            node_cost=NodeVolumeCost(Float64(row[NODE_COST])),
         )
     end
 
@@ -113,16 +201,23 @@ function parse_inbound_instance(
     filter!(row -> all(col -> !ismissing(row[col]), leg_fields_to_check), df_legs)
 
     raw_arcs = map(eachrow(df_legs)) do row
-        cost = if row.is_linear
-            LinearArcCost(row[ARC_SHIPMENT_COST] / row[ARC_CAPACITY])
+        shipment_cost = Float64(row[ARC_SHIPMENT_COST])
+        capacity = Int(row[ARC_CAPACITY])
+        carbon_cost = Float64(row[ARC_CARBON_COST])
+        distance = Float64(row[ARC_DISTANCE])
+        base_cost = if row.is_linear
+            LinearArcCost(shipment_cost / capacity)
         else
-            BinPackingArcCost(row[ARC_SHIPMENT_COST], row[ARC_CAPACITY])
+            BinPackingArcCost(shipment_cost, capacity)
         end
+        cost_tuple = (
+            base_cost, CarbonArcCost(carbon_cost / capacity), StockArcCost(distance)
+        )
         return Arc(;
             origin_id=string(row[ARC_ORIGIN_ID]),
             destination_id=string(row[ARC_DESTINATION_ID]),
             travel_time=Week(row[ARC_TRAVEL_TIME]),
-            cost=cost,
+            cost=cost_tuple,
             info=InboundArcInfo(Symbol(row[ARC_TYPE])),
         )
     end
@@ -153,6 +248,7 @@ function parse_inbound_instance(
             quantity=Int(row[COMMODITY_QUANTITY]),
             arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),
             max_delivery_time=Week(row[COMMODITY_MAX_DELIVERY_TIME]),
+            info=InboundCommodityInfo(Float64(row[COMMODITY_LEAD_TIME_COST])),
         )
     end
 
@@ -162,6 +258,9 @@ end
 export InboundNodeInfo,
     InboundArcInfo,
     InboundCommodityInfo,
+    CarbonArcCost,
+    StockArcCost,
+    NodeVolumeCost,
     parse_inbound_instance,
     NODE_ID,
     NODE_COST,
@@ -177,6 +276,7 @@ export InboundNodeInfo,
     COMMODITY_SIZE,
     COMMODITY_ARRIVAL_DATE,
     COMMODITY_MAX_DELIVERY_TIME,
-    COMMODITY_QUANTITY
+    COMMODITY_QUANTITY,
+    COMMODITY_LEAD_TIME_COST
 
 end  # module Inbound

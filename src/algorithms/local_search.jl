@@ -107,6 +107,49 @@ end
 """
 $TYPEDSIGNATURES
 
+Attempt a single-bundle reinsertion. Save the bundle's current path, remove
+it, recompute the cost matrix against the now-bundle-less solution, run
+Dijkstra, and accept the new path only if its net cost delta is strictly
+negative (improvement greater than `1e-6`). Otherwise restore the old path.
+Returns the cost improvement (non-negative `Float64`).
+
+Used by `bundle_reinsertion_improvement!` as its per-bundle inner step and by
+`two_node_common_incremental!` (Phase 3.7) as the refine step. Bundles whose
+path is already empty return `0.0` without side effects.
+"""
+function _try_reinsert_bundle!(
+    sol::Solution, instance::Instance, bundle_idx::Int, mode_selector::AbstractModeSelector
+)
+    isempty(sol.bundle_paths[bundle_idx]) && return 0.0
+    ttg = instance.travel_time_graph
+
+    old_path = copy(sol.bundle_paths[bundle_idx])
+    cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
+    update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector)
+    origin = ttg.origin_codes[bundle_idx]
+    dest = ttg.destination_codes[bundle_idx]
+    res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
+    new_path = Graphs.enumerate_paths(res, dest)
+
+    if isempty(new_path)
+        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector)
+        return 0.0
+    end
+
+    cost_added = add_bundle_path!(sol, instance, bundle_idx, new_path; mode_selector)
+    net_delta = cost_added + cost_removed
+    if net_delta < -1e-6
+        return -net_delta
+    else
+        remove_bundle_path!(sol, instance, bundle_idx)
+        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector)
+        return 0.0
+    end
+end
+
+"""
+$TYPEDSIGNATURES
+
 For each bundle in turn, remove its current path, recompute the cost matrix
 against the now-bundle-less solution, run Dijkstra, and accept the new path
 only if its net cost delta is strictly negative (improvement greater than
@@ -136,7 +179,6 @@ function bundle_reinsertion_improvement!(
 )
     saved = 0.0
     t_start = time()
-    ttg = instance.travel_time_graph
     for i in eachindex(instance.bundles)
         time() - t_start > time_limit && break
         isempty(sol.bundle_paths[i]) && continue
@@ -144,28 +186,7 @@ function bundle_reinsertion_improvement!(
             bundle_estimated_removal_cost(sol, instance, i) <= cost_threshold
             continue
         end
-
-        old_path = copy(sol.bundle_paths[i])
-        cost_removed = remove_bundle_path!(sol, instance, i)  # <= 0
-        update_bundle_cost_matrix!(sol, instance, i, mode_selector)
-        origin = ttg.origin_codes[i]
-        dest = ttg.destination_codes[i]
-        res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-        new_path = Graphs.enumerate_paths(res, dest)
-
-        if isempty(new_path)
-            add_bundle_path!(sol, instance, i, old_path; mode_selector)
-            continue
-        end
-
-        cost_added = add_bundle_path!(sol, instance, i, new_path; mode_selector)
-        net_delta = cost_added + cost_removed  # negative if improvement
-        if net_delta < -1e-6
-            saved += -net_delta
-        else
-            remove_bundle_path!(sol, instance, i)
-            add_bundle_path!(sol, instance, i, old_path; mode_selector)
-        end
+        saved += _try_reinsert_bundle!(sol, instance, i, mode_selector)
     end
     return saved
 end

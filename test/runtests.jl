@@ -46,6 +46,9 @@ using .Inbound
         @testset "Local search" begin
             include("test_local_search.jl")
         end
+        @testset "Two-node consolidation" begin
+            include("test_two_node_consolidation.jl")
+        end
         @testset "Tiny instance" begin
             include("test_tiny_instance.jl")
         end
@@ -55,6 +58,15 @@ using .Inbound
         @testset "Bin packing checks" begin
             include("test_bin_packing.jl")
             include("test_tentative_bin_packing.jl")
+        end
+        @testset "SumArcCost" begin
+            include("test_sum_arc_cost.jl")
+        end
+        @testset "NodeCost" begin
+            include("test_node_cost.jl")
+        end
+        @testset "Inbound extensions" begin
+            include("test_inbound_extensions.jl")
         end
     end
     @testset "Cross-package comparison vs ShipperTransportationPlanning" begin

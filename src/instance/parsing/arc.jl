@@ -6,7 +6,7 @@ Representation of an arc in the network graph.
 # Fields
 $TYPEDFIELDS
 """
-@kwdef struct Arc{C<:AbstractArcCostFunction,K,T<:Period}
+struct Arc{C<:AbstractArcCostFunction,K,T<:Period}
     "id of the origin node"
     origin_id::String
     "id of the destination node"
@@ -14,11 +14,52 @@ $TYPEDFIELDS
     "travel time in number of discrete time steps (0 if less than the time discretization step)"
     travel_time::T
     "capacity of the arc (in size units)"
-    capacity::Int = typemax(Int)
+    capacity::Int
     "cost function associated with the arc"
     cost::C
     "additional information associated with the arc"
-    info::K = nothing
+    info::K
+end
+
+"""
+$TYPEDSIGNATURES
+
+Normalize an arc cost argument. Accepts a single `AbstractArcCostFunction` or
+a tuple of them. Returns the single cost unwrapped (no `SumArcCost` overhead
+for the common case), or a `SumArcCost` when multiple costs are provided.
+
+Throws `ArgumentError` on an empty tuple (matches `SumArcCost`'s own check).
+"""
+_normalize_arc_cost(c::AbstractArcCostFunction) = c
+function _normalize_arc_cost(t::Tuple{Vararg{AbstractArcCostFunction}})
+    isempty(t) && throw(ArgumentError("Arc constructor: cost cannot be an empty tuple"))
+    return length(t) == 1 ? only(t) : SumArcCost(t)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Keyword constructor for `Arc`. Accepts `cost` as either a single
+`AbstractArcCostFunction` or a tuple of them (auto-wrapped via `SumArcCost`
+when more than one is given).
+"""
+function Arc(;
+    origin_id::AbstractString,
+    destination_id::AbstractString,
+    travel_time::Period,
+    cost,
+    capacity::Int=typemax(Int),
+    info=nothing,
+)
+    normalized_cost = _normalize_arc_cost(cost)
+    return Arc(
+        String(origin_id),
+        String(destination_id),
+        travel_time,
+        capacity,
+        normalized_cost,
+        info,
+    )
 end
 
 function Base.show(io::IO, arc::Arc)

@@ -770,3 +770,35 @@ Compute the cost of the solution (legacy signature for compatibility).
 function cost(sol::Solution, instance::Instance)
     return cost(sol)
 end
+
+"""
+$TYPEDSIGNATURES
+
+Total cost of `sol` including both arc costs (sum over assignments) and
+destination-node costs (sum over each bundle's path, charging
+`evaluate(dst.node_cost, comms_on_edge)` for each TSG edge in the path).
+
+Use this when comparing against external systems that include node costs in
+their total (for example STP's `compute_cost`). For arc-only cost use `cost(sol)`.
+"""
+function cost_with_nodes(sol::Solution{C}, instance::Instance) where {C}
+    total = cost(sol)
+    tsg = instance.time_space_graph
+    for (i, path) in enumerate(sol.bundle_paths)
+        isempty(path) && continue
+        bundle = instance.bundles[i]
+        for order in bundle.orders
+            tsg_path = [
+                project_to_time_space_graph(node_code, order, instance) for
+                node_code in path
+            ]
+            for k in 1:(length(tsg_path) - 1)
+                v_tsg = tsg_path[k + 1]
+                v_label = MetaGraphsNext.label_for(tsg.graph, v_tsg)
+                dst_node = instance.network_graph.graph[v_label[1]]
+                total += evaluate(dst_node.node_cost, order.commodities)
+            end
+        end
+    end
+    return total
+end

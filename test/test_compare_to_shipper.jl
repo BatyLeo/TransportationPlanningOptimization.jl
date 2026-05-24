@@ -505,12 +505,12 @@ end
 
             tpo_sol = TPO.greedy_heuristic(tpo_instance)
             tpo_paths = tpo_solution_paths_spatial(tpo_sol, tpo_instance, matches)
-            tpo_total_cost = TPO.cost(tpo_sol)
+            tpo_total_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
 
             stp_sol = STP.Solution(stp_instance)
             STP.greedy!(stp_sol, stp_instance)
             stp_paths = stp_solution_paths_spatial(stp_sol, stp_instance, matches)
-            stp_total_cost = stp_transport_only_cost(stp_sol, stp_instance)
+            stp_total_cost = STP.compute_cost(stp_instance, stp_sol)
 
             ratio = tpo_total_cost / stp_total_cost
             @info "Greedy cost" instance = name tpo_total_cost stp_total_cost ratio
@@ -528,10 +528,14 @@ end
             # some diverge). We do NOT assert equality here. Path divergences
             # are logged above; the cost assertion below is the global signal.
 
-            # Loose cost equality: greedy with different orderings can shift
-            # the total cost by a small percent. 2% covers the observed gap
-            # on `tiny` and `small` with headroom.
-            @test isapprox(tpo_total_cost, stp_total_cost; rtol=2e-2)
+            # Loose cost equality (both sides now use full cost via
+            # `cost_with_nodes` / `compute_cost`, consistent with the LB test).
+            # Greedy with different insertion-order keys (TPO `total_size` vs
+            # STP `maxPackSize`) shifts the total cost by a small percent: on
+            # `tiny` the costs match exactly (ratio 1.0), on `small` TPO is
+            # ~2.1% higher than STP. The 3% rtol covers both with headroom.
+            # Insertion-order parity is tracked separately and out of scope here.
+            @test isapprox(tpo_total_cost, stp_total_cost; rtol=3e-2)
         end
     end
 end
@@ -545,15 +549,16 @@ end
 
             tpo_sol = TPO.lower_bound(tpo_instance)
             tpo_paths = tpo_solution_paths_spatial(tpo_sol, tpo_instance, matches)
-            tpo_total_cost = TPO.cost(tpo_sol)
+            tpo_total_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
 
             stp_sol = STP.Solution(stp_instance)
             STP.lower_bound!(stp_sol, stp_instance)
             stp_paths = stp_solution_paths_spatial(stp_sol, stp_instance, matches)
-            stp_total_cost = stp_transport_only_cost(stp_sol, stp_instance)
+            stp_total_cost = STP.compute_cost(stp_instance, stp_sol)
 
             ratio = tpo_total_cost / stp_total_cost
-            @info "Lower bound cost (post-insertion, integer bins)" instance = name tpo_total_cost stp_total_cost ratio
+            @info "Lower bound cost (post-insertion, integer bins, full cost)" instance =
+                name tpo_total_cost stp_total_cost ratio
 
             log_path_divergences("lower_bound", name, matches, tpo_paths, stp_paths)
 
@@ -562,20 +567,24 @@ end
                 @test last(tpo_paths[od]) == last(stp_paths[od])
             end
 
-            # Wide cost tolerance: post-direct-arc-ceil fix (LB now applies
-            # `ceil(volume / capacity)` per order on the bundle's direct arc,
-            # matching STP's `get_lb_transport_units`), TPO and STP agree to
-            # within ~2% on `small`. On `tiny` (4 bundles) they diverge by
-            # ~50% because STP's LB additionally charges `volume_stock_cost`
-            # (Renault-specific stock + carbon + node platform cost) on every
-            # arc, which TPO does not model. On `tiny`, that stock penalty
-            # flips the LB's path choice for at least one bundle (TPO picks
-            # multi-hop, STP picks direct), and with only 4 bundles a single
-            # path difference moves the total noticeably. On `small` the effect
-            # averages out. Adding stock/carbon cost to TPO is a Phase 4+
-            # follow-up. The 0.6 rtol catches gross divergence on both
-            # instances while accepting tiny's structural mismatch.
-            @test isapprox(tpo_total_cost, stp_total_cost; rtol=6e-1)
+            # After cost composition + Inbound extensions (stock + carbon + node
+            # platform costs), TPO's `cost_with_nodes` and STP's `compute_cost`
+            # agree to within 0.05% on `small` (312 bundles, observed ratio
+            # 0.999583).
+            #
+            # On `tiny` (4 bundles) they still diverge by ~50% because TPO's LB
+            # picks a 3-hop path (O1 -> P2 -> P4 -> D1) for bundle O1->D1 where
+            # STP's LB picks the direct arc. With all bundle volumes tiny enough
+            # to fit in a single bin and per-arc bin cost 10, the multi-hop
+            # path's fractional bin count (LB relaxation on multi-hop arcs) is
+            # cheaper for TPO's Dijkstra than the integer-bin direct arc, while
+            # STP's per-arc `volume_stock_cost` (always charged in `compute_cost`,
+            # even on the LB relaxation cost matrix) tilts STP toward the direct
+            # arc. With only 4 bundles a single path difference moves the total
+            # by 50%. This is a genuine LB-algorithm path-choice divergence on
+            # the smallest instance, not a measurement bug.
+            rtol = name == "small" ? 1e-3 : 6e-1
+            @test isapprox(tpo_total_cost, stp_total_cost; rtol=rtol)
         end
     end
 end
@@ -625,12 +634,12 @@ end
 
             tpo_sol = TPO.greedy_heuristic(tpo_instance)
             TPO.local_search!(tpo_sol, tpo_instance; time_limit=60)
-            tpo_total_cost = TPO.cost(tpo_sol)
+            tpo_total_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
 
             stp_sol = STP.Solution(stp_instance)
             STP.greedy!(stp_sol, stp_instance)
             STP.local_search!(stp_sol, stp_instance; timeLimit=60)
-            stp_total_cost = stp_transport_only_cost(stp_sol, stp_instance)
+            stp_total_cost = STP.compute_cost(stp_instance, stp_sol)
 
             ratio = tpo_total_cost / stp_total_cost
             @info "Local-search comparison" instance = name tpo_total_cost stp_total_cost ratio
@@ -733,6 +742,81 @@ end
                     tpo_instance,
                 )
                 @test TPO.is_feasible(stp_in_tpo, tpo_instance)
+            end
+        end
+    end
+end
+
+# Cross-package cost round-trip.
+#
+# For each algorithm and each instance, run both packages independently, then
+# translate each package's solution into the other package's representation
+# and recompute the total cost there. Asserts the recomputed cost matches the
+# original package's reported cost. This isolates the cost model (per-arc
+# BinPackingArcCost + LinearArcCost + CarbonArcCost + StockArcCost plus
+# per-destination-node NodeVolumeCost) from algorithm divergence in path
+# choice, sort key, RNG order, and Dijkstra tie breaks.
+#
+# Residual sources of error after cost composition + Inbound extensions:
+# - FFD tie breaks: when two commodities have identical size, TPO's and STP's
+#   FFD may put them in different bins. Bin counts can differ by 1.
+# - STP_VOLUME_FACTOR = 100 integer scaling: TPO sizes are Float64 m3, STP
+#   sizes are Int (m3 * 100). Round-trip through STP truncates fractional
+#   commodities and shifts bin packing by up to 1 bin per arc.
+@testset "Cross-package cost round-trip" begin
+    for name in COMPARISON_INSTANCES
+        @testset "instance $(name)" begin
+            (; tpo_instance, stp_instance) = load_instance_pair(name)
+            stp_instance = setup_stp_instance_for_algorithms(stp_instance)
+
+            @testset "greedy" begin
+                tpo_sol = TPO.greedy_heuristic(tpo_instance)
+                tpo_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
+                tpo_in_stp = build_stp_solution_from_translated_paths(
+                    translate_tpo_solution_to_stp(tpo_sol, tpo_instance, stp_instance),
+                    stp_instance,
+                )
+                tpo_in_stp_cost = STP.compute_cost(stp_instance, tpo_in_stp)
+                @info "greedy round-trip TPO->STP" instance = name tpo_cost tpo_in_stp_cost ratio =
+                    tpo_in_stp_cost / tpo_cost
+                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=1e-2)
+
+                stp_sol = STP.Solution(stp_instance)
+                STP.greedy!(stp_sol, stp_instance)
+                stp_cost = STP.compute_cost(stp_instance, stp_sol)
+                stp_in_tpo = build_tpo_solution_from_translated_paths(
+                    translate_stp_solution_to_tpo(stp_sol, stp_instance, tpo_instance),
+                    tpo_instance,
+                )
+                stp_in_tpo_cost = TPO.cost_with_nodes(stp_in_tpo, tpo_instance)
+                @info "greedy round-trip STP->TPO" instance = name stp_cost stp_in_tpo_cost ratio =
+                    stp_in_tpo_cost / stp_cost
+                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=1e-2)
+            end
+
+            @testset "lower_bound" begin
+                tpo_sol = TPO.lower_bound(tpo_instance)
+                tpo_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
+                tpo_in_stp = build_stp_solution_from_translated_paths(
+                    translate_tpo_solution_to_stp(tpo_sol, tpo_instance, stp_instance),
+                    stp_instance,
+                )
+                tpo_in_stp_cost = STP.compute_cost(stp_instance, tpo_in_stp)
+                @info "lower_bound round-trip TPO->STP" instance = name tpo_cost tpo_in_stp_cost ratio =
+                    tpo_in_stp_cost / tpo_cost
+                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=1e-2)
+
+                stp_sol = STP.Solution(stp_instance)
+                STP.lower_bound!(stp_sol, stp_instance)
+                stp_cost = STP.compute_cost(stp_instance, stp_sol)
+                stp_in_tpo = build_tpo_solution_from_translated_paths(
+                    translate_stp_solution_to_tpo(stp_sol, stp_instance, tpo_instance),
+                    tpo_instance,
+                )
+                stp_in_tpo_cost = TPO.cost_with_nodes(stp_in_tpo, tpo_instance)
+                @info "lower_bound round-trip STP->TPO" instance = name stp_cost stp_in_tpo_cost ratio =
+                    stp_in_tpo_cost / stp_cost
+                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=1e-2)
             end
         end
     end
