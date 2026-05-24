@@ -15,13 +15,13 @@ function lower_bound!(
 )
     ttg = instance.travel_time_graph
     empty_sol = Solution(instance)
-    # Insert bundles in decreasing size order, matching `greedy_heuristic`.
-    # The LB paths themselves are computed against `empty_sol` and therefore
-    # independent of insertion order, but the order in which paths are added
-    # to `current_solution` affects shared-arc bin packing in the resulting
-    # solution. Sorting by total size keeps the post-insertion `cost(lb_sol)`
-    # competitive with greedy.
-    sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
+    # Insert bundles in decreasing max-pack-size order, matching
+    # `greedy_heuristic`. The LB paths themselves are computed against
+    # `empty_sol` and therefore independent of insertion order, but the order
+    # in which paths are added to `current_solution` affects shared-arc bin
+    # packing in the resulting solution. Sorting by `max_pack_size` keeps the
+    # post-insertion `cost(lb_sol)` competitive with greedy.
+    sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     @showprogress for i in sorted_indices
         update_bundle_cost_matrix!(
             empty_sol, instance, i, mode_selector; cost_fn=compute_ttg_edge_lower_bound_cost
@@ -125,11 +125,11 @@ function lower_bound_filtering!(
 )
     ttg = instance.travel_time_graph
     empty_sol = Solution(instance)
-    # Size-decreasing insertion order, matching `greedy_heuristic` and
-    # `lower_bound!`. Path selection is order-independent (computed against
-    # the empty solution), but the order affects shared-arc bin packing in
-    # the resulting solution.
-    sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
+    # Max-pack-size decreasing insertion order, matching `greedy_heuristic`
+    # and `lower_bound!`. Path selection is order-independent (computed
+    # against the empty solution), but the order affects shared-arc bin
+    # packing in the resulting solution.
+    sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     @showprogress for i in sorted_indices
         update_bundle_cost_matrix!(
             empty_sol, instance, i, mode_selector; cost_fn=compute_ttg_edge_filtering_cost

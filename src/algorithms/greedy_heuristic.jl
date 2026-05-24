@@ -50,8 +50,8 @@ function greedy_heuristic(
     instance::Instance; mode_selector::AbstractModeSelector=CheapestMode()
 )
     solution = Solution(instance)
-    # Sort bundles by decreasing total size
-    sorted_indices = sortperm(instance.bundles; by=total_size, rev=true)
+    # Sort bundles by decreasing max single-order pack size (matches STP).
+    sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     # Then, insert them one by one into the solution
     @showprogress for i in sorted_indices
         insert_bundle!(solution, instance, i, mode_selector)

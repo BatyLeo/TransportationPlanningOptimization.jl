@@ -52,6 +52,8 @@ using .Inbound
         @testset "Tiny instance" begin
             include("test_tiny_instance.jl")
         end
+        include("test_mix_start.jl")
+        include("test_solve_filtered.jl")
         @testset "Forbidden constraints" begin
             include("test_forbidden_constraints.jl")
         end

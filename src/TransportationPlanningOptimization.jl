@@ -38,14 +38,16 @@ include("solution/parsing.jl")
 include("algorithms/cost_matrix_update.jl")
 include("algorithms/greedy_heuristic.jl")
 include("algorithms/lower_bound.jl")
+include("algorithms/mix_start.jl")
 include("algorithms/instance_extraction.jl")
 include("algorithms/merge_solutions.jl")
 include("algorithms/local_search.jl")
 include("algorithms/two_node_consolidation.jl")
+include("algorithms/solve.jl")
 
 export LightCommodity
 export Instance, Bundle, Order, Commodity
-export bundle_count, order_count, commodity_count, total_size
+export bundle_count, order_count, commodity_count, total_size, max_pack_size
 export write_solution_csv, read_solution_csv
 export NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
 export AbstractNodeCostFunction, NoNodeCost
@@ -67,6 +69,8 @@ export commodities_of, bins_of, cost_of
 export AbstractModeSelector, CheapestMode, FillThenSpillMode
 export greedy_heuristic, lower_bound, lower_bound!
 export lower_bound_filtering, lower_bound_filtering!
+export mix_greedy_and_lower_bound, choose_best_feasible
+export solve_filtered
 export extract_filtered_instance
 export merge_solutions
 export bin_packing_improvement!, bundle_reinsertion_improvement!, local_search!

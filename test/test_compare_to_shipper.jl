@@ -530,12 +530,11 @@ end
 
             # Loose cost equality (both sides now use full cost via
             # `cost_with_nodes` / `compute_cost`, consistent with the LB test).
-            # Greedy with different insertion-order keys (TPO `total_size` vs
-            # STP `maxPackSize`) shifts the total cost by a small percent: on
-            # `tiny` the costs match exactly (ratio 1.0), on `small` TPO is
-            # ~2.1% higher than STP. The 3% rtol covers both with headroom.
-            # Insertion-order parity is tracked separately and out of scope here.
-            @test isapprox(tpo_total_cost, stp_total_cost; rtol=3e-2)
+            # Both packages now share the `max_pack_size` insertion-order key.
+            # On `tiny` the costs match exactly (ratio 1.0), on `small` TPO is
+            # ~1.6% higher than STP (residual is FFD tie-breaks on identical
+            # commodity sizes). The 2.5% rtol covers both with ~1.5x headroom.
+            @test isapprox(tpo_total_cost, stp_total_cost; rtol=2.5e-2)
         end
     end
 end
@@ -779,7 +778,10 @@ end
                 tpo_in_stp_cost = STP.compute_cost(stp_instance, tpo_in_stp)
                 @info "greedy round-trip TPO->STP" instance = name tpo_cost tpo_in_stp_cost ratio =
                     tpo_in_stp_cost / tpo_cost
-                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=1e-2)
+                # Greedy round-trip residual on small is ~0.1% (FFD tie-breaks
+                # on identical commodity sizes). 3e-3 rtol covers with ~3x
+                # headroom.
+                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=3e-3)
 
                 stp_sol = STP.Solution(stp_instance)
                 STP.greedy!(stp_sol, stp_instance)
@@ -791,7 +793,7 @@ end
                 stp_in_tpo_cost = TPO.cost_with_nodes(stp_in_tpo, tpo_instance)
                 @info "greedy round-trip STP->TPO" instance = name stp_cost stp_in_tpo_cost ratio =
                     stp_in_tpo_cost / stp_cost
-                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=1e-2)
+                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=3e-3)
             end
 
             @testset "lower_bound" begin
@@ -804,7 +806,10 @@ end
                 tpo_in_stp_cost = STP.compute_cost(stp_instance, tpo_in_stp)
                 @info "lower_bound round-trip TPO->STP" instance = name tpo_cost tpo_in_stp_cost ratio =
                     tpo_in_stp_cost / tpo_cost
-                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=1e-2)
+                # LB round-trip residual is ~5e-5 (pure numerical, no FFD
+                # involved since LB uses fractional bin counts). 5e-4 rtol
+                # covers with ~10x headroom.
+                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=5e-4)
 
                 stp_sol = STP.Solution(stp_instance)
                 STP.lower_bound!(stp_sol, stp_instance)
@@ -816,8 +821,70 @@ end
                 stp_in_tpo_cost = TPO.cost_with_nodes(stp_in_tpo, tpo_instance)
                 @info "lower_bound round-trip STP->TPO" instance = name stp_cost stp_in_tpo_cost ratio =
                     stp_in_tpo_cost / stp_cost
-                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=1e-2)
+                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=5e-4)
             end
+
+            @testset "mix" begin
+                candidates = TPO.mix_greedy_and_lower_bound(tpo_instance)
+                tpo_sol = candidates.mixed
+                tpo_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
+                tpo_in_stp = build_stp_solution_from_translated_paths(
+                    translate_tpo_solution_to_stp(tpo_sol, tpo_instance, stp_instance),
+                    stp_instance,
+                )
+                tpo_in_stp_cost = STP.compute_cost(stp_instance, tpo_in_stp)
+                @info "mix round-trip TPO->STP" instance = name tpo_cost tpo_in_stp_cost ratio =
+                    tpo_in_stp_cost / tpo_cost
+                # Mix round-trip residual is FFD tie-break driven (same
+                # mechanism as the greedy round-trip). Observed ratios: tiny
+                # 1.0 (exact), small 0.99994 (gap 5.6e-5). The 3e-3 rtol
+                # covers small with ~50x headroom and leaves room for cost
+                # composition drift on larger instances.
+                @test isapprox(tpo_in_stp_cost, tpo_cost; rtol=3e-3)
+
+                stp_sol = STP.Solution(stp_instance)
+                STP.mix_greedy_and_lower_bound!(stp_sol, stp_instance)
+                stp_cost = STP.compute_cost(stp_instance, stp_sol)
+                stp_in_tpo = build_tpo_solution_from_translated_paths(
+                    translate_stp_solution_to_tpo(stp_sol, stp_instance, tpo_instance),
+                    tpo_instance,
+                )
+                stp_in_tpo_cost = TPO.cost_with_nodes(stp_in_tpo, tpo_instance)
+                @info "mix round-trip STP->TPO" instance = name stp_cost stp_in_tpo_cost ratio =
+                    stp_in_tpo_cost / stp_cost
+                # STP->TPO round-trip residual on small is ~9.6e-4 (FFD
+                # tie-breaks plus VOLUME_FACTOR rounding). The 3e-3 rtol
+                # covers with ~3x headroom.
+                @test isapprox(stp_in_tpo_cost, stp_cost; rtol=3e-3)
+            end
+        end
+    end
+end
+
+@testset "Cross-package comparison: mixed paths + transport cost" begin
+    for name in COMPARISON_INSTANCES
+        @testset "instance $(name)" begin
+            (; tpo_instance, stp_instance) = load_instance_pair(name)
+            stp_instance = setup_stp_instance_for_algorithms(stp_instance)
+
+            tpo_sol = TPO.mix_greedy_and_lower_bound(tpo_instance).mixed
+            tpo_total_cost = TPO.cost_with_nodes(tpo_sol, tpo_instance)
+
+            stp_sol = STP.Solution(stp_instance)
+            STP.mix_greedy_and_lower_bound!(stp_sol, stp_instance)
+            stp_total_cost = STP.compute_cost(stp_instance, stp_sol)
+
+            ratio = tpo_total_cost / stp_total_cost
+            @info "Mix cost" instance = name tpo_total_cost stp_total_cost ratio
+
+            # TPO reproduces STP's blend formula exactly. The remaining gap
+            # is FFD tie-break driven. Observed ratios: tiny 1.0 (exact),
+            # small 1.00096 (gap 9.65e-4). The small rtol is 3e-3 (~3x
+            # headroom over the observed gap). Tiny keeps a wider 6e-1 bound
+            # because with only 4 bundles, a single Dijkstra tie-break flip
+            # can move the cost by ~50% (same pattern as the LB paths test).
+            rtol = name == "small" ? 3e-3 : 6e-1
+            @test isapprox(tpo_total_cost, stp_total_cost; rtol=rtol)
         end
     end
 end

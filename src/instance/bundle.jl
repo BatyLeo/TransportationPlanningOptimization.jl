@@ -52,3 +52,20 @@ Compute the total size of all commodities in the bundle.
 function total_size(bundle::Bundle)
     return sum(total_size(order) for order in bundle.orders; init=0.0)
 end
+
+"""
+$TYPEDSIGNATURES
+
+Compute the maximum single-order volume in the bundle (the largest sum of
+commodity sizes within any one `Order`). Used as the bundle-insertion sort key
+in `greedy_heuristic`, `lower_bound`, `lower_bound_filtering`, and
+`mix_greedy_and_lower_bound`. Prioritising bundles with large single-order
+loads reduces the chance of later bundles getting boxed out of nearly-full
+bins.
+"""
+function max_pack_size(bundle::Bundle)
+    return maximum(
+        sum(c.size for c in order.commodities; init=0.0) for order in bundle.orders;
+        init=0.0,
+    )
+end
