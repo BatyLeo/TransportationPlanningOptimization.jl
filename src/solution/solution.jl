@@ -287,6 +287,55 @@ end
 """
 $TYPEDSIGNATURES
 
+Frozen-bin commit for a single-mode slot. `slot.commodities` has already had
+`new_comms` appended by the caller. Instead of re-packing the union (the
+`:ffd_union` path via `_update_single_assignment_cost!`), this adds only
+`new_comms` to the cached `slot.bins` via first-fit, keeping the existing bins
+frozen. The result mirrors `frozen_incremental_count!` exactly, so the committed
+bin count matches what the frozen incremental cost predicted.
+
+Dispatch by cost type:
+- `BinPackingArcCost`: grow `slot.bins` via `frozen_first_fit_add!` and set
+  `slot.cost = cost_per_bin * length(slot.bins)`.
+- `SumArcCost`: grow the bin-packing term's `slot.bins` via first-fit and set
+  `slot.cost = cost_per_bin * length(slot.bins)` plus `evaluate` of the
+  non-bin-packing terms (linear in volume, hence mode-independent).
+- any other (linear, shortcut): identical to `_update_single_assignment_cost!`.
+"""
+function _frozen_commit_single_assignment!(
+    slot::SingleAssignment{C}, arc_cost::BinPackingArcCost, new_comms::Vector{C}
+) where {C}
+    frozen_first_fit_add!(slot.bins, Float64(arc_cost.bin_capacity), new_comms)
+    slot.cost = arc_cost.cost_per_bin * length(slot.bins)
+    return nothing
+end
+
+function _frozen_commit_single_assignment!(
+    slot::SingleAssignment{C}, arc_cost::SumArcCost, new_comms::Vector{C}
+) where {C}
+    total = 0.0
+    for t in arc_cost.terms
+        if t isa BinPackingArcCost
+            frozen_first_fit_add!(slot.bins, Float64(t.bin_capacity), new_comms)
+            total += t.cost_per_bin * length(slot.bins)
+        else
+            total += evaluate(t, slot.commodities)
+        end
+    end
+    slot.cost = total
+    return nothing
+end
+
+function _frozen_commit_single_assignment!(
+    slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction, ::Vector{C}
+) where {C}
+    # Non-bin-packing costs are identical under both packing modes.
+    return _update_single_assignment_cost!(slot, arc_cost)
+end
+
+"""
+$TYPEDSIGNATURES
+
 Partition `new_comms` across the modes of `arc` in cheapest-first order, filling
 each mode up to its remaining capacity before moving to the next.
 
@@ -369,14 +418,19 @@ function _add_order_to_assignment!(
     edge::Tuple{Int,Int},
     arc::NetworkArc,
     new_commodities::Vector{C},
-    ::AbstractModeSelector,
+    ::AbstractModeSelector;
+    packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         SingleAssignment{C}()
     end::SingleAssignment{C}
     before = assignment.cost
     append!(assignment.commodities, new_commodities)
-    _update_single_assignment_cost!(assignment, arc.cost)
+    if packing === :frozen
+        _frozen_commit_single_assignment!(assignment, arc.cost, new_commodities)
+    else
+        _update_single_assignment_cost!(assignment, arc.cost)
+    end
     return assignment.cost - before
 end
 
@@ -385,7 +439,8 @@ function _add_order_to_assignment!(
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
     new_commodities::Vector{C},
-    ::CheapestMode,
+    ::CheapestMode;
+    packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         MultiAssignment{C}(length(arc.modes))
@@ -394,8 +449,8 @@ function _add_order_to_assignment!(
         if _mode_has_capacity(
             arc.modes[i], assignment.per_mode[i].commodities, new_commodities
         )
-            incremental_cost(
-                arc.modes[i].cost, assignment.per_mode[i].commodities, new_commodities
+            _commit_mode_incremental(
+                arc.modes[i].cost, assignment.per_mode[i], new_commodities, packing
             )
         else
             Inf
@@ -412,8 +467,35 @@ function _add_order_to_assignment!(
     slot = assignment.per_mode[best_mode_idx]
     before = slot.cost
     append!(slot.commodities, new_commodities)
-    _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
+    if packing === :frozen
+        _frozen_commit_single_assignment!(
+            slot, arc.modes[best_mode_idx].cost, new_commodities
+        )
+    else
+        _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
+    end
     return slot.cost - before
+end
+
+"""
+$TYPEDSIGNATURES
+
+Per-mode incremental cost used by the `CheapestMode` commit to pick the mode.
+Under `:frozen` it scores against the slot's cached frozen bins (matching the
+greedy cost matrix), otherwise it uses the standard `incremental_cost`.
+"""
+function _commit_mode_incremental(
+    mode_cost::AbstractArcCostFunction,
+    slot::SingleAssignment{C},
+    new_commodities::Vector{C},
+    packing::Symbol,
+) where {C<:LightCommodity}
+    if packing === :frozen
+        return _frozen_edge_incremental_cost(
+            BinPackingBuffer{C}(), mode_cost, slot, new_commodities
+        )
+    end
+    return incremental_cost(mode_cost, slot.commodities, new_commodities)
 end
 
 function _add_order_to_assignment!(
@@ -421,8 +503,12 @@ function _add_order_to_assignment!(
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
     new_commodities::Vector{C},
-    ::FillThenSpillMode,
+    ::FillThenSpillMode;
+    packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
+    # FillThenSpillMode always uses ffd_union semantics (re-packs each affected
+    # mode), matching its `_edge_incremental_cost`. `packing` is accepted for
+    # signature uniformity but does not switch to frozen here.
     assignment = get!(assignments, edge) do
         MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
@@ -532,6 +618,7 @@ function add_bundle_path!(
     bundle_idx::Int,
     path::Vector{Int};
     mode_selector::AbstractModeSelector=CheapestMode(),
+    packing::Symbol=:frozen,
 ) where {C}
     # Remove potential shortcut edges before storing the path (TTG may contain shortcuts).
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
@@ -560,7 +647,7 @@ function add_bundle_path!(
         v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
         arc = tsg.graph[u_label, v_label]
         cost_delta += _add_order_to_assignment!(
-            current_solution.assignments, edge, arc, new_comms, mode_selector
+            current_solution.assignments, edge, arc, new_comms, mode_selector; packing
         )
     end
     return cost_delta

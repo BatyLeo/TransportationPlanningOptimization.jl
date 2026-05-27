@@ -177,6 +177,7 @@ function two_node_common_incremental!(
     mode_selector::AbstractModeSelector=CheapestMode(),
     cost_threshold::Real=0.0,
     refine::Bool=true,
+    packing::Symbol=:ffd_union,
 )
     lifted_idxs = bundles_through_arc(sol, src, dst)
     isempty(lifted_idxs) && return 0.0
@@ -197,26 +198,28 @@ function two_node_common_incremental!(
 
     virtual_bundle, virtual_arcs = merge_bundles(instance, lifted_idxs)
 
-    update_bundle_cost_matrix!(sol, instance, virtual_bundle, virtual_arcs, mode_selector)
+    update_bundle_cost_matrix!(
+        sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing
+    )
     ttg = instance.travel_time_graph
     res = Graphs.dijkstra_shortest_paths(ttg.graph, src, ttg.cost_matrix)
     new_sub_path = Graphs.enumerate_paths(res, dst)
 
     if isempty(new_sub_path)
         for (k, i) in enumerate(lifted_idxs)
-            add_bundle_path!(sol, instance, i, old_paths[k]; mode_selector)
+            add_bundle_path!(sol, instance, i, old_paths[k]; mode_selector, packing)
         end
         return 0.0
     end
 
     for (k, i) in enumerate(lifted_idxs)
         new_path = splice_path(old_paths[k], src, dst, new_sub_path)
-        add_bundle_path!(sol, instance, i, new_path; mode_selector)
+        add_bundle_path!(sol, instance, i, new_path; mode_selector, packing)
     end
 
     if refine
         for i in Random.shuffle(lifted_idxs)
-            _try_reinsert_bundle!(sol, instance, i, mode_selector)
+            _try_reinsert_bundle!(sol, instance, i, mode_selector; packing)
         end
     end
 
@@ -226,7 +229,7 @@ function two_node_common_incremental!(
     else
         for (k, i) in enumerate(lifted_idxs)
             remove_bundle_path!(sol, instance, i)
-            add_bundle_path!(sol, instance, i, old_paths[k]; mode_selector)
+            add_bundle_path!(sol, instance, i, old_paths[k]; mode_selector, packing)
         end
         return 0.0
     end
@@ -259,6 +262,7 @@ function loop_two_nodes!(
     cost_threshold_relative::Real=5e-5,
     refine::Bool=true,
     rng::Random.AbstractRNG=Random.default_rng(),
+    packing::Symbol=:ffd_union,
 )
     src_codes, dst_codes = compute_candidate_nodes(instance.travel_time_graph)
     (isempty(src_codes) || isempty(dst_codes)) && return 0.0
@@ -276,7 +280,7 @@ function loop_two_nodes!(
     while time() - t_start < time_limit
         (src, dst) = rand(rng, valid_pairs)
         saved += two_node_common_incremental!(
-            sol, instance, src, dst; mode_selector, cost_threshold, refine
+            sol, instance, src, dst; mode_selector, cost_threshold, refine, packing
         )
     end
     return saved

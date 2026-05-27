@@ -61,6 +61,9 @@ using .Inbound
             include("test_bin_packing.jl")
             include("test_tentative_bin_packing.jl")
         end
+        @testset "Frozen packing default" begin
+            include("test_frozen_packing.jl")
+        end
         @testset "SumArcCost" begin
             include("test_sum_arc_cost.jl")
         end

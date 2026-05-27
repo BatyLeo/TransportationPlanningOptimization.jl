@@ -58,6 +58,10 @@ function lower_bound_incremental_cost(
     return sum(lower_bound_incremental_cost(t, existing, new) for t in c.terms)
 end
 
+# The buffer-threaded `incremental_cost!(::BinPackingBuffer, ::SumArcCost, ...)`
+# forwarding overload lives in `algorithms/cost_matrix_update.jl`, which is
+# included after `instance/bin.jl` defines `BinPackingBuffer`.
+
 function compute_bin_assignments(c::SumArcCost, comms::Vector{<:LightCommodity})
     bp = _find_bin_packing(c)
     bp === nothing && throw(

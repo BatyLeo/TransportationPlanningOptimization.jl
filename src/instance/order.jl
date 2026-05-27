@@ -15,7 +15,7 @@ Commodities in an `Order` share the same:
 $TYPEDFIELDS
 """
 struct Order{is_date_arrival,I}
-    "list of commodities in the order"
+    "list of commodities in the order, kept sorted by size descending (invariant set at instance construction so the bin-packing hot path can merge pre-sorted runs)"
     commodities::Vector{LightCommodity{is_date_arrival,I}}
     "time step corresponding to the delivery arrival/departure date"
     time_step::Int

@@ -5,7 +5,7 @@ A representation of a bin/truck used in bin-packing cost functions.
 # Fields
 $TYPEDFIELDS
 """
-struct Bin{C<:LightCommodity}
+mutable struct Bin{C<:LightCommodity}
     "List of commodities assigned to this bin"
     commodities::Vector{C}
     "Total size of all commodities in the bin"
@@ -18,6 +18,220 @@ end
 
 function Base.show(io::IO, bin::Bin)
     return println(io, "$(bin.total_size) / $(bin.max_capacity)")
+end
+
+"""
+$TYPEDEF
+
+Reusable scratch buffers for the bin-packing hot path. Created once per sweep
+and threaded through `incremental_cost!` so the per-arc evaluation allocates
+nothing. Single-threaded use only (one buffer per thread when parallelism
+lands, mirroring STP's per-thread `CAPACITIES`).
+
+The `edge_map` and `vec_pool` fields support the per-arc TSG-edge grouping in
+`compute_ttg_edge_incremental_cost` (and its lower-bound and filtering
+variants). `edge_map` is the reusable grouping dictionary and `vec_pool` is a
+free-list of inner commodity vectors recycled across arc evaluations, so the
+grouping allocates nothing in steady state. The commodity type parameter `C`
+ties the buffer to the instance's `LightCommodity` type.
+
+# Fields
+$TYPEDFIELDS
+"""
+mutable struct BinPackingBuffer{C<:LightCommodity}
+    "remaining capacity of each currently open bin"
+    caps::Vector{Float64}
+    "scratch for the merged (existing union new) commodity sizes, sorted descending"
+    sizes::Vector{Float64}
+    "scratch for the existing run's sizes, sorted descending"
+    existing_sizes::Vector{Float64}
+    "scratch for the new run's sizes, sorted descending"
+    new_sizes::Vector{Float64}
+    "reusable TSG-edge to commodities grouping dictionary, cleared at the start of each arc evaluation"
+    edge_map::Dict{Tuple{Int,Int},Vector{C}}
+    "free-list of inner commodity vectors recycled across arc evaluations"
+    vec_pool::Vector{Vector{C}}
+end
+
+"""
+$TYPEDSIGNATURES
+
+Construct an empty `BinPackingBuffer` for commodity type `C`.
+"""
+function BinPackingBuffer{C}() where {C<:LightCommodity}
+    return BinPackingBuffer{C}(
+        Float64[],
+        Float64[],
+        Float64[],
+        Float64[],
+        Dict{Tuple{Int,Int},Vector{C}}(),
+        Vector{C}[],
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+First-Fit-Decreasing bin count over `sizes_desc` (already sorted descending),
+reusing `buffer.caps`. Returns the number of bins. Allocates nothing in steady
+state once `buffer.caps` has grown to the working size.
+"""
+function ffd_count!(buffer::BinPackingBuffer, bin_capacity::Float64, sizes_desc)
+    empty!(buffer.caps)
+    for s in sizes_desc
+        placed = false
+        @inbounds for i in eachindex(buffer.caps)
+            if buffer.caps[i] >= s - 1e-8
+                buffer.caps[i] -= s
+                placed = true
+                break
+            end
+        end
+        placed || push!(buffer.caps, bin_capacity - s)
+    end
+    return length(buffer.caps)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Merge two descending-sorted size runs `a` and `b` into `dest` (a two-pointer
+descending merge). `dest` must already be sized to `length(a) + length(b)`. The
+result is the descending-sorted union of the two runs, identical to sorting the
+concatenation. Allocates nothing.
+"""
+function merge_desc!(
+    dest::Vector{Float64}, a::AbstractVector{Float64}, b::AbstractVector{Float64}
+)
+    i = 1
+    j = 1
+    k = 0
+    na = length(a)
+    nb = length(b)
+    @inbounds while i <= na && j <= nb
+        if a[i] >= b[j]
+            k += 1
+            dest[k] = a[i]
+            i += 1
+        else
+            k += 1
+            dest[k] = b[j]
+            j += 1
+        end
+    end
+    @inbounds while i <= na
+        k += 1
+        dest[k] = a[i]
+        i += 1
+    end
+    @inbounds while j <= nb
+        k += 1
+        dest[k] = b[j]
+        j += 1
+    end
+    return dest
+end
+
+"""
+$TYPEDSIGNATURES
+
+Frozen-bin incremental count. Given the remaining capacities of the already
+committed (frozen) bins on an arc and the `new` commodities, pack `new` via
+first-fit onto a COPY of those capacities (so the committed bins are never
+mutated during a tentative evaluation) and return the number of newly opened
+bins.
+
+This is the STP packing semantics: the existing bins are not re-packed and not
+re-sorted. Only `new` is sorted descending and dropped into the first frozen
+bin that has room, opening a fresh bin when none fits. The result equals the
+number of bins `frozen_first_fit_add!` would open on the same inputs, so the
+incremental cost predicted here matches the committed bin count exactly.
+
+`buffer.caps` is reused as the scratch for the capacities copy. `new` is read
+into `buffer.new_sizes`, checked for descending order, and sorted only when
+needed (the common case is already descending).
+"""
+function frozen_incremental_count!(
+    buffer::BinPackingBuffer,
+    bin_capacity::Float64,
+    existing_bins::AbstractVector{<:Bin},
+    new::Vector{C},
+) where {C<:LightCommodity}
+    isempty(new) && return 0
+
+    # New run sizes, descending (pre-sorted at construction in the common case).
+    resize!(buffer.new_sizes, length(new))
+    @inbounds for (i, c) in enumerate(new)
+        buffer.new_sizes[i] = c.size
+    end
+    _is_desc(buffer.new_sizes) || sort!(buffer.new_sizes; rev=true)
+
+    # Copy the frozen bins' remaining capacities into scratch (never mutate the
+    # committed bins here). New bins are appended to this same scratch vector.
+    empty!(buffer.caps)
+    for b in existing_bins
+        push!(buffer.caps, b.remaining_capacity)
+    end
+    n_frozen = length(buffer.caps)
+
+    @inbounds for s in buffer.new_sizes
+        placed = false
+        for i in eachindex(buffer.caps)
+            if buffer.caps[i] >= s - 1e-8
+                buffer.caps[i] -= s
+                placed = true
+                break
+            end
+        end
+        placed || push!(buffer.caps, bin_capacity - s)
+    end
+    return length(buffer.caps) - n_frozen
+end
+
+"""
+$TYPEDSIGNATURES
+
+Frozen-bin commit. Add `new` to `bins` in place via first-fit: each commodity
+(sorted descending) drops into the first existing bin with room, opening a fresh
+`Bin` when none fits. The frozen bins keep their contents and only shrink their
+remaining capacity, mirroring `frozen_incremental_count!` exactly so the
+committed bin count agrees with the predicted incremental cost.
+
+Returns the (possibly grown) `bins` vector. `Bin` is mutable, so a bin that
+receives a commodity is updated in place (the commodity is appended and the
+totals adjusted) without allocating a fresh `Bin`.
+
+Throws `DomainError` if any commodity exceeds `bin_capacity`.
+"""
+function frozen_first_fit_add!(
+    bins::Vector{Bin{C}}, bin_capacity::Float64, new::Vector{C}
+) where {C<:LightCommodity}
+    isempty(new) && return bins
+    sorted_new = sort(new; by=c -> c.size, rev=true)
+    if sorted_new[1].size > bin_capacity + 1e-8
+        throw(
+            DomainError(
+                sorted_new[1],
+                "Commodity size $(sorted_new[1].size) exceeds bin capacity $(bin_capacity)",
+            ),
+        )
+    end
+    for c in sorted_new
+        placed = false
+        @inbounds for i in eachindex(bins)
+            if bins[i].remaining_capacity >= c.size - 1e-8
+                push!(bins[i].commodities, c)
+                bins[i].total_size += c.size
+                bins[i].remaining_capacity -= c.size
+                placed = true
+                break
+            end
+        end
+        if !placed
+            push!(bins, Bin([c], c.size, bin_capacity, bin_capacity - c.size))
+        end
+    end
+    return bins
 end
 
 """

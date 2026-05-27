@@ -22,9 +22,16 @@ function lower_bound!(
     # packing in the resulting solution. Sorting by `max_pack_size` keeps the
     # post-insertion `cost(lb_sol)` competitive with greedy.
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
+    # One bin-packing scratch buffer reused across every bundle and arc.
+    buffer = BinPackingBuffer(instance)
     @showprogress for i in sorted_indices
         update_bundle_cost_matrix!(
-            empty_sol, instance, i, mode_selector; cost_fn=compute_ttg_edge_lower_bound_cost
+            empty_sol,
+            instance,
+            i,
+            mode_selector;
+            cost_fn=compute_ttg_edge_lower_bound_cost,
+            buffer=buffer,
         )
         origin = ttg.origin_codes[i]
         dest = ttg.destination_codes[i]
@@ -95,17 +102,33 @@ function compute_ttg_edge_filtering_cost(
     bundle::Bundle,
     u_ttg_code::Int,
     v_ttg_code::Int,
-    mode_selector::AbstractModeSelector=CheapestMode(),
+    mode_selector::AbstractModeSelector=CheapestMode();
+    buffer::BinPackingBuffer=BinPackingBuffer{C}(),
+    packing::Symbol=:frozen,
 ) where {C}
+    # Filtering is a lower-bound pre-pass, out of scope for frozen packing.
+    # `packing` is accepted only for cost_fn signature uniformity (no effect).
     u_id = MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)[1]
     v_id = MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code)[1]
     if u_id == bundle.origin_id && v_id == bundle.destination_id
         return compute_ttg_edge_incremental_cost(
-            current_solution, instance, bundle, u_ttg_code, v_ttg_code, mode_selector
+            current_solution,
+            instance,
+            bundle,
+            u_ttg_code,
+            v_ttg_code,
+            mode_selector;
+            buffer,
         )
     else
         return compute_ttg_edge_lower_bound_cost(
-            current_solution, instance, bundle, u_ttg_code, v_ttg_code, mode_selector
+            current_solution,
+            instance,
+            bundle,
+            u_ttg_code,
+            v_ttg_code,
+            mode_selector;
+            buffer,
         )
     end
 end
@@ -130,9 +153,16 @@ function lower_bound_filtering!(
     # against the empty solution), but the order affects shared-arc bin
     # packing in the resulting solution.
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
+    # One bin-packing scratch buffer reused across every bundle and arc.
+    buffer = BinPackingBuffer(instance)
     @showprogress for i in sorted_indices
         update_bundle_cost_matrix!(
-            empty_sol, instance, i, mode_selector; cost_fn=compute_ttg_edge_filtering_cost
+            empty_sol,
+            instance,
+            i,
+            mode_selector;
+            cost_fn=compute_ttg_edge_filtering_cost,
+            buffer=buffer,
         )
         origin = ttg.origin_codes[i]
         dest = ttg.destination_codes[i]

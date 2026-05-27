@@ -349,6 +349,12 @@ Build a TPO `Solution` from a dict of OD-keyed TPO-TTG paths. Iterates over
 the TPO bundles, looks up the matching OD path, and calls `add_bundle_path!`.
 Bundles missing from the dict keep an empty path (which `is_feasible` will
 flag).
+
+Uses `packing=:ffd_union` so the reconstructed cost is order-independent and
+matches STP's full re-pack semantics for the cross-package cost comparison.
+The production default (`:frozen`) is order-dependent and would inject a
+bin-count discrepancy that depends only on bundle iteration order, which is
+not what these round-trip equality assertions are testing.
 """
 function build_tpo_solution_from_translated_paths(
     paths_by_od::Dict{Tuple{String,String},Vector{Int}}, tpo_instance
@@ -357,7 +363,9 @@ function build_tpo_solution_from_translated_paths(
     for (i, bundle) in enumerate(tpo_instance.bundles)
         key = (bundle.origin_id, bundle.destination_id)
         haskey(paths_by_od, key) || continue
-        TPO.add_bundle_path!(sol, tpo_instance, i, copy(paths_by_od[key]))
+        TPO.add_bundle_path!(
+            sol, tpo_instance, i, copy(paths_by_od[key]); packing=:ffd_union
+        )
     end
     return sol
 end

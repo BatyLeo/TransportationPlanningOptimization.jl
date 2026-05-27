@@ -116,33 +116,46 @@ Returns the cost improvement (non-negative `Float64`).
 Used by `bundle_reinsertion_improvement!` as its per-bundle inner step and by
 `two_node_common_incremental!` (Phase 3.7) as the refine step. Bundles whose
 path is already empty return `0.0` without side effects.
+
+The `packing` keyword defaults to `:ffd_union` because the remove-then-readd
+cycle requires order-independent re-packing: `remove_bundle_path!` re-packs the
+remaining commodities from scratch (FFD), so the cost matrix and the commit
+must use the same FFD-union semantics for the net-delta accept test to be
+exact. Frozen packing is order-dependent and would make a remove-readd cycle
+change the cost even when the path is unchanged, so it is not used here.
 """
 function _try_reinsert_bundle!(
-    sol::Solution, instance::Instance, bundle_idx::Int, mode_selector::AbstractModeSelector
+    sol::Solution,
+    instance::Instance,
+    bundle_idx::Int,
+    mode_selector::AbstractModeSelector;
+    packing::Symbol=:ffd_union,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
 
     old_path = copy(sol.bundle_paths[bundle_idx])
     cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
-    update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector)
+    update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector; packing)
     origin = ttg.origin_codes[bundle_idx]
     dest = ttg.destination_codes[bundle_idx]
     res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
     new_path = Graphs.enumerate_paths(res, dest)
 
     if isempty(new_path)
-        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector)
+        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
         return 0.0
     end
 
-    cost_added = add_bundle_path!(sol, instance, bundle_idx, new_path; mode_selector)
+    cost_added = add_bundle_path!(
+        sol, instance, bundle_idx, new_path; mode_selector, packing
+    )
     net_delta = cost_added + cost_removed
     if net_delta < -1e-6
         return -net_delta
     else
         remove_bundle_path!(sol, instance, bundle_idx)
-        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector)
+        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
         return 0.0
     end
 end
@@ -176,6 +189,7 @@ function bundle_reinsertion_improvement!(
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=Inf,
     cost_threshold::Real=0.0,
+    packing::Symbol=:ffd_union,
 )
     saved = 0.0
     t_start = time()
@@ -186,7 +200,7 @@ function bundle_reinsertion_improvement!(
             bundle_estimated_removal_cost(sol, instance, i) <= cost_threshold
             continue
         end
-        saved += _try_reinsert_bundle!(sol, instance, i, mode_selector)
+        saved += _try_reinsert_bundle!(sol, instance, i, mode_selector; packing)
     end
     return saved
 end
@@ -210,6 +224,11 @@ affected arcs (the cost delta is computed via the same FFD heuristic used
 on insertion, but a different ordering can occasionally open BFD
 improvements). Running `bin_packing_improvement!` after reinsertion gives it
 a chance to find those reductions in the same sweep.
+
+The `packing` keyword defaults to `:ffd_union` and is forwarded to the
+reinsertion step. The remove-readd cycle that drives reinsertion needs
+order-independent re-packing (see `_try_reinsert_bundle!`), so it stays on
+FFD-union even when the initial solution was built with the `:frozen` default.
 """
 function local_search!(
     sol::Solution,
@@ -218,6 +237,7 @@ function local_search!(
     time_limit::Real=60.0,
     relative_tolerance::Real=5e-5,
     cost_threshold_relative::Real=5e-5,
+    packing::Symbol=:ffd_union,
 )
     t_start = time()
     start_cost = cost(sol)
@@ -230,6 +250,7 @@ function local_search!(
             mode_selector;
             time_limit=max(0, time_limit - (time() - t_start)),
             cost_threshold,
+            packing,
         )
         improved += bin_packing_improvement!(sol, instance)
         improved < tolerance && break

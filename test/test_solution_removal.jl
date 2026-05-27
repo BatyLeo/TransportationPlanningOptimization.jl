@@ -31,7 +31,15 @@ end
         joinpath(datadir, "tiny_commodities.csv"),
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    # The round-trip cost-preservation invariant holds only under
+    # order-independent packing: `remove_bundle_path!` always re-packs the
+    # affected arcs with FFD-union, so re-adding the same commodities must use
+    # the same FFD-union semantics to recover the original cost. The production
+    # default (`:frozen`) is order-dependent (it grows cached bins in insertion
+    # order), so re-adding bundles in a different order than the greedy built
+    # them would legitimately change the bin counts. This test pins the
+    # invariant for the FFD-union mode that the remove machinery relies on.
+    sol = greedy_heuristic(instance; packing=:ffd_union)
     c_before = cost(sol)
     saved_paths = [copy(p) for p in sol.bundle_paths]
 
@@ -42,7 +50,7 @@ end
     @test isapprox(cost(sol), 0.0; atol=1e-6)
 
     for i in eachindex(saved_paths)
-        add_bundle_path!(sol, instance, i, saved_paths[i])
+        add_bundle_path!(sol, instance, i, saved_paths[i]; packing=:ffd_union)
     end
     @test isapprox(cost(sol), c_before; atol=1e-6)
 end

@@ -70,7 +70,12 @@ function merge_solutions(
             ) for code in sub_path
         ]
         remove_bundle_path!(full_solution, full_instance, full_i)
-        add_bundle_path!(full_solution, full_instance, full_i, full_path)
+        # `remove_bundle_path!` re-packs the affected arcs with FFD-union, so the
+        # re-add stays on FFD-union to keep the merged solution self-consistent
+        # (frozen packing is order-dependent and would not match the re-pack).
+        add_bundle_path!(
+            full_solution, full_instance, full_i, full_path; packing=:ffd_union
+        )
     end
     return full_solution
 end

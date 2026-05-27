@@ -28,9 +28,18 @@ The sweep relies on the shared `ttg.cost_matrix`: each iteration calls
 `update_bundle_cost_matrix!` with the greedy `cost_fn`, snapshots the bundle's
 arc entries, calls it again with the lower-bound `cost_fn` (which overwrites),
 then blends in place on the bundle's arcs only using the snapshot.
+
+The `packing::Symbol = :frozen` keyword selects bin-packing semantics on the
+greedy half: it is forwarded to the greedy cost matrix and to the greedy and
+mixed commits (so those two solutions are self-consistent). See
+[`greedy_heuristic`](@ref) for the `:frozen` versus `:ffd_union` distinction.
+The lower-bound strategy is a fractional relaxation and is unaffected, so the
+`lb_sol` commit keeps `:ffd_union`.
 """
 function mix_greedy_and_lower_bound(
-    instance::Instance; mode_selector::AbstractModeSelector=CheapestMode()
+    instance::Instance;
+    mode_selector::AbstractModeSelector=CheapestMode(),
+    packing::Symbol=:frozen,
 )
     ttg = instance.travel_time_graph
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
@@ -39,6 +48,9 @@ function mix_greedy_and_lower_bound(
     greedy_sol = Solution(instance)
     lb_sol = Solution(instance)
     mixed_sol = Solution(instance)
+
+    # One bin-packing scratch buffer reused across every bundle and arc.
+    buffer = BinPackingBuffer(instance)
 
     @showprogress for (i, bundle_idx) in enumerate(sorted_indices)
         bundle_arcs = ttg.bundle_arcs[bundle_idx]
@@ -53,6 +65,8 @@ function mix_greedy_and_lower_bound(
             bundle_idx,
             mode_selector;
             cost_fn=compute_ttg_edge_incremental_cost,
+            buffer=buffer,
+            packing=packing,
         )
         greedy_snapshot = Dict{Tuple{Int,Int},Float64}()
         for (u, v) in bundle_arcs
@@ -68,7 +82,9 @@ function mix_greedy_and_lower_bound(
                 ),
             )
         end
-        add_bundle_path!(greedy_sol, instance, bundle_idx, greedy_path; mode_selector)
+        add_bundle_path!(
+            greedy_sol, instance, bundle_idx, greedy_path; mode_selector, packing
+        )
 
         # Lower-bound strategy: relaxed costs against empty lb_sol path state.
         # This overwrites ttg.cost_matrix in place.
@@ -78,6 +94,7 @@ function mix_greedy_and_lower_bound(
             bundle_idx,
             mode_selector;
             cost_fn=compute_ttg_edge_lower_bound_cost,
+            buffer=buffer,
         )
         lb_res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
         lb_path = Graphs.enumerate_paths(lb_res, destination)
@@ -89,7 +106,9 @@ function mix_greedy_and_lower_bound(
                 ),
             )
         end
-        add_bundle_path!(lb_sol, instance, bundle_idx, lb_path; mode_selector)
+        add_bundle_path!(
+            lb_sol, instance, bundle_idx, lb_path; mode_selector, packing=:ffd_union
+        )
 
         # Blend: ttg.cost_matrix now holds LB costs. Apply the blend on the
         # bundle's arcs only, using the cached greedy snapshot. Reproduces
@@ -111,7 +130,7 @@ function mix_greedy_and_lower_bound(
                 ),
             )
         end
-        add_bundle_path!(mixed_sol, instance, bundle_idx, mix_path; mode_selector)
+        add_bundle_path!(mixed_sol, instance, bundle_idx, mix_path; mode_selector, packing)
     end
 
     return (; mixed=mixed_sol, greedy=greedy_sol, lower_bound=lb_sol)
