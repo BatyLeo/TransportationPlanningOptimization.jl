@@ -28,17 +28,10 @@ and threaded through `incremental_cost!` so the per-arc evaluation allocates
 nothing. Single-threaded use only (one buffer per thread when parallelism
 lands, mirroring STP's per-thread `CAPACITIES`).
 
-The `edge_map` and `vec_pool` fields support the per-arc TSG-edge grouping in
-`compute_ttg_edge_incremental_cost` (and its lower-bound and filtering
-variants). `edge_map` is the reusable grouping dictionary and `vec_pool` is a
-free-list of inner commodity vectors recycled across arc evaluations, so the
-grouping allocates nothing in steady state. The commodity type parameter `C`
-ties the buffer to the instance's `LightCommodity` type.
-
 # Fields
 $TYPEDFIELDS
 """
-mutable struct BinPackingBuffer{C<:LightCommodity}
+struct BinPackingBuffer
     "remaining capacity of each currently open bin"
     caps::Vector{Float64}
     "scratch for the merged (existing union new) commodity sizes, sorted descending"
@@ -47,26 +40,15 @@ mutable struct BinPackingBuffer{C<:LightCommodity}
     existing_sizes::Vector{Float64}
     "scratch for the new run's sizes, sorted descending"
     new_sizes::Vector{Float64}
-    "reusable TSG-edge to commodities grouping dictionary, cleared at the start of each arc evaluation"
-    edge_map::Dict{Tuple{Int,Int},Vector{C}}
-    "free-list of inner commodity vectors recycled across arc evaluations"
-    vec_pool::Vector{Vector{C}}
 end
 
 """
 $TYPEDSIGNATURES
 
-Construct an empty `BinPackingBuffer` for commodity type `C`.
+Construct an empty `BinPackingBuffer`.
 """
-function BinPackingBuffer{C}() where {C<:LightCommodity}
-    return BinPackingBuffer{C}(
-        Float64[],
-        Float64[],
-        Float64[],
-        Float64[],
-        Dict{Tuple{Int,Int},Vector{C}}(),
-        Vector{C}[],
-    )
+function BinPackingBuffer()
+    return BinPackingBuffer(Float64[], Float64[], Float64[], Float64[])
 end
 
 """

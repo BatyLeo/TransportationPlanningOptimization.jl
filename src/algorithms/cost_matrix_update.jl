@@ -241,7 +241,7 @@ function _edge_incremental_cost(
     packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     return _edge_incremental_cost(
-        BinPackingBuffer{C}(), arc, existing, new_comms, sel; packing=packing
+        BinPackingBuffer(), arc, existing, new_comms, sel; packing=packing
     )
 end
 
@@ -253,7 +253,7 @@ function _edge_incremental_cost(
     packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     return _edge_incremental_cost(
-        BinPackingBuffer{C}(), arc, existing, new_comms, sel; packing=packing
+        BinPackingBuffer(), arc, existing, new_comms, sel; packing=packing
     )
 end
 
@@ -482,49 +482,6 @@ end
 """
 $TYPEDSIGNATURES
 
-Group the bundle's orders by the TSG edge they project to, reusing
-`buffer.edge_map` and the recycled inner vectors in `buffer.vec_pool`.
-
-Before grouping, every vector currently held in `buffer.edge_map` is emptied and
-returned to `buffer.vec_pool`, then `buffer.edge_map` is cleared. New edges pop a
-vector from the pool (or allocate a fresh `C[]` when the pool is empty), empty it,
-and receive the order commodities via `append!`. This preserves the exact grouping
-semantics (orders aliasing to the same TSG edge under `wrap_time` are combined into
-one per-edge commodity vector) while allocating nothing in steady state.
-
-The recycled vectors are only safe to reuse because each caller consumes a
-per-edge vector synchronously inside its edge loop, so no references survive past
-the call. Do not retain references to these vectors beyond the grouping caller.
-"""
-function _group_orders_by_tsg_edge!(
-    buffer::BinPackingBuffer{C}, instance::Instance, bundle::Bundle, u_ttg_code, v_ttg_code
-) where {C}
-    edge_map = buffer.edge_map
-    # Recycle the inner vectors from the previous arc evaluation.
-    for v in values(edge_map)
-        empty!(v)
-        push!(buffer.vec_pool, v)
-    end
-    empty!(edge_map)
-
-    for order in bundle.orders
-        u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
-        v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        edge = (u_tsg, v_tsg)
-
-        vec = get(edge_map, edge, nothing)
-        if vec === nothing
-            vec = isempty(buffer.vec_pool) ? C[] : empty!(pop!(buffer.vec_pool))
-            edge_map[edge] = vec
-        end
-        append!(vec, order.commodities)
-    end
-    return edge_map
-end
-
-"""
-$TYPEDSIGNATURES
-
 Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
@@ -535,11 +492,9 @@ function compute_ttg_edge_incremental_cost(
     u_ttg_code::Int,
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
-    buffer::BinPackingBuffer=BinPackingBuffer{C}(),
+    buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 ) where {C}
-    tsg = instance.time_space_graph
-
     # IF it's a shortcut arc, return zero cost
     u_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)
     v_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code)
@@ -547,36 +502,41 @@ function compute_ttg_edge_incremental_cost(
         return 0.0
     end
 
-    # Collect all TSG edges affected by this TTG edge for this bundle. Many
-    # orders might map to the same TSG edge, so they are grouped (combined) into
-    # one per-edge commodity vector. The grouping reuses the buffer's scratch.
-    tsg_edge_to_new_commodities = _group_orders_by_tsg_edge!(
-        buffer, instance, bundle, u_ttg_code, v_ttg_code
-    )
-
+    cache = instance.index_cache
     total_incremental_cost = 0.0
 
-    for (edge, new_comms) in tsg_edge_to_new_commodities
-        u_tsg, v_tsg = edge
-        u_tsg_label = MetaGraphsNext.label_for(tsg.graph, u_tsg)
-        v_tsg_label = MetaGraphsNext.label_for(tsg.graph, v_tsg)
-
-        if !MetaGraphsNext.haskey(tsg.graph, u_tsg_label, v_tsg_label)
-            @warn "TSG edge ($u_tsg_label -> $v_tsg_label) does not exist!"
+    # Each order in a bundle has a distinct delivery time step in
+    # 1:time_horizon_length, so two orders differ by less than the horizon and
+    # cannot alias modulo it. They therefore project to distinct TSG edges on this
+    # arc even under wrap_time, so no grouping is needed to combine commodities on
+    # a shared edge (verified: zero collisions over ~9.5M projections on medium and
+    # large, both wrap_time). The cost is an additive sum over orders.
+    for order in bundle.orders
+        u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
+        v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
+        su = cache.tsg_spatial[u_tsg]
+        sv = cache.tsg_spatial[v_tsg]
+        arc = get(cache.arc_of, (su, sv), nothing)
+        if arc === nothing
+            @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf # Infeasible for this bundle
         end
 
-        arc = tsg.graph[u_tsg_label, v_tsg_label]
+        edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
         total_incremental_cost += _edge_incremental_cost(
-            buffer, arc, existing_assignment, new_comms, mode_selector; packing=packing
+            buffer,
+            arc,
+            existing_assignment,
+            order.commodities,
+            mode_selector;
+            packing=packing,
         )
 
         # Destination-node cost. Charged on the spatial destination of each
         # traversed arc, matching STP's `volume_stock_cost`
         # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
-        v_node_id = v_tsg_label[1]
-        dst_node = instance.network_graph.graph[v_node_id]
+        node_cost = cache.node_cost_of[sv]
         existing_at_dst_node = if existing_assignment === nothing
             C[]
         elseif existing_assignment isa SingleAssignment
@@ -587,7 +547,7 @@ function compute_ttg_edge_incremental_cost(
             collect(commodities_of(existing_assignment))
         end
         total_incremental_cost += incremental_cost!(
-            buffer, dst_node.node_cost, existing_at_dst_node, new_comms
+            buffer, node_cost, existing_at_dst_node, order.commodities
         )
     end
 
@@ -616,16 +576,14 @@ function compute_ttg_edge_lower_bound_cost(
     u_ttg_code::Int,
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
-    buffer::BinPackingBuffer=BinPackingBuffer{C}(),
+    buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 ) where {C}
     # The lower-bound path is a fractional relaxation, not FFD bin packing, so
     # `packing` is accepted only to keep the `cost_fn` call signature uniform
     # with `compute_ttg_edge_incremental_cost`. It has no effect here.
-    # The fractional bin counting needs none of `buffer`'s `Float64` scratch, but
-    # `buffer` is still threaded so the TSG-edge grouping reuses `buffer.edge_map`
-    # and `buffer.vec_pool` instead of allocating a fresh dictionary per arc.
-    tsg = instance.time_space_graph
+    # The fractional bin counting needs none of `buffer`'s scratch, so `buffer` is
+    # accepted only to keep the `cost_fn` call signature uniform.
 
     # IF it's a shortcut arc, return zero cost
     u_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)
@@ -639,35 +597,41 @@ function compute_ttg_edge_lower_bound_cost(
         return _direct_arc_lb_cost(bundle, instance, u_ttg_code, v_ttg_code, mode_selector)
     end
 
-    tsg_edge_to_new_commodities = _group_orders_by_tsg_edge!(
-        buffer, instance, bundle, u_ttg_code, v_ttg_code
-    )
-
+    cache = instance.index_cache
     total = 0.0
-    for (edge, new_comms) in tsg_edge_to_new_commodities
-        u_tsg, v_tsg = edge
-        u_label = MetaGraphsNext.label_for(tsg.graph, u_tsg)
-        v_label = MetaGraphsNext.label_for(tsg.graph, v_tsg)
-        if !MetaGraphsNext.haskey(tsg.graph, u_label, v_label)
-            @warn "TSG edge ($u_label -> $v_label) does not exist!"
+    # Each order in a bundle has a distinct delivery time step in
+    # 1:time_horizon_length, so two orders cannot alias modulo the horizon and
+    # therefore project to distinct TSG edges on this arc even under wrap_time
+    # (verified: zero collisions). The cost is an additive sum over orders.
+    for order in bundle.orders
+        u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
+        v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
+        su = cache.tsg_spatial[u_tsg]
+        sv = cache.tsg_spatial[v_tsg]
+        arc = get(cache.arc_of, (su, sv), nothing)
+        if arc === nothing
+            @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf
         end
-        arc = tsg.graph[u_label, v_label]
+        edge = (u_tsg, v_tsg)
         existing = get(current_solution.assignments, edge, nothing)
-        total += _edge_lower_bound_cost(arc, existing, new_comms, mode_selector)
+        total += _edge_lower_bound_cost(arc, existing, order.commodities, mode_selector)
 
         # Destination-node cost. Charged on the spatial destination of each
         # traversed arc, matching STP's `volume_stock_cost`
         # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
-        v_node_id = v_label[1]
-        dst_node = instance.network_graph.graph[v_node_id]
+        node_cost = cache.node_cost_of[sv]
         existing_at_dst_node = if existing === nothing
             C[]
+        elseif existing isa SingleAssignment
+            # Stored vector, read-only (no copy needed).
+            existing.commodities
         else
+            # MultiAssignment commodities_of is a lazy flatten, so materialize it.
             collect(commodities_of(existing))
         end
         total += lower_bound_incremental_cost(
-            dst_node.node_cost, existing_at_dst_node, new_comms
+            node_cost, existing_at_dst_node, order.commodities
         )
     end
     return total
@@ -691,18 +655,18 @@ function _direct_arc_lb_cost(
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector,
 )
-    tsg = instance.time_space_graph
+    cache = instance.index_cache
     total = 0.0
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        u_label = MetaGraphsNext.label_for(tsg.graph, u_tsg)
-        v_label = MetaGraphsNext.label_for(tsg.graph, v_tsg)
-        if !MetaGraphsNext.haskey(tsg.graph, u_label, v_label)
-            @warn "TSG edge ($u_label -> $v_label) does not exist!"
+        su = cache.tsg_spatial[u_tsg]
+        sv = cache.tsg_spatial[v_tsg]
+        arc = get(cache.arc_of, (su, sv), nothing)
+        if arc === nothing
+            @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf
         end
-        arc = tsg.graph[u_label, v_label]
         order_size = sum(c.size for c in order.commodities; init=0.0)
         total += _direct_arc_order_lb_cost(
             arc, order_size, order.commodities, mode_selector
@@ -710,9 +674,9 @@ function _direct_arc_lb_cost(
 
         # Destination-node cost on the direct arc, charged once per order.
         # Per-order incremental: existing is empty (LB is against empty solution).
-        dst_node = instance.network_graph.graph[v_label[1]]
+        node_cost = cache.node_cost_of[sv]
         total += lower_bound_incremental_cost(
-            dst_node.node_cost, eltype(order.commodities)[], order.commodities
+            node_cost, eltype(order.commodities)[], order.commodities
         )
     end
     return total
@@ -807,16 +771,25 @@ function update_bundle_cost_matrix!(
     packing::Symbol=:frozen,
 )
     ttg = instance.travel_time_graph
+    cache = instance.index_cache
+    ng = instance.network_graph.graph
+
+    # Map the bundle's forbidden sets to integer spatial codes once (these sets
+    # are usually empty or tiny), so the per-arc check stays on integers and
+    # works for both real and virtual (two-node) bundles with no bundle index.
+    fn = Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
+    fa = Set{Tuple{Int,Int}}(
+        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
+        (u, v) in bundle.forbidden_arcs
+    )
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
     for (u_code, v_code) in bundle_arcs
-        u_node_id = MetaGraphsNext.label_for(ttg.graph, u_code)[1]
-        v_node_id = MetaGraphsNext.label_for(ttg.graph, v_code)[1]
+        su = cache.ttg_spatial[u_code]
+        sv = cache.ttg_spatial[v_code]
 
-        if (u_node_id, v_node_id) in bundle.forbidden_arcs ||
-            u_node_id in bundle.forbidden_nodes ||
-            v_node_id in bundle.forbidden_nodes
+        if (su, sv) in fa || su in fn || sv in fn
             ttg.cost_matrix[u_code, v_code] = Inf
         else
             ttg.cost_matrix[u_code, v_code] = cost_fn(

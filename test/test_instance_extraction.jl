@@ -148,6 +148,8 @@ end
         time_step_to_date=instance.time_step_to_date,
         time_space_graph=instance.time_space_graph,
         travel_time_graph=instance.travel_time_graph,
+        # Reuses the original graphs, so the original cache stays valid.
+        index_cache=instance.index_cache,
     )
 
     sol = greedy_heuristic(instance)

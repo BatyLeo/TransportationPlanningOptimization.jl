@@ -103,7 +103,7 @@ function compute_ttg_edge_filtering_cost(
     u_ttg_code::Int,
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
-    buffer::BinPackingBuffer=BinPackingBuffer{C}(),
+    buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 ) where {C}
     # Filtering is a lower-bound pre-pass, out of scope for frozen packing.

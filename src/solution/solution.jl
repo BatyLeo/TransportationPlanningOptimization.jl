@@ -201,8 +201,9 @@ Throws a `DomainError` if the resulting `t` is outside the instance time horizon
 function project_to_time_space_graph(
     ttg_node_code::Int, order::Order{is_date_arrival}, instance::Instance
 ) where {is_date_arrival}
-    (; time_space_graph, travel_time_graph) = instance
-    u_label, τ = MetaGraphsNext.label_for(travel_time_graph.graph, ttg_node_code)
+    cache = instance.index_cache
+    snode = cache.ttg_spatial[ttg_node_code]
+    τ = cache.ttg_tau[ttg_node_code]
 
     if is_date_arrival
         t = order.time_step - τ
@@ -210,10 +211,8 @@ function project_to_time_space_graph(
         t = order.time_step + τ
     end
 
-    wrap_time = time_space_graph.wrap_time
-
     if !(1 <= t <= instance.time_horizon_length)
-        if wrap_time
+        if instance.time_space_graph.wrap_time
             if t > instance.time_horizon_length
                 t = t - instance.time_horizon_length
             else
@@ -223,14 +222,25 @@ function project_to_time_space_graph(
             throw(
                 DomainError(
                     t,
-                    "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order) and node code $(ttg_node_code) u_label=$(u_label)",
+                    "Projected time step out of bounds (τ=$(τ), t=$(t)) for order $(order) and node code $(ttg_node_code)",
                 ),
             )
         end
     end
 
-    tsg_node_label = (u_label, t)
-    return MetaGraphsNext.code_for(time_space_graph.graph, tsg_node_label)
+    tsg_code = cache.tsg_code_of[snode, t]
+    # tsg_code_of stores 0 where no TSG node exists at (snode, t). Valid
+    # projections always land on an existing node (the TSG has a timed copy of
+    # every network node for every t in 1:time_horizon_length), so a 0 here means
+    # a broken invariant, not normal flow. Throw a clear error instead of letting
+    # 0 propagate into downstream graph lookups.
+    iszero(tsg_code) && throw(
+        DomainError(
+            (snode, t),
+            "No TimeSpaceGraph node at (spatial=$(snode), t=$(t)) for ttg_node_code=$(ttg_node_code), τ=$(τ)",
+        ),
+    )
+    return tsg_code
 end
 
 """
@@ -492,7 +502,7 @@ function _commit_mode_incremental(
 ) where {C<:LightCommodity}
     if packing === :frozen
         return _frozen_edge_incremental_cost(
-            BinPackingBuffer{C}(), mode_cost, slot, new_commodities
+            BinPackingBuffer(), mode_cost, slot, new_commodities
         )
     end
     return incremental_cost(mode_cost, slot.commodities, new_commodities)

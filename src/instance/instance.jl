@@ -6,7 +6,9 @@ An `Instance` represents a transportation planning problem instance, containing 
 # Fields
 $TYPEDFIELDS
 """
-@kwdef struct Instance{B<:Bundle,G<:NetworkGraph,TSG<:TimeSpaceGraph,TTG<:TravelTimeGraph}
+@kwdef struct Instance{
+    B<:Bundle,G<:NetworkGraph,TSG<:TimeSpaceGraph,TTG<:TravelTimeGraph,IC<:IndexCache
+}
     "list of bundles in the instance"
     bundles::Vector{B}
     "underlying network graph"
@@ -21,16 +23,16 @@ $TYPEDFIELDS
     time_space_graph::TSG
     "travel time graph (for bundle paths)"
     travel_time_graph::TTG
+    "precomputed integer-indexed lookup tables for the construction hot path"
+    index_cache::IC
 end
 
 """
 $TYPEDSIGNATURES
 
-Construct an empty `BinPackingBuffer` whose commodity type matches `instance`.
+Convenience constructor for sweep callers. Equivalent to `BinPackingBuffer()`.
 """
-function BinPackingBuffer(::Instance{Bundle{Order{IDA,I}}}) where {IDA,I}
-    return BinPackingBuffer{LightCommodity{IDA,I}}()
-end
+BinPackingBuffer(::Instance) = BinPackingBuffer()
 
 """
 $TYPEDSIGNATURES
@@ -406,6 +408,8 @@ function build_instance(
         end
     end
 
+    index_cache = build_index_cache(network_graph, travel_time_graph, time_space_graph)
+
     return Instance(;
         time_horizon_length,
         time_step,
@@ -414,6 +418,7 @@ function build_instance(
         network_graph,
         time_space_graph,
         travel_time_graph,
+        index_cache,
     )
 end
 

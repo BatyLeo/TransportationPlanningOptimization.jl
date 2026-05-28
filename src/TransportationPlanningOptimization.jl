@@ -27,6 +27,7 @@ include("instance/parsing/arc.jl")
 include("instance/graphs/network_graph.jl")
 include("instance/graphs/time_space_graph.jl")
 include("instance/graphs/travel_time_graph.jl")
+include("instance/index_cache.jl")
 
 include("instance/instance.jl")
 

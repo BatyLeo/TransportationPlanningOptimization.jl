@@ -28,6 +28,9 @@ using .Inbound
             include("test_solution_parsing.jl")
             include("test_lower_bound_cost.jl")
         end
+        @testset "IndexCache" begin
+            include("test_index_cache.jl")
+        end
         @testset "Solution removal" begin
             include("test_solution_removal.jl")
         end

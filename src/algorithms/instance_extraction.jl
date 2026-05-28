@@ -34,6 +34,9 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
             time_step_to_date=instance.time_step_to_date,
             time_space_graph=instance.time_space_graph,
             travel_time_graph=instance.travel_time_graph,
+            # The degenerate case reuses the original graphs verbatim, so the
+            # original cache (built from those same graphs) stays valid.
+            index_cache=instance.index_cache,
         )
     end
 
@@ -73,5 +76,7 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
         time_step_to_date=instance.time_step_to_date,
         time_space_graph=sub_tsg,
         travel_time_graph=sub_ttg,
+        # Fresh cache for the rebuilt sub-graphs (codes differ from the original).
+        index_cache=build_index_cache(sub_network, sub_ttg, sub_tsg),
     )
 end
