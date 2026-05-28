@@ -151,33 +151,29 @@ function _try_reinsert_bundle!(
         return 0.0
     end
 
-    # Canonicalize new_path (drop shortcut nodes) so the equality check is
-    # apples-to-apples with the stored old_path. add_bundle_path! does this
-    # internally, so pre-applying it here makes the inner call a no-op when
-    # the path is already canonical.
-    _remove_shortcuts_from_path!(new_path, ttg)
-
-    # Same-path fast path: Dijkstra picked the bundle's existing path. Under
-    # :ffd_union packing (the LS hot path) the slot cost depends only on the
-    # multiset of commodities, so restoring old_path returns the slot to the
-    # exact pre-iteration state with zero net delta. Skip the add-then-reject
-    # round trip.
-    if new_path == old_path
-        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
-        return 0.0
-    end
-
     cost_added = add_bundle_path!(
         sol, instance, bundle_idx, new_path; mode_selector, packing
     )
     net_delta = cost_added + cost_removed
     if net_delta < -1e-6
         return -net_delta
-    else
-        remove_bundle_path!(sol, instance, bundle_idx)
-        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
+    end
+
+    # No improvement: normally we rollback (remove new_path then add old_path).
+    # When Dijkstra returned the same path as old_path, that rollback is a
+    # state-wise no-op (under :ffd_union packing the slot's commodities are
+    # already at FFD-equilibrium with B on its old path, which is exactly
+    # what the rollback would reconstruct). Skip the wasted remove+add cycle.
+    # `add_bundle_path!` canonicalized `new_path` in place via
+    # `_remove_shortcuts_from_path!`, so the equality is apples-to-apples
+    # with the canonical `old_path` snapshot.
+    if new_path == old_path
         return 0.0
     end
+
+    remove_bundle_path!(sol, instance, bundle_idx)
+    add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
+    return 0.0
 end
 
 """
