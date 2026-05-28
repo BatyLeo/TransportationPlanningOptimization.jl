@@ -223,12 +223,14 @@ Compute the bin assignments for a list of commodities using the
 First-Fit Decreasing (FFD) heuristic. Returns a vector of `Bin` objects.
 """
 function compute_bin_assignments(
-    arc_f::BinPackingArcCost, commodities::Vector{C}
+    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
 ) where {C<:LightCommodity}
     isempty(commodities) && return Bin{C}[]
 
-    # Sort commodities in non-increasing order of size
-    sorted_commodities = sort(commodities; by=c -> c.size, rev=true)
+    # Sort commodities in non-increasing order of size, unless the caller
+    # guarantees they already are.
+    sorted_commodities =
+        presorted ? commodities : sort(commodities; by=c -> c.size, rev=true)
 
     # Check for oversized commodities after sorting (in case of numerical issues)
     if sorted_commodities[1].size > arc_f.bin_capacity + 1e-8
@@ -291,15 +293,39 @@ bin contents are needed downstream.
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
 function tentative_bin_count(
-    arc_f::BinPackingArcCost, commodities::Vector{C}
+    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
 ) where {C<:LightCommodity}
     isempty(commodities) && return 0
+    cap = arc_f.bin_capacity
+    if presorted
+        # First element is the largest under the descending-by-size invariant.
+        first_size = commodities[1].size
+        first_size > cap + 1e-8 && throw(
+            DomainError(
+                first_size, "Commodity size $(first_size) exceeds bin capacity $(cap)"
+            ),
+        )
+        bin_caps = Float64[]
+        for c in commodities
+            s = c.size
+            placed = false
+            for i in eachindex(bin_caps)
+                if bin_caps[i] >= s - 1e-8
+                    bin_caps[i] -= s
+                    placed = true
+                    break
+                end
+            end
+            placed || push!(bin_caps, cap - s)
+        end
+        return length(bin_caps)
+    end
     sorted_sizes = sort([c.size for c in commodities]; rev=true)
-    if sorted_sizes[1] > arc_f.bin_capacity + 1e-8
+    if sorted_sizes[1] > cap + 1e-8
         throw(
             DomainError(
                 sorted_sizes[1],
-                "Commodity size $(sorted_sizes[1]) exceeds bin capacity $(arc_f.bin_capacity)",
+                "Commodity size $(sorted_sizes[1]) exceeds bin capacity $(cap)",
             ),
         )
     end
@@ -314,7 +340,7 @@ function tentative_bin_count(
             end
         end
         if !placed
-            push!(bin_caps, arc_f.bin_capacity - s)
+            push!(bin_caps, cap - s)
         end
     end
     return length(bin_caps)
@@ -335,15 +361,43 @@ gate the BFD-vs-FFD choice without materializing either packing.
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
 function tentative_best_fit_count(
-    arc_f::BinPackingArcCost, commodities::Vector{C}
+    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
 ) where {C<:LightCommodity}
     isempty(commodities) && return 0
+    cap = arc_f.bin_capacity
+    if presorted
+        first_size = commodities[1].size
+        first_size > cap + 1e-8 && throw(
+            DomainError(
+                first_size, "Commodity size $(first_size) exceeds bin capacity $(cap)"
+            ),
+        )
+        bin_caps = Float64[]
+        for c in commodities
+            s = c.size
+            best_idx = 0
+            best_left = Inf
+            for i in eachindex(bin_caps)
+                after = bin_caps[i] - s
+                if after >= -1e-8 && after < best_left
+                    best_left = after
+                    best_idx = i
+                end
+            end
+            if best_idx == 0
+                push!(bin_caps, cap - s)
+            else
+                bin_caps[best_idx] -= s
+            end
+        end
+        return length(bin_caps)
+    end
     sorted_sizes = sort([c.size for c in commodities]; rev=true)
-    if sorted_sizes[1] > arc_f.bin_capacity + 1e-8
+    if sorted_sizes[1] > cap + 1e-8
         throw(
             DomainError(
                 sorted_sizes[1],
-                "Commodity size $(sorted_sizes[1]) exceeds bin capacity $(arc_f.bin_capacity)",
+                "Commodity size $(sorted_sizes[1]) exceeds bin capacity $(cap)",
             ),
         )
     end
@@ -359,7 +413,7 @@ function tentative_best_fit_count(
             end
         end
         if best_idx == 0
-            push!(bin_caps, arc_f.bin_capacity - s)
+            push!(bin_caps, cap - s)
         else
             bin_caps[best_idx] -= s
         end
@@ -378,10 +432,11 @@ typically a hair faster.
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
 function compute_bin_assignments_bfd(
-    arc_f::BinPackingArcCost, commodities::Vector{C}
+    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
 ) where {C<:LightCommodity}
     isempty(commodities) && return Bin{C}[]
-    sorted_commodities = sort(commodities; by=c -> c.size, rev=true)
+    sorted_commodities =
+        presorted ? commodities : sort(commodities; by=c -> c.size, rev=true)
     if sorted_commodities[1].size > arc_f.bin_capacity + 1e-8
         throw(
             DomainError(

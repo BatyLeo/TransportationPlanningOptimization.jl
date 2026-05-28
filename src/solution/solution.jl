@@ -281,15 +281,31 @@ end
 
 _is_shortcut_arc(arc::MultiModalArc) = false
 
+"""
+$TYPEDSIGNATURES
+
+Ensure `slot.commodities` is in descending order by `.size`, sorting in place
+if not already. Sets `slot.sorted = true`. After this returns, the LS hot path
+can skip the bin-packing internal sort by passing `presorted=true` to FFD/BFD
+helpers.
+"""
+function _ensure_sorted!(slot::SingleAssignment)
+    slot.sorted && return slot
+    sort!(slot.commodities; by=c -> c.size, rev=true)
+    slot.sorted = true
+    return slot
+end
+
 function _update_single_assignment_cost!(
     slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction
 ) where {C}
+    _ensure_sorted!(slot)
     if arc_cost isa BinPackingArcCost
-        bins = compute_bin_assignments(arc_cost, slot.commodities)
+        bins = compute_bin_assignments(arc_cost, slot.commodities; presorted=true)
         slot.bins = bins
         slot.cost = arc_cost.cost_per_bin * length(bins)
     else
-        slot.cost = evaluate(arc_cost, slot.commodities)
+        slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
     end
     return nothing
 end
@@ -417,6 +433,7 @@ function _fill_then_spill_assign!(
         slot = assignment.per_mode[i]
         before = slot.cost
         append!(slot.commodities, placed)
+        slot.sorted = false
         _update_single_assignment_cost!(slot, arc.modes[i].cost)
         cost_delta += slot.cost - before
     end
@@ -436,6 +453,7 @@ function _add_order_to_assignment!(
     end::SingleAssignment{C}
     before = assignment.cost
     append!(assignment.commodities, new_commodities)
+    assignment.sorted = false
     if packing === :frozen
         _frozen_commit_single_assignment!(assignment, arc.cost, new_commodities)
     else
@@ -477,6 +495,7 @@ function _add_order_to_assignment!(
     slot = assignment.per_mode[best_mode_idx]
     before = slot.cost
     append!(slot.commodities, new_commodities)
+    slot.sorted = false
     if packing === :frozen
         _frozen_commit_single_assignment!(
             slot, arc.modes[best_mode_idx].cost, new_commodities
@@ -634,31 +653,31 @@ function add_bundle_path!(
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
     current_solution.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
-    tsg = instance.time_space_graph
+    cache = instance.index_cache
     cost_delta = 0.0
 
-    # Bucket all the bundle's commodities by their projected TSG edge, so that
-    # mode selection at placement time sees the same combined load that Dijkstra
-    # used when scoring the path.
-    tsg_edge_to_new_commodities = Dict{Tuple{Int,Int},Vector{C}}()
-    # For each order in the bundle, project the TTG path to a TSG path
+    # Orders within a bundle have distinct delivery time steps in 1:H so they
+    # project to distinct TSG edges on any arc, even under wrap_time. Each
+    # (order, arc) pair therefore touches a unique TSG edge, so no per-edge
+    # grouping is needed (same zero-collision argument as the forward
+    # `compute_ttg_edge_*` rewrite).
     for order in bundle.orders
-        tsg_path = [
-            project_to_time_space_graph(node_code, order, instance) for node_code in path
-        ]
-        for i in 1:(length(tsg_path) - 1)
-            edge = (tsg_path[i], tsg_path[i + 1])
-            append!(get!(tsg_edge_to_new_commodities, edge, C[]), order.commodities)
+        for k in 1:(length(path) - 1)
+            u_tsg = project_to_time_space_graph(path[k], order, instance)
+            v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
+            su = cache.tsg_spatial[u_tsg]
+            sv = cache.tsg_spatial[v_tsg]
+            arc = cache.arc_of[(su, sv)]
+            edge = (u_tsg, v_tsg)
+            cost_delta += _add_order_to_assignment!(
+                current_solution.assignments,
+                edge,
+                arc,
+                order.commodities,
+                mode_selector;
+                packing,
+            )
         end
-    end
-
-    for (edge, new_comms) in tsg_edge_to_new_commodities
-        u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
-        v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
-        arc = tsg.graph[u_label, v_label]
-        cost_delta += _add_order_to_assignment!(
-            current_solution.assignments, edge, arc, new_comms, mode_selector; packing
-        )
     end
     return cost_delta
 end
@@ -702,26 +721,27 @@ function remove_bundle_path!(
     path = current_solution.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
     bundle = instance.bundles[bundle_idx]
-    tsg = instance.time_space_graph
-
-    tsg_edge_to_removed_commodities = Dict{Tuple{Int,Int},Vector{C}}()
-    for order in bundle.orders
-        tsg_path = [
-            project_to_time_space_graph(node_code, order, instance) for node_code in path
-        ]
-        for i in 1:(length(tsg_path) - 1)
-            edge = (tsg_path[i], tsg_path[i + 1])
-            append!(get!(tsg_edge_to_removed_commodities, edge, C[]), order.commodities)
-        end
-    end
-
+    cache = instance.index_cache
     cost_delta = 0.0
-    for (edge, removed_comms) in tsg_edge_to_removed_commodities
-        u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
-        v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
-        arc = tsg.graph[u_label, v_label]
-        assignment = current_solution.assignments[edge]
-        cost_delta += _remove_commodities_from_assignment!(assignment, arc, removed_comms)
+
+    # Orders within a bundle have distinct delivery time steps in 1:H so they
+    # project to distinct TSG edges on any arc, even under wrap_time (same
+    # zero-collision argument as the forward `compute_ttg_edge_*` rewrite).
+    # The cost delta is therefore an additive sum over (order, arc) pairs
+    # without any per-edge grouping.
+    for order in bundle.orders
+        for k in 1:(length(path) - 1)
+            u_tsg = project_to_time_space_graph(path[k], order, instance)
+            v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
+            su = cache.tsg_spatial[u_tsg]
+            sv = cache.tsg_spatial[v_tsg]
+            arc = cache.arc_of[(su, sv)]
+            edge = (u_tsg, v_tsg)
+            assignment = current_solution.assignments[edge]
+            cost_delta += _remove_commodities_from_assignment!(
+                assignment, arc, order.commodities
+            )
+        end
     end
 
     current_solution.bundle_paths[bundle_idx] = Int[]
@@ -783,19 +803,48 @@ same `to_remove` vector to successive calls and stop when it is empty.
 function _drain_first_matches!(
     pool::Vector{C}, to_remove::Vector{C}
 ) where {C<:LightCommodity}
+    isempty(to_remove) && return C[]
+
+    # Multi-set of items wanted for removal.
+    counts = Dict{C,Int}()
+    for c in to_remove
+        counts[c] = get(counts, c, 0) + 1
+    end
+
+    # Single in-place pass over pool. Items whose count is positive are dropped
+    # (and the count is decremented so multiplicity is respected); others are
+    # compacted to the front.
+    n_pool = length(pool)
+    write_idx = 0
     dropped = C[]
-    i = 1
-    while i <= length(to_remove)
-        c = to_remove[i]
-        idx = findfirst(==(c), pool)
-        if idx === nothing
-            i += 1
-        else
+    for read_idx in 1:n_pool
+        c = pool[read_idx]
+        ct = get(counts, c, 0)
+        if ct > 0
+            counts[c] = ct - 1
             push!(dropped, c)
-            deleteat!(pool, idx)
-            deleteat!(to_remove, i)
+        else
+            write_idx += 1
+            pool[write_idx] = c
         end
     end
+    resize!(pool, write_idx)
+
+    # Compact to_remove in place: keep only items whose residual count > 0
+    # (i.e. items that did NOT find a match in pool). Preserves their original
+    # order so the MultiAssignment caller's chaining contract is intact.
+    write_idx = 0
+    for read_idx in 1:length(to_remove)
+        c = to_remove[read_idx]
+        ct = get(counts, c, 0)
+        if ct > 0
+            counts[c] = ct - 1
+            write_idx += 1
+            to_remove[write_idx] = c
+        end
+    end
+    resize!(to_remove, write_idx)
+
     return dropped
 end
 

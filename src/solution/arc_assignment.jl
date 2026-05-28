@@ -23,10 +23,22 @@ mutable struct SingleAssignment{C<:LightCommodity} <: AbstractArcAssignment{C}
     bins::Vector{Bin{C}}
     "cost of routing the stored commodities across this edge"
     cost::Float64
+    "true iff `commodities` is currently in descending order by `.size`; lets bin-packing skip its internal sort on the LS hot path"
+    sorted::Bool
 end
 
 function SingleAssignment{C}() where {C<:LightCommodity}
-    return SingleAssignment{C}(C[], Bin{C}[], 0.0)
+    # Empty vector is trivially sorted.
+    return SingleAssignment{C}(C[], Bin{C}[], 0.0, true)
+end
+
+# 3-arg convenience constructor for callers (tests, ad-hoc construction) that
+# do not know or maintain the sort order. Defaults `sorted=false` so the next
+# FFD call sorts before using.
+function SingleAssignment{C}(
+    commodities::Vector{C}, bins::Vector{Bin{C}}, cost::Float64
+) where {C<:LightCommodity}
+    return SingleAssignment{C}(commodities, bins, cost, false)
 end
 
 """

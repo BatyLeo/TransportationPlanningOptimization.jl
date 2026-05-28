@@ -1,6 +1,7 @@
 using Test
 using TransportationPlanningOptimization
 using Dates
+using Random
 
 @testset "bin_packing_improvement! does not increase cost" begin
     datadir = joinpath(@__DIR__, "public")
@@ -66,10 +67,12 @@ end
     sol = greedy_heuristic(instance)
     c0 = cost(sol)
 
-    local_search!(sol, instance; time_limit=10)
+    res = local_search!(sol, instance; time_limit=10, rng=MersenneTwister(0))
 
     @test is_feasible(sol, instance)
     @test cost(sol) <= c0 + 1e-6
+    @test isapprox(res.final_cost, cost(sol); atol=1e-6)
+    @test res.n_iter >= 1
 end
 
 @testset "tentative_best_fit_count parity with compute_bin_assignments_bfd" begin
@@ -179,7 +182,7 @@ end
     @test 0 <= saved_modest <= saved_no_filter + 1e-6
 end
 
-@testset "local_search! relative tolerance scales with cost" begin
+@testset "local_search! terminates on max_no_improv" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -188,12 +191,43 @@ end
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     sol = greedy_heuristic(instance)
-    c0 = cost(sol)
 
-    local_search!(sol, instance; time_limit=30, relative_tolerance=5e-5)
+    res = local_search!(
+        sol,
+        instance;
+        time_limit=60,
+        max_no_improv=10,
+        max_iter=500_000,
+        rng=MersenneTwister(0),
+    )
 
+    @test res.n_no_improv >= 10
+    @test res.n_iter < 500_000
     @test is_feasible(sol, instance)
-    @test cost(sol) <= c0 + 1e-6
+end
+
+@testset "local_search! returns a usable trace" begin
+    datadir = joinpath(@__DIR__, "public")
+    (; nodes, arcs, commodities) = parse_inbound_instance(
+        joinpath(datadir, "small_nodes.csv"),
+        joinpath(datadir, "small_legs.csv"),
+        joinpath(datadir, "small_commodities.csv"),
+    )
+    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    sol = greedy_heuristic(instance)
+
+    res = local_search!(
+        sol, instance; time_limit=5, sample_every=200, rng=MersenneTwister(0)
+    )
+
+    @test length(res.timestamps) == length(res.costs)
+    @test length(res.timestamps) == length(res.iters_at_sample)
+    @test length(res.timestamps) >= 2
+    @test issorted(res.timestamps)
+    # costs should never go up between samples (each move has an accept gate
+    # and the final repack is non-increasing)
+    @test all(res.costs[i + 1] <= res.costs[i] + 1e-6 for i in 1:(length(res.costs) - 1))
+    @test isapprox(last(res.costs), cost(sol); atol=1e-6)
 end
 
 @testset "local_search! reaches at least standalone reinsertion cost on small" begin
@@ -210,11 +244,17 @@ end
     cost_solo = cost(sol_solo)
 
     sol_ls = greedy_heuristic(instance)
-    local_search!(sol_ls, instance; time_limit=120, cost_threshold_relative=0.0)
+    local_search!(
+        sol_ls,
+        instance;
+        time_limit=120,
+        cost_threshold_relative=0.0,
+        rng=MersenneTwister(0),
+    )
     cost_ls = cost(sol_ls)
 
     # LS should never be worse than a single full reinsertion sweep
-    # (the driver re-runs reinsertion and adds BP on top, both of which
-    # can only improve the cost).
+    # (random reinsertion plus two-node consolidation plus a final repack
+    # can only improve the cost beyond a one-pass reinsertion).
     @test cost_ls <= cost_solo + 1e-6
 end

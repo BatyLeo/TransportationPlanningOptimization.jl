@@ -1,3 +1,5 @@
+using Random
+
 """
 $TYPEDSIGNATURES
 
@@ -27,16 +29,17 @@ end
 function _repack_assignment!(a::SingleAssignment, arc::NetworkArc)
     arc.cost isa BinPackingArcCost || return 0.0
     current_count = length(a.bins)
-    ffd_count = tentative_bin_count(arc.cost, a.commodities)
-    bfd_count = tentative_best_fit_count(arc.cost, a.commodities)
+    ps = a.sorted
+    ffd_count = tentative_bin_count(arc.cost, a.commodities; presorted=ps)
+    bfd_count = tentative_best_fit_count(arc.cost, a.commodities; presorted=ps)
     new_count = min(ffd_count, bfd_count)
     new_count >= current_count && return 0.0  # gate: no improvement possible
 
     before = a.cost
     a.bins = if ffd_count <= bfd_count
-        compute_bin_assignments(arc.cost, a.commodities)
+        compute_bin_assignments(arc.cost, a.commodities; presorted=ps)
     else
-        compute_bin_assignments_bfd(arc.cost, a.commodities)
+        compute_bin_assignments_bfd(arc.cost, a.commodities; presorted=ps)
     end
     a.cost = arc.cost.cost_per_bin * length(a.bins)
     return before - a.cost
@@ -48,16 +51,17 @@ function _repack_assignment!(a::MultiAssignment, arc::MultiModalArc)
         mode_cost = arc.modes[i].cost
         mode_cost isa BinPackingArcCost || continue
         current_count = length(slot.bins)
-        ffd_count = tentative_bin_count(mode_cost, slot.commodities)
-        bfd_count = tentative_best_fit_count(mode_cost, slot.commodities)
+        ps = slot.sorted
+        ffd_count = tentative_bin_count(mode_cost, slot.commodities; presorted=ps)
+        bfd_count = tentative_best_fit_count(mode_cost, slot.commodities; presorted=ps)
         new_count = min(ffd_count, bfd_count)
         new_count >= current_count && continue
 
         before = slot.cost
         slot.bins = if ffd_count <= bfd_count
-            compute_bin_assignments(mode_cost, slot.commodities)
+            compute_bin_assignments(mode_cost, slot.commodities; presorted=ps)
         else
-            compute_bin_assignments_bfd(mode_cost, slot.commodities)
+            compute_bin_assignments_bfd(mode_cost, slot.commodities; presorted=ps)
         end
         slot.cost = mode_cost.cost_per_bin * length(slot.bins)
         saved += before - slot.cost
@@ -147,6 +151,22 @@ function _try_reinsert_bundle!(
         return 0.0
     end
 
+    # Canonicalize new_path (drop shortcut nodes) so the equality check is
+    # apples-to-apples with the stored old_path. add_bundle_path! does this
+    # internally, so pre-applying it here makes the inner call a no-op when
+    # the path is already canonical.
+    _remove_shortcuts_from_path!(new_path, ttg)
+
+    # Same-path fast path: Dijkstra picked the bundle's existing path. Under
+    # :ffd_union packing (the LS hot path) the slot cost depends only on the
+    # multiset of commodities, so restoring old_path returns the slot to the
+    # exact pre-iteration state with zero net delta. Skip the add-then-reject
+    # round trip.
+    if new_path == old_path
+        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
+        return 0.0
+    end
+
     cost_added = add_bundle_path!(
         sol, instance, bundle_idx, new_path; mode_selector, packing
     )
@@ -208,52 +228,196 @@ end
 """
 $TYPEDSIGNATURES
 
-Drive a basic local search: alternate `bundle_reinsertion_improvement!` and
-`bin_packing_improvement!` (in that order) until total improvement in a
-sweep drops below `relative_tolerance * start_cost`, or the wall-time budget
-`time_limit` is exhausted. Returns `sol` for chaining.
+Random-neighborhood local search driver mirroring STP's `local_search!`. Each
+iteration flips a fair coin to pick one move:
 
-The `relative_tolerance` defaults to `5e-5`, matching the corresponding
-parameter in the Renault reference implementation. Likewise,
-`cost_threshold_relative` (default `5e-5`) is scaled by `start_cost` and
-passed to `bundle_reinsertion_improvement!` to skip bundles with negligible
-cost contribution.
+- Bundle reintroduction: a random bundle index is selected, its current path
+  is removed, the cost matrix is recomputed against the now-bundle-less
+  solution, and a Dijkstra-found new path is accepted iff it strictly improves
+  the total cost. Implemented by `_try_reinsert_bundle!`.
+- Two-node consolidation: a random `(src, dst)` pair is selected from the set
+  of valid `:other -> :other / :destination` arcs in the TTG. Every bundle
+  whose current path traverses `(src, dst)` is lifted, a merged virtual bundle
+  is rerouted between the two nodes via Dijkstra, and each lifted bundle's
+  sub-path is spliced through the new segment. Accepted iff the total cost
+  strictly improves. Implemented by `two_node_common_incremental!`.
 
-Order rationale: reinsertion may leave bin packings sub-optimal on the
-affected arcs (the cost delta is computed via the same FFD heuristic used
-on insertion, but a different ordering can occasionally open BFD
-improvements). Running `bin_packing_improvement!` after reinsertion gives it
-a chance to find those reductions in the same sweep.
+The loop exits when any of three conditions hits: `time_limit` seconds elapsed,
+`max_iter` iterations attempted, or `max_no_improv` consecutive iterations
+without improvement (improvement below `1.0`, matching STP's tolerance).
 
-The `packing` keyword defaults to `:ffd_union` and is forwarded to the
-reinsertion step. The remove-readd cycle that drives reinsertion needs
-order-independent re-packing (see `_try_reinsert_bundle!`), so it stays on
-FFD-union even when the initial solution was built with the `:frozen` default.
+After the loop a single `bin_packing_improvement!` pass is run when
+`allow_repack=true`. It is not interleaved per iteration because most
+iterations modify zero or very few arcs (a global pass at the end captures the
+same opportunities at lower amortized cost).
+
+Per-move pre-filtering: `cost_threshold_relative * start_cost` is passed as the
+`cost_threshold` to both move types, so candidates whose estimated removal cost
+is below that threshold are skipped without running Dijkstra.
+
+Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type
+(useful for ablation studies). Setting both to false skips straight to the
+final repack.
+
+The `packing` keyword defaults to `:ffd_union` and is forwarded to both moves.
+The remove-readd cycle inside each move needs order-independent re-packing (see
+`_try_reinsert_bundle!`), so it stays on FFD-union even when the initial
+solution was built with the `:frozen` default.
+
+Returns a `NamedTuple` with diagnostic info:
+
+- `saved::Float64`: total cost improvement (accepted moves plus final repack).
+- `final_cost::Float64`: `start_cost - saved`.
+- `n_iter::Int`: number of iterations performed.
+- `n_no_improv::Int`: final no-improvement streak length.
+- `timestamps::Vector{Float64}`: wall-time samples from `t_start`, taken every
+  `sample_every` iterations plus one at the start and one at the end.
+- `costs::Vector{Float64}`: `start_cost - tot_improv` snapshots at the same
+  iteration counts.
+- `iters_at_sample::Vector{Int}`: iteration counts at each sample.
 """
 function local_search!(
     sol::Solution,
     instance::Instance,
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=60.0,
-    relative_tolerance::Real=5e-5,
+    max_iter::Int=500_000,
+    max_no_improv::Int=15_000,
     cost_threshold_relative::Real=5e-5,
+    allow_reintro::Bool=true,
+    allow_consolidate::Bool=true,
+    allow_repack::Bool=true,
     packing::Symbol=:ffd_union,
+    rng::Random.AbstractRNG=Random.default_rng(),
+    sample_every::Int=1000,
 )
     t_start = time()
     start_cost = cost(sol)
-    tolerance = max(1.0, relative_tolerance * start_cost)
     cost_threshold = cost_threshold_relative * start_cost
-    while time() - t_start < time_limit
-        improved = bundle_reinsertion_improvement!(
-            sol,
-            instance,
-            mode_selector;
-            time_limit=max(0, time_limit - (time() - t_start)),
-            cost_threshold,
-            packing,
-        )
-        improved += bin_packing_improvement!(sol, instance)
-        improved < tolerance && break
+
+    ttg = instance.travel_time_graph
+    src_codes, dst_codes = compute_candidate_nodes(ttg)
+    valid_pairs = Tuple{Int,Int}[]
+    for s in src_codes, d in dst_codes
+        s != d && Graphs.has_edge(ttg.graph, s, d) && push!(valid_pairs, (s, d))
     end
-    return sol
+    can_consolidate = allow_consolidate && !isempty(valid_pairs)
+    can_reintro = allow_reintro && !isempty(instance.bundles)
+
+    tot_improv = 0.0
+    no_improv = 0
+    iter = 0
+    timestamps = Float64[0.0]
+    costs = Float64[start_cost]
+    iters_at_sample = Int[0]
+
+    if can_reintro || can_consolidate
+        while (time() - t_start < time_limit) &&
+                  (iter < max_iter) &&
+                  (no_improv < max_no_improv)
+            take_reintro = if can_reintro && can_consolidate
+                rand(rng) < 0.5
+            else
+                can_reintro
+            end
+
+            improved = if take_reintro
+                _run_reintro_step!(sol, instance, mode_selector, rng, cost_threshold, packing)
+            else
+                _run_two_node_step!(
+                    sol,
+                    instance,
+                    valid_pairs,
+                    mode_selector,
+                    rng,
+                    cost_threshold,
+                    allow_reintro,
+                    packing,
+                )
+            end
+
+            tot_improv += improved
+            if improved < 1.0
+                no_improv += 1
+            else
+                no_improv = 0
+            end
+            iter += 1
+            if iter % sample_every == 0
+                push!(timestamps, time() - t_start)
+                push!(costs, start_cost - tot_improv)
+                push!(iters_at_sample, iter)
+            end
+        end
+    end
+
+    if allow_repack
+        tot_improv += bin_packing_improvement!(sol, instance)
+    end
+    push!(timestamps, time() - t_start)
+    push!(costs, start_cost - tot_improv)
+    push!(iters_at_sample, iter)
+
+    return (;
+        saved=tot_improv,
+        final_cost=start_cost - tot_improv,
+        n_iter=iter,
+        n_no_improv=no_improv,
+        timestamps,
+        costs,
+        iters_at_sample,
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+One bundle-reintroduction step: pick a random bundle, skip it if its path is
+empty or its `bundle_estimated_removal_cost` is below `cost_threshold`,
+otherwise delegate to `_try_reinsert_bundle!`. Returns the per-step cost
+improvement (`0.0` if skipped or move rejected).
+"""
+function _run_reintro_step!(
+    sol::Solution,
+    instance::Instance,
+    mode_selector::AbstractModeSelector,
+    rng::Random.AbstractRNG,
+    cost_threshold::Float64,
+    packing::Symbol,
+)
+    n = length(instance.bundles)
+    n == 0 && return 0.0
+    bundle_idx = rand(rng, 1:n)
+    isempty(sol.bundle_paths[bundle_idx]) && return 0.0
+    if cost_threshold > 0 &&
+        bundle_estimated_removal_cost(sol, instance, bundle_idx) <= cost_threshold
+        return 0.0
+    end
+    return _try_reinsert_bundle!(sol, instance, bundle_idx, mode_selector; packing)
+end
+
+"""
+$TYPEDSIGNATURES
+
+One two-node consolidation step: pick a random `(src, dst)` pair from
+`valid_pairs` and delegate to `two_node_common_incremental!`. The `refine`
+argument forwards to that move (when true, lifted bundles are individually
+re-inserted after the splice). Returns the per-step cost improvement (`0.0`
+if no bundles traversed the arc or the move was rejected).
+"""
+function _run_two_node_step!(
+    sol::Solution,
+    instance::Instance,
+    valid_pairs::Vector{Tuple{Int,Int}},
+    mode_selector::AbstractModeSelector,
+    rng::Random.AbstractRNG,
+    cost_threshold::Float64,
+    refine::Bool,
+    packing::Symbol,
+)
+    isempty(valid_pairs) && return 0.0
+    (src, dst) = rand(rng, valid_pairs)
+    return two_node_common_incremental!(
+        sol, instance, src, dst; mode_selector, cost_threshold, refine, packing
+    )
 end

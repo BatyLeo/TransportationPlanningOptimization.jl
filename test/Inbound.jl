@@ -80,7 +80,9 @@ struct CarbonArcCost <: TPO.AbstractArcCostFunction
     carbon_per_unit_volume::Float64
 end
 
-function TPO.evaluate(c::CarbonArcCost, comms::Vector{<:TPO.LightCommodity})
+function TPO.evaluate(
+    c::CarbonArcCost, comms::Vector{<:TPO.LightCommodity}; presorted::Bool=false
+)
     return c.carbon_per_unit_volume * sum(x.size for x in comms; init=0.0)
 end
 function TPO.incremental_cost(
@@ -111,7 +113,9 @@ struct StockArcCost <: TPO.AbstractArcCostFunction
     distance::Float64
 end
 
-function TPO.evaluate(c::StockArcCost, comms::Vector{<:TPO.LightCommodity})
+function TPO.evaluate(
+    c::StockArcCost, comms::Vector{<:TPO.LightCommodity}; presorted::Bool=false
+)
     return c.distance * sum(x.info.stock_cost for x in comms; init=0.0)
 end
 function TPO.incremental_cost(

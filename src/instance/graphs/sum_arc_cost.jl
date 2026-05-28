@@ -42,56 +42,91 @@ function _find_bin_packing(c::SumArcCost)
     return isempty(bps) ? nothing : only(bps)
 end
 
-function evaluate(c::SumArcCost, comms::Vector{<:LightCommodity})
-    return sum(evaluate(t, comms) for t in c.terms)
+function evaluate(
+    c::SumArcCost, comms::Vector{C}; presorted::Bool=false
+) where {C<:LightCommodity}
+    return _sum_evaluate(c.terms, comms, presorted)
+end
+@inline _sum_evaluate(::Tuple{}, ::Vector{C}, ::Bool) where {C<:LightCommodity} = 0.0
+@inline function _sum_evaluate(
+    terms::Tuple, comms::Vector{C}, presorted::Bool
+) where {C<:LightCommodity}
+    return evaluate(first(terms), comms; presorted) +
+           _sum_evaluate(Base.tail(terms), comms, presorted)
 end
 
 function incremental_cost(
     c::SumArcCost, existing::Vector{C}, new::Vector{C}
 ) where {C<:LightCommodity}
-    return sum(incremental_cost(t, existing, new) for t in c.terms)
+    return _sum_incremental_cost(c.terms, existing, new)
+end
+@inline _sum_incremental_cost(
+    ::Tuple{}, ::Vector{C}, ::Vector{C}
+) where {C<:LightCommodity} = 0.0
+@inline function _sum_incremental_cost(
+    terms::Tuple, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return incremental_cost(first(terms), existing, new) +
+           _sum_incremental_cost(Base.tail(terms), existing, new)
 end
 
 function lower_bound_incremental_cost(
     c::SumArcCost, existing::Vector{C}, new::Vector{C}
 ) where {C<:LightCommodity}
-    return sum(lower_bound_incremental_cost(t, existing, new) for t in c.terms)
+    return _sum_lb_incremental_cost(c.terms, existing, new)
+end
+@inline _sum_lb_incremental_cost(
+    ::Tuple{}, ::Vector{C}, ::Vector{C}
+) where {C<:LightCommodity} = 0.0
+@inline function _sum_lb_incremental_cost(
+    terms::Tuple, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return lower_bound_incremental_cost(first(terms), existing, new) +
+           _sum_lb_incremental_cost(Base.tail(terms), existing, new)
 end
 
 # The buffer-threaded `incremental_cost!(::BinPackingBuffer, ::SumArcCost, ...)`
 # forwarding overload lives in `algorithms/cost_matrix_update.jl`, which is
 # included after `instance/bin.jl` defines `BinPackingBuffer`.
 
-function compute_bin_assignments(c::SumArcCost, comms::Vector{<:LightCommodity})
+function compute_bin_assignments(
+    c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
     bp = _find_bin_packing(c)
     bp === nothing && throw(
         ArgumentError("compute_bin_assignments: SumArcCost has no BinPackingArcCost term"),
     )
-    return compute_bin_assignments(bp, comms)
+    return compute_bin_assignments(bp, comms; presorted)
 end
 
-function compute_bin_assignments_bfd(c::SumArcCost, comms::Vector{<:LightCommodity})
+function compute_bin_assignments_bfd(
+    c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
     bp = _find_bin_packing(c)
     bp === nothing && throw(
         ArgumentError(
             "compute_bin_assignments_bfd: SumArcCost has no BinPackingArcCost term"
         ),
     )
-    return compute_bin_assignments_bfd(bp, comms)
+    return compute_bin_assignments_bfd(bp, comms; presorted)
 end
 
-function tentative_bin_count(c::SumArcCost, comms::Vector{<:LightCommodity})
+function tentative_bin_count(
+    c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
     bp = _find_bin_packing(c)
     bp === nothing && throw(
         ArgumentError("tentative_bin_count: SumArcCost has no BinPackingArcCost term")
     )
-    return tentative_bin_count(bp, comms)
+    return tentative_bin_count(bp, comms; presorted)
 end
 
-function tentative_best_fit_count(c::SumArcCost, comms::Vector{<:LightCommodity})
+function tentative_best_fit_count(
+    c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
     bp = _find_bin_packing(c)
     bp === nothing && throw(
         ArgumentError("tentative_best_fit_count: SumArcCost has no BinPackingArcCost term"),
     )
-    return tentative_best_fit_count(bp, comms)
+    return tentative_best_fit_count(bp, comms; presorted)
 end

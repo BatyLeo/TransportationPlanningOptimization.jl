@@ -627,13 +627,11 @@ end
 end
 
 @testset "Cross-package comparison: full LS (TPO <= 1.1x STP)" begin
-    # TPO's `local_search!` is currently missing the two-node consolidation
-    # move (Phase 3.7 of the parity plan), but empirically with 60s budgets on
-    # `tiny` and `small`, TPO's reinsertion converges fully and TPO matches or
-    # slightly beats STP. Observed ratios at 60s: tiny ~1.0, small ~0.98. The
-    # 1.1 bound has comfortable headroom while still catching regressions.
-    # Loosen back to 1.5 if larger instances reveal STP's two-node move pulling
-    # ahead before Phase 3.7 lands.
+    # TPO's `local_search!` now uses the same random-neighborhood structure
+    # as STP (coin-flip between bundle reintroduction and two-node
+    # consolidation) and runs a final `bin_packing_improvement!` pass. With
+    # equal 60s budgets, TPO matches or slightly beats STP on tiny and small.
+    # Tighten the 1.1x bound once larger instances confirm the same ratio.
     for name in COMPARISON_INSTANCES
         @testset "instance $(name)" begin
             (; tpo_instance, stp_instance) = load_instance_pair(name)

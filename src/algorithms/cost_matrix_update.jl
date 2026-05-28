@@ -189,7 +189,16 @@ sum-over-terms `incremental_cost(::SumArcCost, ...)`.
 function incremental_cost!(
     buffer::BinPackingBuffer, c::SumArcCost, existing::Vector{C}, new::Vector{C}
 ) where {C<:LightCommodity}
-    return sum(incremental_cost!(buffer, t, existing, new) for t in c.terms)
+    return _sum_incremental_cost_buf(buffer, c.terms, existing, new)
+end
+@inline _sum_incremental_cost_buf(
+    ::BinPackingBuffer, ::Tuple{}, ::Vector{C}, ::Vector{C}
+) where {C<:LightCommodity} = 0.0
+@inline function _sum_incremental_cost_buf(
+    buffer::BinPackingBuffer, terms::Tuple, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return incremental_cost!(buffer, first(terms), existing, new) +
+           _sum_incremental_cost_buf(buffer, Base.tail(terms), existing, new)
 end
 
 """

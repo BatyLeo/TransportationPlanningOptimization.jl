@@ -158,7 +158,9 @@ $TYPEDSIGNATURES
 Evaluate the cost of transporting a list of commodities on an arc with a linear cost function.
 The cost is proportional to the total size of all commodities.
 """
-function evaluate(arc_f::LinearArcCost, commodities::Vector{<:LightCommodity})
+function evaluate(
+    arc_f::LinearArcCost, commodities::Vector{<:LightCommodity}; presorted::Bool=false
+)
     total_size = sum(c.size for c in commodities; init=0.0)
     return arc_f.cost_per_unit_size * total_size
 end
@@ -170,9 +172,12 @@ Evaluate the cost of transporting a list of commodities on an arc with a bin-pac
 The cost is based on the number of bins (trucks) needed to transport all commodities.
 Uses the First-Fit Decreasing (FFD) heuristic to determine bin assignments and count.
 """
-function evaluate(arc_f::BinPackingArcCost, commodities::Vector{<:LightCommodity})
-    assignments = compute_bin_assignments(arc_f, commodities)
-    return arc_f.cost_per_bin * length(assignments)
+function evaluate(
+    arc_f::BinPackingArcCost, commodities::Vector{<:LightCommodity}; presorted::Bool=false
+)
+    # tentative_bin_count returns the same `length` as compute_bin_assignments
+    # without allocating Bin objects, and honors the presorted hint.
+    return arc_f.cost_per_bin * tentative_bin_count(arc_f, commodities; presorted)
 end
 
 """
@@ -180,7 +185,7 @@ $TYPEDSIGNATURES
 
 Evaluate the cost of a shortcut (wait) arc: always zero.
 """
-evaluate(::ShortcutArcCost, ::Vector{<:LightCommodity}) = 0.0
+evaluate(::ShortcutArcCost, ::Vector{<:LightCommodity}; presorted::Bool=false) = 0.0
 
 """
 $TYPEDSIGNATURES
@@ -188,7 +193,9 @@ $TYPEDSIGNATURES
 Fallback for cost function types that have not yet implemented `evaluate`.
 Throws to prevent silently incorrect (zero) costs during development.
 """
-function evaluate(arc_f::AbstractArcCostFunction, ::Vector{<:LightCommodity})
+function evaluate(
+    arc_f::AbstractArcCostFunction, ::Vector{<:LightCommodity}; presorted::Bool=false
+)
     return throw(
         ArgumentError("evaluate not implemented for cost function of type $(typeof(arc_f))")
     )
