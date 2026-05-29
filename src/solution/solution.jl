@@ -296,6 +296,65 @@ function _ensure_sorted!(slot::SingleAssignment)
     return slot
 end
 
+"""
+$TYPEDSIGNATURES
+
+Append `new_commodities` into `slot.commodities` while preserving the
+descending-by-size invariant. `new_commodities` is assumed to already be in
+descending order (which is the `Order.commodities` invariant established at
+instance construction). When `slot.sorted` is true, this performs an in-place
+two-pointer merge in O(`|slot.commodities|` + `|new_commodities|`) and keeps
+`slot.sorted = true`. When the slot's order is not known (the fallback case
+hit by ad-hoc external constructors), we append and re-sort just like before.
+
+Hot path during LS — replaces the previous `append! + slot.sorted = false`
+pattern, which forced the next `_ensure_sorted!` call to re-sort the full
+pool. The instrumented LS profile showed that re-sort accounting for ~15% of
+LS time at `packing=:frozen`.
+"""
+function _merge_sorted_into_slot!(slot::SingleAssignment{C}, new_commodities::Vector{C}) where {C<:LightCommodity}
+    isempty(new_commodities) && return slot
+    if !slot.sorted
+        # Fallback for slots not maintained under the invariant. Hot path
+        # never enters this branch because every slot starts with sorted=true
+        # (0-arg ctor) and we now keep it that way on every add.
+        append!(slot.commodities, new_commodities)
+        return slot
+    end
+    n = length(slot.commodities)
+    k = length(new_commodities)
+    if n == 0
+        append!(slot.commodities, new_commodities)
+        return slot
+    end
+    # In-place two-pointer merge from the back. Writing slot[w] only ever
+    # overwrites a slot position already past the read pointer `i`, so the
+    # merge is safe in place. `w >= i + (k - new_picks)` holds throughout.
+    resize!(slot.commodities, n + k)
+    i = n
+    j = k
+    w = n + k
+    @inbounds while i >= 1 && j >= 1
+        a = slot.commodities[i]
+        b = new_commodities[j]
+        if a.size <= b.size
+            slot.commodities[w] = a
+            i -= 1
+        else
+            slot.commodities[w] = b
+            j -= 1
+        end
+        w -= 1
+    end
+    @inbounds while j >= 1
+        slot.commodities[w] = new_commodities[j]
+        j -= 1
+        w -= 1
+    end
+    # Any remaining slot.commodities[1..i] are already in their correct positions.
+    return slot
+end
+
 function _update_single_assignment_cost!(
     slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction
 ) where {C}
@@ -432,8 +491,9 @@ function _fill_then_spill_assign!(
         isempty(placed) && continue
         slot = assignment.per_mode[i]
         before = slot.cost
-        append!(slot.commodities, placed)
-        slot.sorted = false
+        # `placed` is a subset of the order's commodities, which are sorted
+        # desc at construction. The merge preserves slot.sorted=true.
+        _merge_sorted_into_slot!(slot, placed)
         _update_single_assignment_cost!(slot, arc.modes[i].cost)
         cost_delta += slot.cost - before
     end
@@ -452,8 +512,10 @@ function _add_order_to_assignment!(
         SingleAssignment{C}()
     end::SingleAssignment{C}
     before = assignment.cost
-    append!(assignment.commodities, new_commodities)
-    assignment.sorted = false
+    # new_commodities is sorted desc by the Order invariant. The merge
+    # preserves assignment.sorted=true so the next remove can skip its
+    # _ensure_sorted! sort.
+    _merge_sorted_into_slot!(assignment, new_commodities)
     if packing === :frozen
         _frozen_commit_single_assignment!(assignment, arc.cost, new_commodities)
     else
@@ -494,8 +556,9 @@ function _add_order_to_assignment!(
     end
     slot = assignment.per_mode[best_mode_idx]
     before = slot.cost
-    append!(slot.commodities, new_commodities)
-    slot.sorted = false
+    # new_commodities is sorted desc by the Order invariant. Merge preserves
+    # slot.sorted=true so the next remove can skip its _ensure_sorted! sort.
+    _merge_sorted_into_slot!(slot, new_commodities)
     if packing === :frozen
         _frozen_commit_single_assignment!(
             slot, arc.modes[best_mode_idx].cost, new_commodities
@@ -799,21 +862,96 @@ in `pool`. Returns the vector of items that were actually dropped.
 This dual-mutation contract is convenient when scanning a queue of items across
 several pools (for example, across the modes of a `MultiAssignment`): pass the
 same `to_remove` vector to successive calls and stop when it is empty.
+
+# Adaptive strategy
+
+Two implementations are dispatched on `length(to_remove)`:
+
+- **Linear-scan** for `length(to_remove) ≤ 8`. No `Dict` allocation; for each
+  pool element, scan `to_remove` for the first unmatched equal entry.
+- **Dict-based multiset** for larger `to_remove`. The dictionary amortizes
+  pool walks of `O(|pool|)` look-ups regardless of `|to_remove|`.
+
+The 8-element cutoff was chosen from a captured-input microbench
+(`scripts/benchmark/microbench_drain.jl`): on LS-realistic inputs, linear wins
+2.5x for `to_remove ≤ 5`, breaks even around 5-10, and loses 2-3x for
+`to_remove ∈ [10, 32]`. The instrumented LS distribution puts ~57% of calls
+under the threshold (median `to_remove = 3`).
 """
 function _drain_first_matches!(
     pool::Vector{C}, to_remove::Vector{C}
 ) where {C<:LightCommodity}
     isempty(to_remove) && return C[]
+    if length(to_remove) <= 8
+        return _drain_first_matches_linear!(pool, to_remove)
+    end
+    return _drain_first_matches_dict!(pool, to_remove)
+end
 
-    # Multi-set of items wanted for removal.
+"""
+$TYPEDSIGNATURES
+
+Linear-scan implementation of `_drain_first_matches!`. Tracks which
+`to_remove` indices have already been matched via a `BitVector`. For each pool
+element, scans the unmatched indices in `to_remove` for the first `==`
+match. Stable in pool order; preserves original order of unmatched entries in
+`to_remove`. Used when `length(to_remove)` is small (the dominant case).
+"""
+function _drain_first_matches_linear!(
+    pool::Vector{C}, to_remove::Vector{C}
+) where {C<:LightCommodity}
+    n_to_remove = length(to_remove)
+    matched = falses(n_to_remove)
+    n_pool = length(pool)
+    write_idx = 0
+    dropped = C[]
+    @inbounds for read_idx in 1:n_pool
+        c = pool[read_idx]
+        match_idx = 0
+        for i in 1:n_to_remove
+            if !matched[i] && to_remove[i] == c
+                match_idx = i
+                break
+            end
+        end
+        if match_idx > 0
+            matched[match_idx] = true
+            push!(dropped, c)
+        else
+            write_idx += 1
+            pool[write_idx] = c
+        end
+    end
+    resize!(pool, write_idx)
+
+    # Compact to_remove in place, keeping unmatched entries in original order.
+    write_idx = 0
+    @inbounds for i in 1:n_to_remove
+        if !matched[i]
+            write_idx += 1
+            to_remove[write_idx] = to_remove[i]
+        end
+    end
+    resize!(to_remove, write_idx)
+
+    return dropped
+end
+
+"""
+$TYPEDSIGNATURES
+
+Dict-based multiset implementation of `_drain_first_matches!`. Used when
+`length(to_remove)` is large, where the `O(|pool|)` dictionary look-up cost
+beats the linear scan's `O(|pool| × |to_remove|)`.
+"""
+function _drain_first_matches_dict!(
+    pool::Vector{C}, to_remove::Vector{C}
+) where {C<:LightCommodity}
     counts = Dict{C,Int}()
     for c in to_remove
         counts[c] = get(counts, c, 0) + 1
     end
 
-    # Single in-place pass over pool. Items whose count is positive are dropped
-    # (and the count is decremented so multiplicity is respected); others are
-    # compacted to the front.
     n_pool = length(pool)
     write_idx = 0
     dropped = C[]
@@ -830,9 +968,6 @@ function _drain_first_matches!(
     end
     resize!(pool, write_idx)
 
-    # Compact to_remove in place: keep only items whose residual count > 0
-    # (i.e. items that did NOT find a match in pool). Preserves their original
-    # order so the MultiAssignment caller's chaining contract is intact.
     write_idx = 0
     for read_idx in 1:length(to_remove)
         c = to_remove[read_idx]
