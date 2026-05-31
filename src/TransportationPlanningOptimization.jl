@@ -17,7 +17,10 @@ include("instance/bundle.jl")
 
 include("instance/graphs/nodes/node_cost.jl")
 include("instance/graphs/nodes/network_node.jl")
-include("instance/graphs/arcs/arc_cost.jl")
+include("instance/graphs/arcs/arc_costs/abstract_arc_cost.jl")
+include("instance/graphs/arcs/arc_costs/shortcut_arc_cost.jl")
+include("instance/graphs/arcs/arc_costs/linear_arc_cost.jl")
+include("instance/graphs/arcs/arc_costs/bin_packing_arc_cost.jl")
 include("instance/graphs/arcs/sum_arc_cost.jl")
 include("instance/graphs/arcs/network_arc.jl")
 
