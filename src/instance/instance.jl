@@ -299,12 +299,8 @@ function build_instance(
         time_step_idx, origin_id, destination_id, group_key = key
         commodities_list, min_steps = order_dict[key]
         min_steps = min(time_horizon_length, min_steps)
-        # Invariant: `Order.commodities` is kept sorted by size descending. This
-        # one-time O(n log n) sort at construction lets the bin-packing hot path
-        # (FFD via `incremental_cost!`) merge pre-sorted runs instead of sorting
-        # the commodity sizes on every arc evaluation. FFD requires descending
-        # order, so this does not change any bin count or cost.
-        sort!(commodities_list; by=c -> c.size, rev=true)
+        # `Order`'s constructor sorts the commodities by size descending (the
+        # invariant the bin-packing hot path relies on), so no sort is needed here.
         order = Order{is_date_arrival,I}(commodities_list, time_step_idx, min_steps)
         push!(orders, order)
 

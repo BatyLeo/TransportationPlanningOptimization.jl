@@ -37,6 +37,6 @@ end
 function Base.show(io::IO, commodity::LightCommodity)
     return print(
         io,
-        "LightCommodity($(commodity.origin_id) -> $(commodity.destination_id), $(round(commodity.size; digits=2)))",
+        "LightCommodity($(commodity.origin_id) -> $(commodity.destination_id), size: $(round(commodity.size; digits=2)))",
     )
 end

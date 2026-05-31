@@ -54,7 +54,8 @@ end
             ),
         ]
         order = Order(; commodities=light_commodities, time_step=3, max_transit_steps=21)
-        order.commodities[1].info.id == 1 && order.commodities[2].info.id == 2
+        # Check that commodities are sorted by descending size and that info is preserved.
+        order.commodities[2].info.id == 1 && order.commodities[1].info.id == 2
     end
 end
 

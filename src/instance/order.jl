@@ -8,16 +8,16 @@ Commodities in an `Order` share the same:
 - Delivery date (interpreted as a deadline or release depending on `is_date_arrival` value)
 
 # Type Parameters
-- `is_date_arrival::Bool`: Inherited from the commodities. `true` for deadline-driven, `false` for release-driven.
+- `is_date_arrival::Bool`: `true` for deadline-driven, `false` for release-driven.
 - `I`: Additional problem-specific information.
 
 # Fields
 $TYPEDFIELDS
 """
 struct Order{is_date_arrival,I}
-    "list of commodities in the order, kept sorted by size descending (invariant set at instance construction so the bin-packing hot path can merge pre-sorted runs)"
+    "list of commodities in the order, kept sorted by descending size"
     commodities::Vector{LightCommodity{I}}
-    "time step corresponding to the delivery arrival/departure date"
+    "time step corresponding to the delivery arrival or departure date"
     time_step::Int
     "maximum number of time steps for delivery among all commodities in the order"
     max_transit_steps::Int
@@ -35,10 +35,18 @@ struct Order{is_date_arrival,I}
                 ),
             )
         end
+        # Sort commodities by size descending to facilitate packing heuristics.
+        sort!(commodities; by=c -> c.size, rev=true)
         return new{is_date_arrival,I}(commodities, time_step, max_transit_steps)
     end
 end
 
+"""
+$TYPEDSIGNATURES
+
+Construct an `Order` from a list of `LightCommodity`.
+The commodities are sorted in descending order of size to facilitate packing heuristics.
+"""
 function Order(;
     commodities::Vector{LightCommodity{I}},
     time_step::Int,
