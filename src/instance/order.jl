@@ -45,7 +45,8 @@ end
 $TYPEDSIGNATURES
 
 Construct an `Order` from a list of `LightCommodity`.
-The commodities are sorted in descending order of size to facilitate packing heuristics.
+The commodities are sorted (inline) in descending order of size to facilitate packing
+heuristics.
 """
 function Order(;
     commodities::Vector{LightCommodity{I}},
@@ -56,10 +57,13 @@ function Order(;
     return Order{is_date_arrival,I}(commodities, time_step, max_transit_steps)
 end
 
-function Base.show(io::IO, order::Order)
+function Base.show(io::IO, order::Order{is_date_arrival,I}) where {is_date_arrival,I}
+    date_kind = is_date_arrival ? "arrival_date" : "departure_date"
     return print(
         io,
-        "Order(time_step=$(order.time_step), num_commodities=$(length(order.commodities)), max_transit_steps=$(order.max_transit_steps))",
+        "Order($date_kind=$(order.time_step), " *
+        "num_commodities=$(length(order.commodities)), " *
+        "max_transit_steps=$(order.max_transit_steps))",
     )
 end
 

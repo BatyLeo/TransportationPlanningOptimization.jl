@@ -2,14 +2,18 @@
 $TYPEDEF
 
 A collection of `Order`s that share the same origin and destination.
-While orders in a bundle can have different delivery dates, they should follow the same path (in the travel time graph).
+While orders in a bundle can have different delivery dates, they should follow the same path
+(in the travel time graph).
 
 # Fields
 $TYPEDFIELDS
 """
 struct Bundle{O<:Order}
+    "list of orders in the bundle"
     orders::Vector{O}
+    "id of the origin node"
     origin_id::String
+    "id of the destination node"
     destination_id::String
     "set of node IDs that are forbidden for this bundle (cannot be traversed)"
     forbidden_nodes::Set{String}
@@ -17,6 +21,13 @@ struct Bundle{O<:Order}
     forbidden_arcs::Set{Tuple{String,String}}
 end
 
+"""
+$TYPEDSIGNATURES
+
+Construct a `Bundle` from a list of `Order`s and the shared origin and destination node IDs.
+The `forbidden_nodes` and `forbidden_arcs` fields are optional and can be used to specify additional
+constraints on the paths that can be taken by this bundle.
+"""
 function Bundle(;
     orders::Vector{O},
     origin_id::String,
@@ -56,16 +67,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the maximum single-order volume in the bundle (the largest sum of
-commodity sizes within any one `Order`). Used as the bundle-insertion sort key
-in `greedy_heuristic`, `lower_bound`, `lower_bound_filtering`, and
-`mix_greedy_and_lower_bound`. Prioritising bundles with large single-order
-loads reduces the chance of later bundles getting boxed out of nearly-full
-bins.
+Compute the maximum order size among all orders in the bundle.
 """
 function max_pack_size(bundle::Bundle)
-    return maximum(
-        sum(c.size for c in order.commodities; init=0.0) for order in bundle.orders;
-        init=0.0,
-    )
+    return maximum(total_size(order) for order in bundle.orders; init=0.0)
 end

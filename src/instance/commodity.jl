@@ -2,8 +2,9 @@
 $TYPEDEF
 
 A `LightCommodity` represents a commodity in the transportation planning problem.
-A commodity is defined by its origin and destination nodes, its size, and any additional problem-specific information.
-This data structure does include date information, as it is stored in [`Order`](@ref) instead.
+A commodity is defined by its origin and destination nodes, its size, and any additional
+problem-specific information. This data structure does include date information,
+as it is stored in [`Order`](@ref) instead.
 
 # Fields
 $TYPEDFIELDS
@@ -37,6 +38,7 @@ end
 function Base.show(io::IO, commodity::LightCommodity)
     return print(
         io,
-        "LightCommodity($(commodity.origin_id) -> $(commodity.destination_id), size: $(round(commodity.size; digits=2)))",
+        "LightCommodity($(commodity.origin_id) -> $(commodity.destination_id), " *
+        "size: $(round(commodity.size; digits=2)))",
     )
 end
