@@ -8,11 +8,16 @@ Nodes represent physical locations and can serve as origins or destinations for 
 $TYPEDFIELDS
 """
 struct NetworkNode{J,N<:AbstractNodeCostFunction}
+    "unique identifier for the node"
     id::String
+    "type of node: :origin, :destination, or :other"
     node_type::Symbol
     cost::Float64
+    "capacity of the node (in size units)"
     capacity::Int
+    "additional information associated with the node"
     info::J
+    "node cost function for this node"
     node_cost::N
 
     function NetworkNode{J,N}(
