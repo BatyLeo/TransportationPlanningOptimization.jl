@@ -24,11 +24,17 @@ using Dates
 struct _TestNodeCost <: AbstractNodeCostFunction
     factor::Float64
 end
-TPO.evaluate(c::_TestNodeCost, comms) = c.factor * sum(x.size for x in comms; init=0.0)
-function TPO.incremental_cost(c::_TestNodeCost, _, new)
+function TPO.evaluate(c::_TestNodeCost, comms::Vector{<:LightCommodity})
+    return c.factor * sum(x.size for x in comms; init=0.0)
+end
+function TPO.incremental_cost(
+    c::_TestNodeCost, ::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
     return c.factor * sum(x.size for x in new; init=0.0)
 end
-function TPO.lower_bound_incremental_cost(c::_TestNodeCost, e, n)
+function TPO.lower_bound_incremental_cost(
+    c::_TestNodeCost, e::Vector{C}, n::Vector{C}
+) where {C<:LightCommodity}
     return TPO.incremental_cost(c, e, n)
 end
 
