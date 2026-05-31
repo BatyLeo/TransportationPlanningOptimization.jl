@@ -15,10 +15,12 @@ include("instance/commodity.jl")
 include("instance/order.jl")
 include("instance/bundle.jl")
 
-include("instance/graphs/node_cost.jl")
-include("instance/graphs/network_node.jl")
-include("instance/graphs/network_arc.jl")
-include("instance/graphs/sum_arc_cost.jl")
+include("instance/graphs/nodes/node_cost.jl")
+include("instance/graphs/nodes/network_node.jl")
+include("instance/graphs/arcs/arc_cost.jl")
+include("instance/graphs/arcs/sum_arc_cost.jl")
+include("instance/graphs/arcs/network_arc.jl")
+
 include("instance/bin.jl")
 
 include("instance/parsing/commodity.jl")
