@@ -232,16 +232,11 @@ end
         # Create a bundle with one order
         order = Order(;
             commodities=[
-                LightCommodity(;
-                    origin_id="O",
-                    destination_id="D",
-                    size=1.0,
-                    info=nothing,
-                    is_date_arrival=true,
-                ),
+                LightCommodity(; origin_id="O", destination_id="D", size=1.0, info=nothing)
             ],
             time_step=1,
             max_transit_steps=2,
+            is_date_arrival=true,
         )
         bundle = Bundle(; orders=[order], origin_id="O", destination_id="D")
         bundles = [bundle]

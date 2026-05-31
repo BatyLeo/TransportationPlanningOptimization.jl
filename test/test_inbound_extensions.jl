@@ -7,15 +7,10 @@ using .Inbound
 const TPO = TransportationPlanningOptimization
 
 @testset "CarbonArcCost is linear in volume" begin
-    C = TPO.LightCommodity{true,Nothing}
+    C = TPO.LightCommodity{Nothing}
     items = [
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in (1.0, 2.0, 3.0)
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (1.0, 2.0, 3.0)
     ]
     c = CarbonArcCost(0.5)
     @test isapprox(TPO.evaluate(c, items), 0.5 * 6.0; atol=1e-9)
@@ -26,18 +21,10 @@ end
 @testset "StockArcCost reads info.stock_cost and scales by distance" begin
     items = [
         LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=1.0,
-            info=InboundCommodityInfo(2.5),
-            is_date_arrival=true,
+            origin_id="o", destination_id="d", size=1.0, info=InboundCommodityInfo(2.5)
         ),
         LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=1.0,
-            info=InboundCommodityInfo(1.5),
-            is_date_arrival=true,
+            origin_id="o", destination_id="d", size=1.0, info=InboundCommodityInfo(1.5)
         ),
     ]
     c = StockArcCost(10.0)
@@ -47,13 +34,8 @@ end
 
 @testset "NodeVolumeCost is linear in volume" begin
     items = [
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in (10.0, 20.0)
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (10.0, 20.0)
     ]
     c = NodeVolumeCost(3.0)
     # 3.0 * 30 = 90

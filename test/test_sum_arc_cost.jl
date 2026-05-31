@@ -6,13 +6,8 @@ const TPO = TransportationPlanningOptimization
 
 @testset "SumArcCost evaluate sums over terms" begin
     items = [
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in (10.0, 20.0, 30.0)
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (10.0, 20.0, 30.0)
     ]
     linear = LinearArcCost(2.0)
     sum_cost = SumArcCost((linear, linear))
@@ -22,26 +17,17 @@ const TPO = TransportationPlanningOptimization
 end
 
 @testset "SumArcCost incremental sums over terms" begin
-    C = LightCommodity{true,Nothing}
+    C = LightCommodity{Nothing}
     existing = C[]
-    new = [
-        LightCommodity(;
-            origin_id="o", destination_id="d", size=5.0, info=nothing, is_date_arrival=true
-        ),
-    ]
+    new = [LightCommodity(; origin_id="o", destination_id="d", size=5.0, info=nothing)]
     sum_cost = SumArcCost((LinearArcCost(1.0), LinearArcCost(3.0)))
     @test isapprox(TPO.incremental_cost(sum_cost, existing, new), 20.0; atol=1e-9)
 end
 
 @testset "SumArcCost bin-packing delegates to unique BinPackingArcCost" begin
     items = [
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in (40.0, 60.0, 35.0)
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (40.0, 60.0, 35.0)
     ]
     bp = BinPackingArcCost(10.0, 100)
     sum_cost = SumArcCost((bp, LinearArcCost(1.0)))
@@ -55,11 +41,11 @@ end
     bp = BinPackingArcCost(10.0, 100)
     sum_no_bp = SumArcCost((LinearArcCost(2.0),))
     @test_throws ArgumentError TPO.compute_bin_assignments(
-        sum_no_bp, LightCommodity{true,Nothing}[]
+        sum_no_bp, LightCommodity{Nothing}[]
     )
     sum_two_bp = SumArcCost((bp, bp))
     @test_throws ArgumentError TPO.tentative_bin_count(
-        sum_two_bp, LightCommodity{true,Nothing}[]
+        sum_two_bp, LightCommodity{Nothing}[]
     )
 end
 

@@ -5,15 +5,10 @@ using MetaGraphsNext
 
 @testset "lower_bound_incremental_cost equals classic for LinearArcCost" begin
     arc_f = LinearArcCost(2.0)
-    C = LightCommodity{true,Nothing}
+    C = LightCommodity{Nothing}
     new = [
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in (3, 5, 7)
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (3, 5, 7)
     ]
     @test TransportationPlanningOptimization.lower_bound_incremental_cost(
         arc_f, C[], new
@@ -22,15 +17,10 @@ end
 
 @testset "lower_bound_incremental_cost uses fractional bins" begin
     arc_f = BinPackingArcCost(10.0, 100)
-    C = LightCommodity{true,Nothing}
+    C = LightCommodity{Nothing}
     new = [
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in (60, 60)
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (60, 60)
     ]
     classic = TransportationPlanningOptimization.incremental_cost(arc_f, C[], new)
     lb = TransportationPlanningOptimization.lower_bound_incremental_cost(arc_f, C[], new)

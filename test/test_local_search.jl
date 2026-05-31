@@ -79,7 +79,7 @@ end
     using Random
     rng = MersenneTwister(20260522)
     arc_f = BinPackingArcCost(10.0, 100)
-    C = LightCommodity{true,Nothing}
+    C = LightCommodity{Nothing}
     for trial in 1:20
         n = rand(rng, 5:40)
         items = [
@@ -88,7 +88,6 @@ end
                 destination_id="d",
                 size=Float64(rand(rng, 1:100)),
                 info=nothing,
-                is_date_arrival=true,
             ) for _ in 1:n
         ]
         @test tentative_best_fit_count(arc_f, items) == length(
@@ -99,19 +98,14 @@ end
 
 @testset "_repack_assignment! chooses BFD when BFD strictly beats FFD" begin
     # Divergent input found by random search: capacity 100, sizes below give FFD=11, BFD=10.
-    C = LightCommodity{true,Nothing}
+    C = LightCommodity{Nothing}
     arc_f = BinPackingArcCost(10.0, 100)
     sizes = [
         75, 95, 28, 95, 1, 28, 60, 11, 10, 30, 65, 27, 52, 8, 7, 94, 98, 60, 16, 86, 20
     ]
     items = C[
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in sizes
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in sizes
     ]
 
     ffd = tentative_bin_count(arc_f, items)
@@ -132,16 +126,11 @@ end
 
 @testset "_repack_assignment! gates when no improvement is possible" begin
     # If the current bin count already equals min(ffd, bfd), no repack should happen.
-    C = LightCommodity{true,Nothing}
+    C = LightCommodity{Nothing}
     arc_f = BinPackingArcCost(10.0, 100)
     items = C[
-        LightCommodity(;
-            origin_id="o",
-            destination_id="d",
-            size=Float64(s),
-            info=nothing,
-            is_date_arrival=true,
-        ) for s in [60, 50, 40, 30, 20]
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in [60, 50, 40, 30, 20]
     ]
     bins = TransportationPlanningOptimization.compute_bin_assignments(arc_f, items)
     slot = SingleAssignment{C}(items, bins, arc_f.cost_per_bin * length(bins))

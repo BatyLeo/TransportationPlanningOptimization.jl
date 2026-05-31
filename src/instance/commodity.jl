@@ -8,7 +8,7 @@ This data structure does include date information, as it is stored in [`Order`](
 # Fields
 $TYPEDFIELDS
 """
-struct LightCommodity{is_date_arrival,I}
+struct LightCommodity{I}
     "id of the origin node"
     origin_id::String
     "id of the destination node"
@@ -18,24 +18,20 @@ struct LightCommodity{is_date_arrival,I}
     "extra information about the commodity, which can be used for problem-specific purposes"
     info::I
 
-    function LightCommodity{is_date_arrival,I}(
+    function LightCommodity(
         origin_id::String, destination_id::String, size::Float64, info::I
-    ) where {is_date_arrival,I}
+    ) where {I}
         if size <= 0.0
             throw(DomainError(size, "LightCommodity size must be positive."))
         end
-        return new{is_date_arrival,I}(origin_id, destination_id, size, info)
+        return new{I}(origin_id, destination_id, size, info)
     end
 end
 
 function LightCommodity(;
-    origin_id::String,
-    destination_id::String,
-    size::Float64,
-    is_date_arrival::Bool=false,
-    info::I=nothing,
+    origin_id::String, destination_id::String, size::Float64, info::I=nothing
 ) where {I}
-    return LightCommodity{is_date_arrival,I}(origin_id, destination_id, size, info)
+    return LightCommodity(origin_id, destination_id, size, info)
 end
 
 function Base.show(io::IO, commodity::LightCommodity)

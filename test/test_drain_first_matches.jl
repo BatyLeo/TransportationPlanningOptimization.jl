@@ -3,7 +3,7 @@ using TransportationPlanningOptimization
 using Dates
 const TPO = TransportationPlanningOptimization
 
-# Build a small bag of LightCommodity{false,Nothing} values for testing.
+# Build a small bag of LightCommodity{Nothing} values for testing.
 function _mk(size::Float64, sup::String="S", cust::String="C")
     return TPO.LightCommodity(; origin_id=sup, destination_id=cust, size=size, info=nothing)
 end
@@ -11,7 +11,7 @@ end
 @testset "_drain_first_matches! contract" begin
     @testset "no removal when to_remove is empty" begin
         pool = [_mk(1.0), _mk(2.0)]
-        to_remove = TPO.LightCommodity{false,Nothing}[]
+        to_remove = TPO.LightCommodity{Nothing}[]
         dropped = TPO._drain_first_matches!(pool, to_remove)
         @test isempty(dropped)
         @test pool == [_mk(1.0), _mk(2.0)]

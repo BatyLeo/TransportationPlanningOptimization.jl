@@ -16,16 +16,14 @@ $TYPEDFIELDS
 """
 struct Order{is_date_arrival,I}
     "list of commodities in the order, kept sorted by size descending (invariant set at instance construction so the bin-packing hot path can merge pre-sorted runs)"
-    commodities::Vector{LightCommodity{is_date_arrival,I}}
+    commodities::Vector{LightCommodity{I}}
     "time step corresponding to the delivery arrival/departure date"
     time_step::Int
     "maximum number of time steps for delivery among all commodities in the order"
     max_transit_steps::Int
 
     function Order{is_date_arrival,I}(
-        commodities::Vector{LightCommodity{is_date_arrival,I}},
-        time_step::Int,
-        max_transit_steps::Int,
+        commodities::Vector{LightCommodity{I}}, time_step::Int, max_transit_steps::Int
     ) where {is_date_arrival,I}
         if time_step <= 0
             throw(DomainError(time_step, "Time steps start from 1."))
@@ -42,10 +40,11 @@ struct Order{is_date_arrival,I}
 end
 
 function Order(;
-    commodities::Vector{LightCommodity{is_date_arrival,I}},
+    commodities::Vector{LightCommodity{I}},
     time_step::Int,
     max_transit_steps::Int,
-) where {is_date_arrival,I}
+    is_date_arrival::Bool=false,
+) where {I}
     return Order{is_date_arrival,I}(commodities, time_step, max_transit_steps)
 end
 

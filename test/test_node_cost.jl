@@ -5,12 +5,8 @@ using MetaGraphsNext
 const TPO = TransportationPlanningOptimization
 
 @testset "NoNodeCost evaluates to 0" begin
-    C = LightCommodity{true,Nothing}
-    items = [
-        LightCommodity(;
-            origin_id="o", destination_id="d", size=10.0, info=nothing, is_date_arrival=true
-        ),
-    ]
+    C = LightCommodity{Nothing}
+    items = [LightCommodity(; origin_id="o", destination_id="d", size=10.0, info=nothing)]
     @test TPO.evaluate(NoNodeCost(), items) == 0.0
     @test TPO.incremental_cost(NoNodeCost(), C[], items) == 0.0
     @test TPO.lower_bound_incremental_cost(NoNodeCost(), C[], items) == 0.0

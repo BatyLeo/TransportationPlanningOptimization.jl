@@ -29,11 +29,12 @@ function _ng_case2()
 end
 
 function _bundle_AB(; max_transit_steps=3)
-    commodity = LightCommodity(;
-        origin_id="A", destination_id="B", size=1.0, is_date_arrival=false
-    )
+    commodity = LightCommodity(; origin_id="A", destination_id="B", size=1.0)
     order = Order(;
-        commodities=[commodity], time_step=1, max_transit_steps=max_transit_steps
+        commodities=[commodity],
+        time_step=1,
+        max_transit_steps=max_transit_steps,
+        is_date_arrival=false,
     )
     return Bundle(; orders=[order], origin_id="A", destination_id="B")
 end

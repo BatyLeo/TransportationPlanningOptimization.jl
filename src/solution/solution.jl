@@ -29,7 +29,7 @@ _bin_count(a::MultiAssignment) = sum(length(slot.bins) for slot in a.per_mode; i
 Initialize an empty solution for the given instance.
 """
 function Solution(instance::Instance{Bundle{Order{IDA,I}}}) where {IDA,I}
-    C = LightCommodity{IDA,I}
+    C = LightCommodity{I}
     return Solution{C}(
         [Int[] for _ in 1:bundle_count(instance)],
         Dict{Tuple{Int,Int},Union{SingleAssignment{C},MultiAssignment{C}}}(),
@@ -998,7 +998,7 @@ function Solution(
 ) where {IDA,I}
     (; time_space_graph, bundles) = instance
 
-    C = LightCommodity{IDA,I}
+    C = LightCommodity{I}
     assignments = Dict{Tuple{Int,Int},Union{SingleAssignment{C},MultiAssignment{C}}}()
 
     # Clean paths (remove TTG shortcut edges) before projecting

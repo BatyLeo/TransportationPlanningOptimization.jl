@@ -215,16 +215,14 @@ function build_instance(
     # Wrapping commodities into light commodities
     # Pre-allocate with total quantity to avoid reallocations
     total_quantity = sum(c.quantity for c in commodities)
-    full_commodities = LightCommodity{is_date_arrival,I}[]
+    full_commodities = LightCommodity{I}[]
     sizehint!(full_commodities, total_quantity)
 
     # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_time_steps)
     first_key = (
         1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
     )
-    order_dict = Dict{
-        typeof(first_key),Tuple{Vector{LightCommodity{is_date_arrival,I}},Int}
-    }()
+    order_dict = Dict{typeof(first_key),Tuple{Vector{LightCommodity{I}},Int}}()
 
     start_date = _compute_start_date(commodities, wrap_time)
 
@@ -235,7 +233,6 @@ function build_instance(
             destination_id=commodity.destination_id,
             size=commodity.size,
             info=commodity.info,
-            is_date_arrival=is_date_arrival,
         )
 
         light_commodities_start_idx = length(full_commodities) + 1
