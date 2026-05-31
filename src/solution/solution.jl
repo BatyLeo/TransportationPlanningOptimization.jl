@@ -312,7 +312,9 @@ pattern, which forced the next `_ensure_sorted!` call to re-sort the full
 pool. The instrumented LS profile showed that re-sort accounting for ~15% of
 LS time at `packing=:frozen`.
 """
-function _merge_sorted_into_slot!(slot::SingleAssignment{C}, new_commodities::Vector{C}) where {C<:LightCommodity}
+function _merge_sorted_into_slot!(
+    slot::SingleAssignment{C}, new_commodities::Vector{C}
+) where {C<:LightCommodity}
     isempty(new_commodities) && return slot
     if !slot.sorted
         # Fallback for slots not maintained under the invariant. Hot path

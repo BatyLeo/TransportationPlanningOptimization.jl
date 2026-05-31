@@ -1,7 +1,21 @@
+"""
+$TYPEDEF
+
+A `LightCommodity` represents a commodity in the transportation planning problem.
+A commodity is defined by its origin and destination nodes, its size, and any additional problem-specific information.
+This data structure does include date information, as it is stored in [`Order`](@ref) instead.
+
+# Fields
+$TYPEDFIELDS
+"""
 struct LightCommodity{is_date_arrival,I}
+    "id of the origin node"
     origin_id::String
+    "id of the destination node"
     destination_id::String
+    "size of the commodity, representing the capacity it occupies"
     size::Float64
+    "extra information about the commodity, which can be used for problem-specific purposes"
     info::I
 
     function LightCommodity{is_date_arrival,I}(

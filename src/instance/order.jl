@@ -5,7 +5,7 @@ An internal structure representing a group of commodities to be delivered togeth
 Commodities in an `Order` share the same:
 - Origin node
 - Destination node
-- Delivery date (interpreted as a deadline or release depending on `is_date_arrival`)
+- Delivery date (interpreted as a deadline or release depending on `is_date_arrival` value)
 
 # Type Parameters
 - `is_date_arrival::Bool`: Inherited from the commodities. `true` for deadline-driven, `false` for release-driven.

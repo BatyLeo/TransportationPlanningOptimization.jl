@@ -4,9 +4,7 @@ using Dates
 const TPO = TransportationPlanningOptimization
 
 function _mk(size::Float64, sup::String="S", cust::String="C")
-    return TPO.LightCommodity(;
-        origin_id=sup, destination_id=cust, size=size, info=nothing,
-    )
+    return TPO.LightCommodity(; origin_id=sup, destination_id=cust, size=size, info=nothing)
 end
 
 const LC = typeof(_mk(1.0))
@@ -16,7 +14,7 @@ function _slot(comms::Vector{LC}; sorted::Bool=true)
 end
 
 # Sizes of `slot.commodities` in descending order means: sorted_desc(slot) ↔ all neighbors satisfy >=.
-_is_desc(v) = all(v[i].size >= v[i+1].size for i in 1:(length(v)-1))
+_is_desc(v) = all(v[i].size >= v[i + 1].size for i in 1:(length(v) - 1))
 
 @testset "_merge_sorted_into_slot! contract" begin
     @testset "no-op on empty new_commodities" begin
@@ -64,8 +62,7 @@ _is_desc(v) = all(v[i].size >= v[i+1].size for i in 1:(length(v)-1))
         slot = _slot([_mk(10.0), _mk(5.0)])
         new = [_mk(10.0), _mk(5.0)]
         TPO._merge_sorted_into_slot!(slot, new)
-        @test sort([c.size for c in slot.commodities]; rev=true) ==
-              [c.size for c in slot.commodities]
+        @test sort([c.size for c in slot.commodities]; rev=true) == [c.size for c in slot.commodities]
         @test length(slot.commodities) == 4
         @test slot.sorted
     end
@@ -87,10 +84,11 @@ _is_desc(v) = all(v[i].size >= v[i+1].size for i in 1:(length(v)-1))
     end
 
     @testset "large merge stress (random sizes)" begin
-        slot = _slot(sort([_mk(rand() * 100) for _ in 1:200], by=c->c.size, rev=true))
-        new = sort([_mk(rand() * 100) for _ in 1:50], by=c->c.size, rev=true)
-        expected_sizes = sort(vcat([c.size for c in slot.commodities],
-                                   [c.size for c in new]); rev=true)
+        slot = _slot(sort([_mk(rand() * 100) for _ in 1:200]; by=c -> c.size, rev=true))
+        new = sort([_mk(rand() * 100) for _ in 1:50]; by=c -> c.size, rev=true)
+        expected_sizes = sort(
+            vcat([c.size for c in slot.commodities], [c.size for c in new]); rev=true
+        )
         TPO._merge_sorted_into_slot!(slot, new)
         @test [c.size for c in slot.commodities] == expected_sizes
         @test slot.sorted

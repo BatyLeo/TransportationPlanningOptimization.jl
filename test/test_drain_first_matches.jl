@@ -5,9 +5,7 @@ const TPO = TransportationPlanningOptimization
 
 # Build a small bag of LightCommodity{false,Nothing} values for testing.
 function _mk(size::Float64, sup::String="S", cust::String="C")
-    return TPO.LightCommodity(;
-        origin_id=sup, destination_id=cust, size=size, info=nothing,
-    )
+    return TPO.LightCommodity(; origin_id=sup, destination_id=cust, size=size, info=nothing)
 end
 
 @testset "_drain_first_matches! contract" begin
