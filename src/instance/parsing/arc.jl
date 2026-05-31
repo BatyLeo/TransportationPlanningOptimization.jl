@@ -75,14 +75,6 @@ function Base.show(io::IO, arc::Arc)
     )
 end
 
-# Conversion constructor to widen the cost type parameter
-# This allows automatic conversion to union types
-function Arc{C,K,T}(arc::Arc) where {C<:AbstractArcCostFunction,K,T}
-    return Arc{C,K,T}(
-        arc.origin_id, arc.destination_id, arc.travel_time, arc.capacity, arc.cost, arc.info
-    )
-end
-
 """
     collect_arcs(cost_types, arcs; validate=true)
 

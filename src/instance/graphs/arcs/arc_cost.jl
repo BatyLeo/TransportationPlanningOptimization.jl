@@ -10,19 +10,6 @@ abstract type AbstractArcCostFunction end
 """
 $TYPEDEF
 
-Abstract supertype for arcs in the spatial network graph.
-
-Concrete subtypes:
-- `NetworkArc` (single transport mode, the common case)
-- `MultiModalArc` (a leg traversable by several transport modes, e.g., truck and train sharing the same physical leg)
-
-Methods that need to act on either form should dispatch on this supertype.
-"""
-abstract type AbstractNetworkArc end
-
-"""
-$TYPEDEF
-
 A linear cost function where the cost is directly proportional to the total size/load on the arc.
 
 # Fields

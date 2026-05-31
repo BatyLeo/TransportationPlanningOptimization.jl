@@ -511,6 +511,27 @@ end
     @test cost(sol) == cost(reconstructed)
 end
 
+@testset "MultiModalArc eltype: union narrowing" begin
+    truck = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
+    train = NetworkArc(; travel_time_steps=2, cost=BinPackingArcCost(100.0, 10))
+
+    # Heterogeneous cost functions: must narrow to a small Union, NOT the
+    # abstract NetworkArc join. This is the inline, union-splittable layout.
+    hetero = MultiModalArc([truck, train])
+    ET = eltype(hetero.modes)
+    @test ET == Union{typeof(truck),typeof(train)}   # narrowed, not the abstract join
+    @test Base.isbitsunion(ET)                        # inline storage with type tag, no boxing
+    @test hetero.modes[1] === truck
+    @test hetero.modes[2] === train
+
+    # Homogeneous cost functions: unchanged: a single concrete eltype.
+    a = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
+    b = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
+    homo = MultiModalArc([a, b])
+    @test eltype(homo.modes) === NetworkArc{LinearArcCost,Nothing}
+    @test isconcretetype(eltype(homo.modes))
+end
+
 @testset "NetworkGraph rejects pre-built MultiModalArc and abstract vectors" begin
     truck = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
     train = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
