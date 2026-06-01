@@ -42,11 +42,8 @@ function _find_bin_packing(c::SumArcCost)
     return isempty(bps) ? nothing : only(bps)
 end
 
-function evaluate(
-    c::SumArcCost, comms::Vector{C}; presorted::Bool=false
-) where {C<:LightCommodity}
-    return _sum_evaluate(c.terms, comms, presorted)
-end
+# Type-stable tuple recursion for summing `evaluate`, `incremental_cost`,
+# and `lower_bound_incremental_cost`.
 @inline _sum_evaluate(::Tuple{}, ::Vector{C}, ::Bool) where {C<:LightCommodity} = 0.0
 @inline function _sum_evaluate(
     terms::Tuple, comms::Vector{C}, presorted::Bool
@@ -55,11 +52,6 @@ end
            _sum_evaluate(Base.tail(terms), comms, presorted)
 end
 
-function incremental_cost(
-    c::SumArcCost, existing::Vector{C}, new::Vector{C}
-) where {C<:LightCommodity}
-    return _sum_incremental_cost(c.terms, existing, new)
-end
 @inline _sum_incremental_cost(
     ::Tuple{}, ::Vector{C}, ::Vector{C}
 ) where {C<:LightCommodity} = 0.0
@@ -70,11 +62,6 @@ end
            _sum_incremental_cost(Base.tail(terms), existing, new)
 end
 
-function lower_bound_incremental_cost(
-    c::SumArcCost, existing::Vector{C}, new::Vector{C}
-) where {C<:LightCommodity}
-    return _sum_lb_incremental_cost(c.terms, existing, new)
-end
 @inline _sum_lb_incremental_cost(
     ::Tuple{}, ::Vector{C}, ::Vector{C}
 ) where {C<:LightCommodity} = 0.0
@@ -83,6 +70,43 @@ end
 ) where {C<:LightCommodity}
     return lower_bound_incremental_cost(first(terms), existing, new) +
            _sum_lb_incremental_cost(Base.tail(terms), existing, new)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Evaluate the sum of `c.terms` on `comms`. If `presorted=true`, assumes `comms` are
+pre-sorted in non-increasing order of size for bin-packing purposes, which can speed up
+evaluation when `c.terms` includes a `BinPackingArcCost`.
+"""
+function evaluate(
+    c::SumArcCost, comms::Vector{C}; presorted::Bool=false
+) where {C<:LightCommodity}
+    return _sum_evaluate(c.terms, comms, presorted)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return the incremental cost of adding `new` commodities to an arc with existing commodities
+`existing`, as the sum of incremental costs over `c.terms`.
+"""
+function incremental_cost(
+    c::SumArcCost, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return _sum_incremental_cost(c.terms, existing, new)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return the incremental lower bound cost of adding `new` commodities to an arc with existing
+commodities `existing`, as the sum of incremental lower bound costs over `c.terms`.
+"""
+function lower_bound_incremental_cost(
+    c::SumArcCost, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return _sum_lb_incremental_cost(c.terms, existing, new)
 end
 
 # The buffer-threaded `incremental_cost!(::BinPackingBuffer, ::SumArcCost, ...)`

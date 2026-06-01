@@ -20,11 +20,10 @@ include("instance/graphs/nodes/network_node.jl")
 include("instance/graphs/arcs/arc_costs/abstract_arc_cost.jl")
 include("instance/graphs/arcs/arc_costs/shortcut_arc_cost.jl")
 include("instance/graphs/arcs/arc_costs/linear_arc_cost.jl")
-include("instance/graphs/arcs/arc_costs/bin_packing_arc_cost.jl")
+include("instance/graphs/arcs/arc_costs/bin_packing/bin_packing_arc_cost.jl")
+include("instance/graphs/arcs/arc_costs/bin_packing/bin.jl")
 include("instance/graphs/arcs/arc_costs/sum_arc_cost.jl")
 include("instance/graphs/arcs/network_arc.jl")
-
-include("instance/bin.jl")
 
 include("instance/parsing/commodity.jl")
 include("instance/parsing/arc.jl")
