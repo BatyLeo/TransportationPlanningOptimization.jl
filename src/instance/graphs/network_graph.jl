@@ -48,9 +48,7 @@ pair are accepted: the graph keeps a single edge whose data is auto-promoted to 
 `MultiModalArc` carrying every mode declared for that leg.
 
 `arcs` must be concretely typed as `Vector{Tuple{String,String,NA}}` for a single
-`NA<:NetworkArc`. The underlying `MetaGraph` then uses `Union{NA,MultiModalArc{NA}}` as
-its edge data type, enabling Julia union-splitting at every dispatch site that reads
-arc data. Pre-built `MultiModalArc` values are not accepted in the input vector:
+`NA<:NetworkArc`. Pre-built `MultiModalArc` values are not accepted in the input vector:
 multi-modal legs must be expressed as several `NetworkArc` entries sharing the same
 `(origin_id, destination_id)` and the constructor handles promotion.
 

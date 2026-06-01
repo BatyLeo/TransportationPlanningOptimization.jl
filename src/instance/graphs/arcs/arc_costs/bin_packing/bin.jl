@@ -49,7 +49,20 @@ function BinPackingBuffer(::Type{T}=Float64) where {T<:Real}
     return BinPackingBuffer{T}(T[], T[])
 end
 
+# Init and get remaining capacity vector: a buffer-owned one (cleared) or a fresh one.
+@inline _init_remaining_capacities(::Nothing) = Float64[]
+@inline function _init_remaining_capacities(buffer::BinPackingBuffer)
+    empty!(buffer.remaining_capacities)
+    return buffer.remaining_capacities
+end
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
 """
+$TYPEDSIGNATURES
+
 Return `true` if `commodities` is sorted in non-increasing order by `.size`.
 Used by `@boundscheck` asserts on the `incremental_cost!` / `frozen_incremental_count!`
 precondition that the `new` run arrives pre-sorted descending.
@@ -63,12 +76,9 @@ precondition that the `new` run arrives pre-sorted descending.
     return true
 end
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-@inline function _check_oversize(largest_size::Real, cap::Real)
-    largest_size > cap + 1e-8 && throw(
+# Throws `DomainError` if oversize
+@inline function _check_oversize(largest_size::Real, cap::Real; eps=1e-8)
+    largest_size > cap + eps && throw(
         DomainError(
             largest_size, "Commodity size $(largest_size) exceeds bin capacity $(cap)"
         ),
@@ -77,56 +87,64 @@ end
 end
 
 """
+$TYPEDSIGNATURES
+
 First-Fit-Decreasing placement loop. Walks `sizes_desc` (assumed sorted
 descending), placing each into the first slot of `caps` with room, otherwise
 opening a new slot with capacity `cap - s`. Mutates `caps` in place.
 """
-@inline function _ffd_place!(caps::Vector{T}, sizes_desc, cap::T; eps=1e-8) where {T<:Real}
+@inline function _ffd_place!(
+    remaining_capacities::Vector{T}, sizes_desc, cap::T; eps=1e-8
+) where {T<:Real}
     @inbounds for s in sizes_desc
         placed = false
-        for i in eachindex(caps)
-            if caps[i] >= s - eps
-                caps[i] -= s
+        for i in eachindex(remaining_capacities)
+            if remaining_capacities[i] >= s - eps
+                remaining_capacities[i] -= s
                 placed = true
                 break
             end
         end
-        placed || push!(caps, cap - s)
+        placed || push!(remaining_capacities, cap - s)
     end
-    return caps
+    return remaining_capacities
 end
 
 """
+$TYPEDSIGNATURES
+
 First-Fit-Decreasing placement iterating a `Vector{C}` of commodities directly,
-reading `c.size` per element. Equivalent to `_ffd_place!(caps, (c.size for c in items), cap)`
-but type-stable (no `Base.Generator` boxing). `items` must be sorted descending by `.size`.
+reading `c.size` per element. Equivalent to `_ffd_place!(caps, (c.size for c in items), cap)`.
+`items` must be sorted descending by `.size`.
 """
 @inline function _ffd_place_commodities!(
-    caps::Vector{Float64}, items::AbstractVector{C}, cap::Float64; eps=1e-8
+    remaining_capacities::Vector{Float64}, items::AbstractVector{C}, cap::Float64; eps=1e-8
 ) where {C<:LightCommodity}
     @inbounds for c in items
         s = c.size
         placed = false
-        for i in eachindex(caps)
-            if caps[i] >= s - eps
-                caps[i] -= s
+        for i in eachindex(remaining_capacities)
+            if remaining_capacities[i] >= s - eps
+                remaining_capacities[i] -= s
                 placed = true
                 break
             end
         end
-        placed || push!(caps, cap - s)
+        placed || push!(remaining_capacities, cap - s)
     end
-    return caps
+    return remaining_capacities
 end
 
 """
+$TYPEDSIGNATURES
+
 First-Fit-Decreasing placement over the descending union of a pre-sorted
 descending `Vector{Float64}` and a pre-sorted descending `Vector{C}` of
 commodities. Mirror of `_ffd_place_merged!` that avoids materializing the
 commodity sizes into a separate buffer.
 """
 @inline function _ffd_place_merged_with_commodities!(
-    caps::Vector{Float64},
+    remaining_capacities::Vector{Float64},
     a::AbstractVector{Float64},
     b::AbstractVector{C},
     cap::Float64;
@@ -155,26 +173,32 @@ commodity sizes into a separate buffer.
             end
         end
         placed = false
-        for k in eachindex(caps)
-            if caps[k] >= s - eps
-                caps[k] -= s
+        for k in eachindex(remaining_capacities)
+            if remaining_capacities[k] >= s - eps
+                remaining_capacities[k] -= s
                 placed = true
                 break
             end
         end
-        placed || push!(caps, cap - s)
+        placed || push!(remaining_capacities, cap - s)
     end
-    return caps
+    return remaining_capacities
 end
 
 """
+$TYPEDSIGNATURES
+
 First-Fit-Decreasing placement over the descending union of two pre-sorted
-descending vectors `a` and `b` — uses a two-pointer merge to read the union
-in descending order without materializing the merged vector. Equivalent to
-`_ffd_place!(caps, merged, cap)` where `merged = sort(vcat(a, b); rev=true)`.
+descending vectors `a` and `b`. Reads the union in descending order without materializing
+the merged vector. Equivalent to `_ffd_place!(caps, merged, cap)` where
+`merged = sort(vcat(a, b); rev=true)`.
 """
 @inline function _ffd_place_merged!(
-    caps::Vector{T}, a::AbstractVector{T}, b::AbstractVector{T}, cap::T; eps=1e-8
+    remaining_capacities::Vector{T},
+    a::AbstractVector{T},
+    b::AbstractVector{T},
+    cap::T;
+    eps=1e-8,
 ) where {T<:Real}
     i, j = 1, 1
     na, nb = length(a), length(b)
@@ -197,57 +221,57 @@ in descending order without materializing the merged vector. Equivalent to
             x
         end
         placed = false
-        for k in eachindex(caps)
-            if caps[k] >= s - eps
-                caps[k] -= s
+        for k in eachindex(remaining_capacities)
+            if remaining_capacities[k] >= s - eps
+                remaining_capacities[k] -= s
                 placed = true
                 break
             end
         end
-        placed || push!(caps, cap - s)
+        placed || push!(remaining_capacities, cap - s)
     end
-    return caps
+    return remaining_capacities
 end
 
 """
+$TYPEDSIGNATURES
+
 Best-Fit-Decreasing placement loop. Mirror of `_ffd_place!` for BFD.
 """
-@inline function _bfd_place!(caps::Vector{T}, sizes_desc, cap::T; eps=1e-8) where {T<:Real}
+@inline function _bfd_place!(
+    remaining_capacities::Vector{T}, sizes_desc, cap::T; eps=1e-8
+) where {T<:Real}
     @inbounds for s in sizes_desc
         best_idx = 0
         best_left = typemax(T)
-        for i in eachindex(caps)
-            after = caps[i] - s
+        for i in eachindex(remaining_capacities)
+            after = remaining_capacities[i] - s
             if after >= -eps && after < best_left
                 best_left = after
                 best_idx = i
             end
         end
         if best_idx == 0
-            push!(caps, cap - s)
+            push!(remaining_capacities, cap - s)
         else
-            caps[best_idx] -= s
+            remaining_capacities[best_idx] -= s
         end
     end
-    return caps
-end
-
-# Acquire the working caps vector: a buffer-owned one (cleared) or a fresh one.
-@inline _take_caps(::Nothing) = Float64[]
-@inline function _take_caps(buffer::BinPackingBuffer)
-    empty!(buffer.remaining_capacities)
-    return buffer.remaining_capacities
+    return remaining_capacities
 end
 
 """
+$TYPEDSIGNATURES
+
 Materializing First-Fit-Decreasing placement. Mirrors `_ffd_place!` but also
-tracks per-bin commodity lists in `bin_contents`. Both vectors grow in lockstep
-— `bin_contents[i]` holds the commodities placed in bin `i` (with remaining
-capacity `caps[i]`). `sorted_commodities` must be descending by `.size`.
+tracks per-bin commodity lists in `bin_contents`.
+`bin_contents[i]` holds the commodities placed in bin `i` (with remaining
+capacity `remaining_capacities[i]`).
+`sorted_commodities` must be descending by `.size`.
 """
 @inline function _ffd_assign!(
     bin_contents::Vector{Vector{C}},
-    caps::Vector{Float64},
+    remaining_capacities::Vector{Float64},
     sorted_commodities,
     cap::Float64;
     eps=1e-8,
@@ -255,23 +279,25 @@ capacity `caps[i]`). `sorted_commodities` must be descending by `.size`.
     @inbounds for c in sorted_commodities
         s = c.size
         placed = false
-        for i in eachindex(caps)
-            if caps[i] >= s - eps
+        for i in eachindex(remaining_capacities)
+            if remaining_capacities[i] >= s - eps
                 push!(bin_contents[i], c)
-                caps[i] -= s
+                remaining_capacities[i] -= s
                 placed = true
                 break
             end
         end
         if !placed
             push!(bin_contents, [c])
-            push!(caps, cap - s)
+            push!(remaining_capacities, cap - s)
         end
     end
     return bin_contents
 end
 
 """
+$TYPEDSIGNATURES
+
 Materializing Best-Fit-Decreasing placement. Mirror of `_ffd_assign!` for BFD.
 """
 @inline function _bfd_assign!(
@@ -310,9 +336,10 @@ end
 """
 $TYPEDSIGNATURES
 
-First-Fit-Decreasing bin count over `sizes_desc` (already sorted descending),
-reusing `buffer.remaining_capacities`. Returns the number of bins. Allocates nothing in steady
-state once `buffer.remaining_capacities` has grown to the working size.
+First-Fit-Decreasing bin count over `sizes_desc` (already sorted descending), reusing
+`buffer.remaining_capacities`. Returns the number of bins.
+Allocates nothing in steady state once `buffer.remaining_capacities` has grown to the
+working size.
 
 !!! note
     `empty!` only resets the length to 0 without releasing the backing buffer,
@@ -332,19 +359,9 @@ $TYPEDSIGNATURES
 
 Frozen-bin incremental count. Given the remaining capacities of the already
 committed (frozen) bins on an arc and the `new` commodities, pack `new` via
-first-fit onto a COPY of those capacities (so the committed bins are never
-mutated during a tentative evaluation) and return the number of newly opened
-bins.
-
-This is the STP packing semantics: the existing bins are not re-packed and not
-re-sorted. Only `new` is sorted descending and dropped into the first frozen
-bin that has room, opening a fresh bin when none fits. The result equals the
-number of bins `frozen_first_fit_add!` would open on the same inputs, so the
-incremental cost predicted here matches the committed bin count exactly.
-
-`buffer.remaining_capacities` is reused as the scratch for the capacities copy.
-`new` is iterated directly via `.size` accessors — it MUST be sorted descending by
-`.size` (an invariant enforced via `@boundscheck`, stripped in release builds).
+first-fit onto a copy of those capacities (committed bins are never mutated)
+and return the number of newly opened bins.
+`new` MUST be sorted descending by `.size`
 """
 function frozen_incremental_count!(
     buffer::BinPackingBuffer,
@@ -369,11 +386,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Frozen-bin commit. Add `new` to `bins` in place via first-fit: each commodity
-(sorted descending) drops into the first existing bin with room, opening a fresh
-`Bin` when none fits. The frozen bins keep their contents and only shrink their
-remaining capacity, mirroring `frozen_incremental_count!` exactly so the
-committed bin count agrees with the predicted incremental cost.
+Frozen-bin commit. Add `new` to `bins` in place via first-fit.
+The frozen bins keep their contents and only shrink their remaining capacity.
 
 Returns the (possibly grown) `bins` vector. `Bin` is mutable, so a bin that
 receives a commodity is updated in place (the commodity is appended and the
@@ -430,18 +444,13 @@ end
 $TYPEDSIGNATURES
 
 Return the number of bins First-Fit-Decreasing would open for `commodities`
-under `arc_f`, without allocating any `Bin` object. The result is exact, not
-a bound, and satisfies `tentative_bin_count(arc_f, items) ==
-length(compute_bin_assignments(arc_f, items))` for any input.
+under `arc_f`, without allocating any `Bin` object.
 
 Prefer this over `compute_bin_assignments` whenever only the bin count is
-needed (for example, in cost-matrix updates and local-search delta
-evaluations where the `BinPackingArcCost` evaluates to
-`cost_per_bin * n_bins`). Use `compute_bin_assignments` when the actual
-bin contents are needed downstream.
+needed. Use `compute_bin_assignments` when the actual bin contents are needed downstream.
 
 Pass `buffer` to reuse a `BinPackingBuffer`'s `caps` vector and avoid the
-per-call allocation; otherwise a fresh `Vector{Float64}` is used.
+per-call allocation, otherwise a fresh `Vector{Float64}` is used.
 
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
@@ -453,7 +462,7 @@ function tentative_bin_count(
 ) where {C<:LightCommodity}
     isempty(commodities) && return 0
     cap = Float64(arc_f.bin_capacity)
-    caps = _take_caps(buffer)
+    caps = _init_remaining_capacities(buffer)
     if presorted
         _check_oversize(commodities[1].size, cap)
         _ffd_place!(caps, (c.size for c in commodities), cap)
@@ -468,14 +477,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Return the number of bins Best-Fit Decreasing (BFD) would open for
-`commodities` under `arc_f`, without allocating any `Bin` object. Mirror of
-`tentative_bin_count` for the BFD heuristic. The result is exact, not a
-bound, and satisfies `tentative_best_fit_count(arc_f, items) ==
-length(compute_bin_assignments_bfd(arc_f, items))` for any input.
-
-Use this alongside `tentative_bin_count` in `bin_packing_improvement!` to
-gate the BFD-vs-FFD choice without materializing either packing.
+Mirror of `tentative_bin_count` for the BFD heuristic.
 
 Pass `buffer` to reuse a `BinPackingBuffer`'s `caps` vector and avoid the
 per-call allocation; otherwise a fresh `Vector{Float64}` is used.
@@ -490,7 +492,7 @@ function tentative_best_fit_count(
 ) where {C<:LightCommodity}
     isempty(commodities) && return 0
     cap = Float64(arc_f.bin_capacity)
-    caps = _take_caps(buffer)
+    caps = _init_remaining_capacities(buffer)
     if presorted
         _check_oversize(commodities[1].size, cap)
         _bfd_place!(caps, (c.size for c in commodities), cap)
@@ -506,9 +508,7 @@ end
 $TYPEDSIGNATURES
 
 Compute the bin assignments for `commodities` using Best-Fit Decreasing
-(BFD). Returns a vector of `Bin` objects. Use this when BFD predicts fewer
-bins than FFD. Otherwise prefer `compute_bin_assignments` (FFD), which is
-typically a hair faster.
+(BFD). Returns a vector of `Bin` objects.
 
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
