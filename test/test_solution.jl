@@ -169,8 +169,6 @@ using MetaGraphsNext
 
             for bin in bins
                 @test length(bin.commodities) == 1
-                @test bin.total_size == 6.0
-                @test bin.max_capacity == 10.0
                 @test bin.remaining_capacity == 4.0
             end
         end

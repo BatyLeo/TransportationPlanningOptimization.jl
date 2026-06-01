@@ -156,12 +156,13 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
     end
 
     # Capacity checks ------------------------------------------------------
-    # 1) For bin-packing arcs, ensure no bin exceeds its capacity.
+    # 1) For bin-packing arcs, ensure no bin exceeds its capacity (remaining
+    #    capacity < 0 within tolerance means total > max).
     for (edge, assignment) in sol.assignments
         for b in bins_of(assignment)
-            if b.total_size > b.max_capacity + 1e-8
+            if b.remaining_capacity < -1e-8
                 verbose &&
-                    @warn "Bin on edge $(edge) exceeds capacity: $(b.total_size) > $(b.max_capacity)"
+                    @warn "Bin on edge $(edge) exceeds capacity by $(-b.remaining_capacity)"
                 return false
             end
         end
@@ -366,6 +367,15 @@ function _update_single_assignment_cost!(
         slot.bins = bins
         slot.cost = arc_cost.cost_per_bin * length(bins)
     else
+        # When SumArcCost wraps a BinPackingArcCost term, refresh slot.bins so
+        # the cached bin count stays consistent with slot.commodities (read by
+        # incremental_cost! to skip the FFD-on-existing pass).
+        if arc_cost isa SumArcCost
+            bp = _find_bin_packing(arc_cost)
+            if bp !== nothing
+                slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
+            end
+        end
         slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
     end
     return nothing

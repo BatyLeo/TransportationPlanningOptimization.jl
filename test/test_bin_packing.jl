@@ -71,7 +71,7 @@ end
         edge = (tsg_path[i], tsg_path[i + 1])
         C = eltype(order.commodities)
         sol.assignments[edge] = SingleAssignment{C}(
-            collect(order.commodities), [Bin{C}(C[], 124.02, 65.0, -59.02)], 0.0
+            collect(order.commodities), [Bin{C}(C[], -59.02)], 0.0
         )
     end
     @test !is_feasible(sol, instance; verbose=false)

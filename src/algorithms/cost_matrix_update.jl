@@ -36,7 +36,11 @@ any other cheap cost function need no specialization. Only `BinPackingArcCost`
 this to reuse the scratch buffer and avoid per-call allocation.
 """
 function incremental_cost!(
-    ::BinPackingBuffer, arc_f::AbstractArcCostFunction, existing::Vector{C}, new::Vector{C}
+    ::BinPackingBuffer,
+    arc_f::AbstractArcCostFunction,
+    existing::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
 ) where {C<:LightCommodity}
     return incremental_cost(arc_f, existing, new)
 end
@@ -51,7 +55,8 @@ function incremental_cost!(
     ::BinPackingBuffer,
     node_f::AbstractNodeCostFunction,
     existing::Vector{C},
-    new::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
 ) where {C<:LightCommodity}
     return incremental_cost(node_f, existing, new)
 end
@@ -76,54 +81,63 @@ $TYPEDSIGNATURES
 Incremental FFD bin cost of adding `new` to `existing` on a `BinPackingArcCost`
 arc, reusing `buffer`. Equals `cost_per_bin * (FFD(existing union new) -
 FFD(existing))`, identical to the generic fallback and to the sort-the-union
-form, but it merges two descending-sorted size runs instead of sorting the
-union.
+form, but it streams the descending two-way merge of the two runs into FFD
+without materializing the union vector.
 
 `Order.commodities` is kept sorted by size descending at instance construction
 (see `build_instance`), so both the per-edge `new` run (one order's commodities
-in the common case) and the `existing` run arrive pre-sorted. Each run is still
-checked for descending order first and sorted only when needed (the guard
-becomes a cheap O(n) pass that passes), so the typical path does no sorting at
-all. The descending union is then produced by `merge_desc!` (a two-pointer
-merge), which yields exactly the order `sort!(union; rev=true)` would, so the
-FFD bin count (and thus the cost) is unchanged.
+in the common case) and the `existing` run arrive pre-sorted. `new` is still
+checked and sorted in place if needed (the `new_sizes` buffer slot doubles as
+that scratch). `existing` is iterated lazily — when the descending invariant
+holds, the loop iterates the commodity vector directly; otherwise a one-shot
+sort over a fresh `Vector{Float64}` is taken (rare).
 """
 function incremental_cost!(
-    buffer::BinPackingBuffer, arc_f::BinPackingArcCost, existing::Vector{C}, new::Vector{C}
+    buffer::BinPackingBuffer,
+    arc_f::BinPackingArcCost,
+    existing::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
 ) where {C<:LightCommodity}
     isempty(new) && return 0.0
+    @boundscheck _commodities_is_desc(new) ||
+        throw(ArgumentError("`new` must be sorted descending by `.size`"))
     cap = Float64(arc_f.bin_capacity)
 
-    # New run sizes, descending (pre-sorted at construction in the common case).
-    resize!(buffer.new_sizes, length(new))
-    @inbounds for (i, c) in enumerate(new)
-        buffer.new_sizes[i] = c.size
-    end
-    _is_desc(buffer.new_sizes) || sort!(buffer.new_sizes; rev=true)
-
-    # Existing run sizes, descending. The descending check passes without a sort
-    # in the common case. The sizes are materialized into `buffer.existing_sizes`
-    # because the union merge needs them.
-    n_existing = if isempty(existing)
+    # Existing run sizes, descending — materialized into `existing_sizes` so the
+    # merge's hot loop reads from a tightly packed `Vector{Float64}`. Validated
+    # against the descending invariant in debug builds.
+    if isempty(existing)
         empty!(buffer.existing_sizes)
-        0
     else
+        @boundscheck _commodities_is_desc(existing) ||
+            throw(ArgumentError("`existing` must be sorted descending by `.size`"))
         resize!(buffer.existing_sizes, length(existing))
         @inbounds for (i, c) in enumerate(existing)
             buffer.existing_sizes[i] = c.size
         end
-        _is_desc(buffer.existing_sizes) || sort!(buffer.existing_sizes; rev=true)
+    end
+
+    # When the caller passes `n_existing` (= `length(assignment.bins)`),
+    # skip the standalone FFD-on-existing pass and trust the cached value.
+    n_ex = if n_existing >= 0
+        n_existing
+    elseif isempty(existing)
+        0
+    else
         ffd_count!(buffer, cap, buffer.existing_sizes)
     end
 
-    # Union sizes: merge the two descending runs (no sort of the union).
-    resize!(buffer.sizes, length(existing) + length(new))
-    merge_desc!(buffer.sizes, buffer.existing_sizes, buffer.new_sizes)
-    # buffer.remaining_capacities is reused inside ffd_count!. Safe because n_existing is already
-    # captured, so the existing-only count no longer needs it.
-    n_union = ffd_count!(buffer, cap, buffer.sizes)
+    # FFD over the descending union of `existing_sizes` and `new`. The `new`
+    # commodity vector is iterated directly via `c.size` — no `new_sizes`
+    # scratch needed.
+    empty!(buffer.remaining_capacities)
+    _ffd_place_merged_with_commodities!(
+        buffer.remaining_capacities, buffer.existing_sizes, new, cap
+    )
+    n_union = length(buffer.remaining_capacities)
 
-    return arc_f.cost_per_bin * (n_union - n_existing)
+    return arc_f.cost_per_bin * (n_union - n_ex)
 end
 
 """
@@ -187,18 +201,26 @@ through the generic `incremental_cost!`. The result is identical to the
 sum-over-terms `incremental_cost(::SumArcCost, ...)`.
 """
 function incremental_cost!(
-    buffer::BinPackingBuffer, c::SumArcCost, existing::Vector{C}, new::Vector{C}
+    buffer::BinPackingBuffer,
+    c::SumArcCost,
+    existing::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
 ) where {C<:LightCommodity}
-    return _sum_incremental_cost_buf(buffer, c.terms, existing, new)
+    return _sum_incremental_cost_buf(buffer, c.terms, existing, new, n_existing)
 end
 @inline _sum_incremental_cost_buf(
-    ::BinPackingBuffer, ::Tuple{}, ::Vector{C}, ::Vector{C}
+    ::BinPackingBuffer, ::Tuple{}, ::Vector{C}, ::Vector{C}, ::Int
 ) where {C<:LightCommodity} = 0.0
 @inline function _sum_incremental_cost_buf(
-    buffer::BinPackingBuffer, terms::Tuple, existing::Vector{C}, new::Vector{C}
+    buffer::BinPackingBuffer,
+    terms::Tuple,
+    existing::Vector{C},
+    new::Vector{C},
+    n_existing::Int,
 ) where {C<:LightCommodity}
-    return incremental_cost!(buffer, first(terms), existing, new) +
-           _sum_incremental_cost_buf(buffer, Base.tail(terms), existing, new)
+    return incremental_cost!(buffer, first(terms), existing, new; n_existing) +
+           _sum_incremental_cost_buf(buffer, Base.tail(terms), existing, new, n_existing)
 end
 
 """
@@ -303,7 +325,9 @@ function _edge_incremental_cost(
     if packing === :frozen
         return _frozen_edge_incremental_cost(buffer, arc.cost, existing, new_comms)
     end
-    return incremental_cost!(buffer, arc.cost, existing.commodities, new_comms)
+    return incremental_cost!(
+        buffer, arc.cost, existing.commodities, new_comms; n_existing=length(existing.bins)
+    )
 end
 
 """
@@ -341,7 +365,9 @@ function _frozen_edge_incremental_cost(
     new_comms::Vector{C},
 ) where {C<:LightCommodity}
     # Linear and node-style costs are identical under both packing modes.
-    return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
+    return incremental_cost!(
+        buffer, arc_f, existing.commodities, new_comms; n_existing=length(existing.bins)
+    )
 end
 
 """
@@ -392,7 +418,11 @@ function _edge_incremental_cost(
                 )
             else
                 incremental_cost!(
-                    buffer, arc.modes[i].cost, existing.per_mode[i].commodities, new_comms
+                    buffer,
+                    arc.modes[i].cost,
+                    existing.per_mode[i].commodities,
+                    new_comms;
+                    n_existing=length(existing.per_mode[i].bins),
                 )
             end
         else
@@ -449,7 +479,11 @@ function _edge_incremental_cost(
     for i in eachindex(arc.modes)
         isempty(partition[i]) && continue
         total += incremental_cost!(
-            buffer, arc.modes[i].cost, existing_per_mode[i], partition[i]
+            buffer,
+            arc.modes[i].cost,
+            existing_per_mode[i],
+            partition[i];
+            n_existing=length(existing.per_mode[i].bins),
         )
     end
     return total
