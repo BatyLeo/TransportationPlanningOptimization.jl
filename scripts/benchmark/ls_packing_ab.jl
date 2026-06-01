@@ -29,14 +29,13 @@ function run_tpo_ls(name::String, ls_limit::Real, packing::Symbol)
 
     local result
     ls_time = @elapsed result = TPO.local_search!(
-        chosen, sub; time_limit=ls_limit, packing=packing,
+        chosen, sub; time_limit=ls_limit, packing=packing
     )
     ls_full = TPO.merge_solutions(filtering_sol, chosen, instance, sub)
     ls_cost = TPO.cost_with_nodes(ls_full, instance)
     feasible = TPO.is_feasible(ls_full, instance)
     return (;
-        init_cost, ls_cost, ls_time, n_iter=result.n_iter,
-        saved=result.saved, feasible,
+        init_cost, ls_cost, ls_time, n_iter=result.n_iter, saved=result.saved, feasible
     )
 end
 
@@ -55,7 +54,9 @@ function run_stp_ls(name::String, ls_limit::Real)
     cands = [mix_sol, greedy_sol, lb_sol]
     feas = filter(s -> STP.is_feasible(sub, s), cands)
     pool = isempty(feas) ? cands : feas
-    chosen = STP.solution_deepcopy(pool[argmin(STP.compute_cost(sub, s) for s in pool)], sub)
+    chosen = STP.solution_deepcopy(
+        pool[argmin(STP.compute_cost(sub, s) for s in pool)], sub
+    )
     init_full = STP.merge_solutions(chosen, filtering_sol, instance, sub)
     init_cost = STP.compute_cost(instance, init_full)
     pre_ls = STP.compute_cost(sub, chosen)
@@ -75,16 +76,16 @@ function run_stp_ls(name::String, ls_limit::Real)
     ls_full = STP.merge_solutions(chosen, filtering_sol, instance, sub)
     ls_cost = STP.compute_cost(instance, ls_full)
     feasible = STP.is_feasible(instance, ls_full)
-    return (;
-        init_cost, ls_cost, ls_time, n_iter,
-        saved=pre_ls - post_ls, feasible,
-    )
+    return (; init_cost, ls_cost, ls_time, n_iter, saved=pre_ls - post_ls, feasible)
 end
 
 println("=== Warmup ===")
-run_tpo_ls("small", 1.0, :ffd_union); GC.gc()
-run_tpo_ls("small", 1.0, :frozen); GC.gc()
-run_stp_ls("small", 1.0); GC.gc()
+run_tpo_ls("small", 1.0, :ffd_union);
+GC.gc();
+run_tpo_ls("small", 1.0, :frozen);
+GC.gc();
+run_stp_ls("small", 1.0);
+GC.gc();
 println("=== Warmup done ===\n")
 
 results = Dict{String,Dict{String,Any}}()
@@ -109,26 +110,64 @@ for name in INSTANCES
     results[name]["stp"] = r_stp
 
     @printf("\n  %-14s %12s %14s %14s\n", "metric", "TPO :union", "TPO :frozen", "STP")
-    @printf("  %-14s %12d %14d %14d  (iters)\n",
-        "n_iter", r_union.n_iter, r_frozen.n_iter, r_stp.n_iter)
-    @printf("  %-14s %12.1f %14.1f %14.1f  (iter/s)\n",
-        "iter/s", r_union.n_iter/r_union.ls_time, r_frozen.n_iter/r_frozen.ls_time,
-        r_stp.n_iter/r_stp.ls_time)
-    @printf("  %-14s %12.1f %14.1f %14.1f  (cost saved)\n",
-        "saved", r_union.saved, r_frozen.saved, r_stp.saved)
-    @printf("  %-14s %12.1f %14.1f %14.1f  (final LS cost)\n",
-        "ls_cost", r_union.ls_cost, r_frozen.ls_cost, r_stp.ls_cost)
-    @printf("  %-14s %12.4f %14.4f %14s  (cost / STP)\n",
-        "cost_ratio", r_union.ls_cost/r_stp.ls_cost, r_frozen.ls_cost/r_stp.ls_cost, "1.0000")
+    @printf(
+        "  %-14s %12d %14d %14d  (iters)\n",
+        "n_iter",
+        r_union.n_iter,
+        r_frozen.n_iter,
+        r_stp.n_iter
+    )
+    @printf(
+        "  %-14s %12.1f %14.1f %14.1f  (iter/s)\n",
+        "iter/s",
+        r_union.n_iter / r_union.ls_time,
+        r_frozen.n_iter / r_frozen.ls_time,
+        r_stp.n_iter / r_stp.ls_time
+    )
+    @printf(
+        "  %-14s %12.1f %14.1f %14.1f  (cost saved)\n",
+        "saved",
+        r_union.saved,
+        r_frozen.saved,
+        r_stp.saved
+    )
+    @printf(
+        "  %-14s %12.1f %14.1f %14.1f  (final LS cost)\n",
+        "ls_cost",
+        r_union.ls_cost,
+        r_frozen.ls_cost,
+        r_stp.ls_cost
+    )
+    @printf(
+        "  %-14s %12.4f %14.4f %14s  (cost / STP)\n",
+        "cost_ratio",
+        r_union.ls_cost / r_stp.ls_cost,
+        r_frozen.ls_cost / r_stp.ls_cost,
+        "1.0000"
+    )
     println()
 end
 
 println("\n=== Summary ===")
-@printf("%-12s %12s %12s %12s %12s %12s\n",
-    "instance", ":union iters", ":frozen iters", "frozen/union", ":union cost", ":frozen cost")
+@printf(
+    "%-12s %12s %12s %12s %12s %12s\n",
+    "instance",
+    ":union iters",
+    ":frozen iters",
+    "frozen/union",
+    ":union cost",
+    ":frozen cost"
+)
 for name in INSTANCES
     u = results[name]["tpo_union"]
     f = results[name]["tpo_frozen"]
-    @printf("%-12s %12d %12d %11.2fx %12.1f %12.1f\n",
-        name, u.n_iter, f.n_iter, f.n_iter/u.n_iter, u.ls_cost, f.ls_cost)
+    @printf(
+        "%-12s %12d %12d %11.2fx %12.1f %12.1f\n",
+        name,
+        u.n_iter,
+        f.n_iter,
+        f.n_iter / u.n_iter,
+        u.ls_cost,
+        f.ls_cost
+    )
 end

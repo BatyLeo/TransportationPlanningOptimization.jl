@@ -19,7 +19,9 @@ function run_tpo_with_iters(name::String, ls_limit::Real)
 
     local instance
     build_time = @elapsed begin
-        (; nodes, arcs, commodities) = parse_inbound_instance(nodes_file, legs_file, com_file)
+        (; nodes, arcs, commodities) = parse_inbound_instance(
+            nodes_file, legs_file, com_file
+        )
         instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     end
 
@@ -48,9 +50,14 @@ function run_tpo_with_iters(name::String, ls_limit::Real)
 
     return (;
         n_bundles=length(instance.bundles),
-        build_time, filter_time,
-        init_cost, init_time, init_feasible,
-        ls_cost, ls_time, ls_feasible,
+        build_time,
+        filter_time,
+        init_cost,
+        init_time,
+        init_feasible,
+        ls_cost,
+        ls_time,
+        ls_feasible,
         ls_iters=ls_result.n_iter,
         ls_saved=ls_result.saved,
     )
@@ -113,9 +120,14 @@ function run_stp_with_iters(name::String, ls_limit::Real)
 
     return (;
         n_bundles=length(instance.bundles),
-        build_time, filter_time,
-        init_cost, init_time, init_feasible,
-        ls_cost, ls_time, ls_feasible,
+        build_time,
+        filter_time,
+        init_cost,
+        init_time,
+        init_feasible,
+        ls_cost,
+        ls_time,
+        ls_feasible,
         ls_iters,
         ls_saved=pre_ls_cost - post_ls_cost,
     )
@@ -165,16 +177,66 @@ end
 function print_row_iters(name::String, tpo, stp)
     @printf("\n%-12s  (%d bundles)\n", name, tpo.n_bundles)
     @printf("  %-12s %14s %14s %10s\n", "stage", "TPO", "STP", "TPO/STP")
-    @printf("  %-12s %14.2f %14.2f %10.2f\n", "build s", tpo.build_time, stp.build_time, tpo.build_time / stp.build_time)
-    @printf("  %-12s %14.2f %14.2f %10.2f\n", "filter s", tpo.filter_time, stp.filter_time, tpo.filter_time / stp.filter_time)
-    @printf("  %-12s %14.2f %14.2f %10.2f\n", "init s", tpo.init_time, stp.init_time, tpo.init_time / stp.init_time)
-    @printf("  %-12s %14.1f %14.1f %10.4f\n", "init cost", tpo.init_cost, stp.init_cost, tpo.init_cost / stp.init_cost)
-    @printf("  %-12s %14d %14d %10.3f\n", "LS iters", tpo.ls_iters, stp.ls_iters, tpo.ls_iters / max(stp.ls_iters, 1))
-    @printf("  %-12s %14.1f %14.1f %10.3f\n", "LS iter/s", tpo.ls_iters / tpo.ls_time, stp.ls_iters / stp.ls_time, (tpo.ls_iters / tpo.ls_time) / max(stp.ls_iters / stp.ls_time, 1e-9))
-    @printf("  %-12s %14.1f %14.1f %10.4f\n", "LS saved", tpo.ls_saved, stp.ls_saved, tpo.ls_saved / max(abs(stp.ls_saved), 1.0))
-    @printf("  %-12s %14.1f %14.1f %10.4f\n", "LS final", tpo.ls_cost, stp.ls_cost, tpo.ls_cost / stp.ls_cost)
+    @printf(
+        "  %-12s %14.2f %14.2f %10.2f\n",
+        "build s",
+        tpo.build_time,
+        stp.build_time,
+        tpo.build_time / stp.build_time
+    )
+    @printf(
+        "  %-12s %14.2f %14.2f %10.2f\n",
+        "filter s",
+        tpo.filter_time,
+        stp.filter_time,
+        tpo.filter_time / stp.filter_time
+    )
+    @printf(
+        "  %-12s %14.2f %14.2f %10.2f\n",
+        "init s",
+        tpo.init_time,
+        stp.init_time,
+        tpo.init_time / stp.init_time
+    )
+    @printf(
+        "  %-12s %14.1f %14.1f %10.4f\n",
+        "init cost",
+        tpo.init_cost,
+        stp.init_cost,
+        tpo.init_cost / stp.init_cost
+    )
+    @printf(
+        "  %-12s %14d %14d %10.3f\n",
+        "LS iters",
+        tpo.ls_iters,
+        stp.ls_iters,
+        tpo.ls_iters / max(stp.ls_iters, 1)
+    )
+    @printf(
+        "  %-12s %14.1f %14.1f %10.3f\n",
+        "LS iter/s",
+        tpo.ls_iters / tpo.ls_time,
+        stp.ls_iters / stp.ls_time,
+        (tpo.ls_iters / tpo.ls_time) / max(stp.ls_iters / stp.ls_time, 1e-9)
+    )
+    @printf(
+        "  %-12s %14.1f %14.1f %10.4f\n",
+        "LS saved",
+        tpo.ls_saved,
+        stp.ls_saved,
+        tpo.ls_saved / max(abs(stp.ls_saved), 1.0)
+    )
+    @printf(
+        "  %-12s %14.1f %14.1f %10.4f\n",
+        "LS final",
+        tpo.ls_cost,
+        stp.ls_cost,
+        tpo.ls_cost / stp.ls_cost
+    )
     if !(tpo.ls_feasible && stp.ls_feasible)
-        @printf("  WARNING infeasible: tpo_ls=%s stp_ls=%s\n", tpo.ls_feasible, stp.ls_feasible)
+        @printf(
+            "  WARNING infeasible: tpo_ls=%s stp_ls=%s\n", tpo.ls_feasible, stp.ls_feasible
+        )
     end
     return nothing
 end

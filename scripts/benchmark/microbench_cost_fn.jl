@@ -40,10 +40,18 @@ median_idx = sorted_idxs[length(sorted_idxs) ÷ 2]
 p10_idx = sorted_idxs[length(sorted_idxs) ÷ 10]
 p90_idx = sorted_idxs[9 * length(sorted_idxs) ÷ 10]
 test_bundles = [p10_idx, median_idx, p90_idx]
-println("Bundle arcs distribution (min/p10/median/p90/max): ",
-        minimum(arcs_per_bundle), "/", arcs_per_bundle[p10_idx], "/",
-        arcs_per_bundle[median_idx], "/", arcs_per_bundle[p90_idx], "/",
-        maximum(arcs_per_bundle))
+println(
+    "Bundle arcs distribution (min/p10/median/p90/max): ",
+    minimum(arcs_per_bundle),
+    "/",
+    arcs_per_bundle[p10_idx],
+    "/",
+    arcs_per_bundle[median_idx],
+    "/",
+    arcs_per_bundle[p90_idx],
+    "/",
+    maximum(arcs_per_bundle),
+)
 
 # -------------------------------------------------------------------------
 # Variants: copies of compute_ttg_edge_incremental_cost with specific
@@ -83,7 +91,11 @@ function cost_fn_no_node(
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
         total += TPO._edge_incremental_cost(
-            buffer, arc, existing_assignment, order.commodities, mode_selector;
+            buffer,
+            arc,
+            existing_assignment,
+            order.commodities,
+            mode_selector;
             packing=packing,
         )
         # Node-cost block intentionally omitted.
@@ -123,7 +135,11 @@ function cost_fn_no_label_for(
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
         total += TPO._edge_incremental_cost(
-            buffer, arc, existing_assignment, order.commodities, mode_selector;
+            buffer,
+            arc,
+            existing_assignment,
+            order.commodities,
+            mode_selector;
             packing=packing,
         )
         node_cost = cache.node_cost_of[sv]
@@ -166,7 +182,11 @@ function cost_fn_no_node_no_label(
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
         total += TPO._edge_incremental_cost(
-            buffer, arc, existing_assignment, order.commodities, mode_selector;
+            buffer,
+            arc,
+            existing_assignment,
+            order.commodities,
+            mode_selector;
             packing=packing,
         )
     end
@@ -242,12 +262,12 @@ function time_one(cost_fn, sub, bundle_idx, n_reps=N_REPEATS; packing::Symbol=:f
     buffer = TPO.BinPackingBuffer()
     # Warmup (JIT)
     TPO.update_bundle_cost_matrix!(
-        chosen, sub, bundle, bundle_arcs; cost_fn, buffer, packing,
+        chosen, sub, bundle, bundle_arcs; cost_fn, buffer, packing
     )
     # Timed runs
     elapsed = @elapsed for _ in 1:n_reps
         TPO.update_bundle_cost_matrix!(
-            chosen, sub, bundle, bundle_arcs; cost_fn, buffer, packing,
+            chosen, sub, bundle, bundle_arcs; cost_fn, buffer, packing
         )
     end
     return (elapsed / n_reps * 1000, elapsed)
@@ -255,11 +275,11 @@ end
 
 variants = [
     ("baseline :ffd_union (LS default)", TPO.compute_ttg_edge_incremental_cost),
-    ("A: no node cost",                cost_fn_no_node),
-    ("B: no label_for",                cost_fn_no_label_for),
-    ("C: A + B combined",              cost_fn_no_node_no_label),
+    ("A: no node cost", cost_fn_no_node),
+    ("B: no label_for", cost_fn_no_label_for),
+    ("C: A + B combined", cost_fn_no_node_no_label),
     ("D: bookkeeping only (no bin pack)", cost_fn_only_bookkeeping),
-    ("E: empty (just outer loop)",     cost_fn_noop),
+    ("E: empty (just outer loop)", cost_fn_noop),
 ]
 
 println("\n=== Per-arc cost-fn timings (mean per `update_bundle_cost_matrix!` call) ===\n")
@@ -278,9 +298,21 @@ for (label, fn) in variants
         nrepeats = N_REPEATS
         (per_call_ms, total_s) = time_one(fn, sub, b_idx, nrepeats)
         push!(times, per_call_ms)
-        bname = i == 1 ? "p10" : i == 2 ? "median" : "p90"
-        @printf("  %-8s bundle (%4d arcs): %8.3f ms/call  (%.2fs over %d reps)\n",
-            bname, arcs_per_bundle[b_idx], per_call_ms, total_s, nrepeats)
+        bname = if i == 1
+            "p10"
+        elseif i == 2
+            "median"
+        else
+            "p90"
+        end
+        @printf(
+            "  %-8s bundle (%4d arcs): %8.3f ms/call  (%.2fs over %d reps)\n",
+            bname,
+            arcs_per_bundle[b_idx],
+            per_call_ms,
+            total_s,
+            nrepeats
+        )
     end
     results[label] = times
 end
@@ -291,12 +323,24 @@ println("\n--- Variant: baseline (packing=:frozen instead of :ffd_union) ---")
 frozen_times = Float64[]
 for (i, b_idx) in enumerate(test_bundles)
     (per_call_ms, total_s) = time_one(
-        TPO.compute_ttg_edge_incremental_cost, sub, b_idx, N_REPEATS; packing=:frozen,
+        TPO.compute_ttg_edge_incremental_cost, sub, b_idx, N_REPEATS; packing=:frozen
     )
     push!(frozen_times, per_call_ms)
-    bname = i == 1 ? "p10" : i == 2 ? "median" : "p90"
-    @printf("  %-8s bundle (%4d arcs): %8.3f ms/call  (%.2fs over %d reps)\n",
-        bname, arcs_per_bundle[b_idx], per_call_ms, total_s, N_REPEATS)
+    bname = if i == 1
+        "p10"
+    elseif i == 2
+        "median"
+    else
+        "p90"
+    end
+    @printf(
+        "  %-8s bundle (%4d arcs): %8.3f ms/call  (%.2fs over %d reps)\n",
+        bname,
+        arcs_per_bundle[b_idx],
+        per_call_ms,
+        total_s,
+        N_REPEATS
+    )
 end
 results["baseline (packing=:frozen)"] = frozen_times
 push!(variants, ("baseline (packing=:frozen)", TPO.compute_ttg_edge_incremental_cost))
@@ -307,8 +351,7 @@ println()
 baseline = results["baseline :ffd_union (LS default)"]
 for (label, _) in variants
     ratio = results[label] ./ baseline
-    @printf("%-40s %11.3f %11.3f %11.3f\n",
-        label, ratio[1], ratio[2], ratio[3])
+    @printf("%-40s %11.3f %11.3f %11.3f\n", label, ratio[1], ratio[2], ratio[3])
 end
 
 println("\n=== Throughput impact ===")
@@ -318,6 +361,10 @@ for (label, _) in variants
     median_ratio = results[label][2] / baseline[2]
     cut_pct = (1 - median_ratio) * 100
     iter_s_factor = 1 / (1 - 0.7 * (1 - median_ratio))
-    @printf("  %-40s cuts cost-fn by %5.1f%%, expected LS iter/s ~ %.2fx baseline\n",
-        label, cut_pct, iter_s_factor)
+    @printf(
+        "  %-40s cuts cost-fn by %5.1f%%, expected LS iter/s ~ %.2fx baseline\n",
+        label,
+        cut_pct,
+        iter_s_factor
+    )
 end

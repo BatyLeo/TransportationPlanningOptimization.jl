@@ -47,7 +47,9 @@ t = @elapsed @profile STP.local_search!(
     profile_sol, sub; timeLimit=Int(PROFILE_BUDGET), verbose=false
 )
 post_cost = STP.compute_cost(sub, profile_sol)
-println("LS wall time: $(round(t; digits=2))s, saved $(round(pre_cost - post_cost; digits=1))")
+println(
+    "LS wall time: $(round(t; digits=2))s, saved $(round(pre_cost - post_cost; digits=1))"
+)
 
 println("\n=== Flat profile, top consumers ===")
 Profile.print(; format=:flat, mincount=50, sortedby=:count, noisefloor=2.0)
@@ -73,15 +75,24 @@ end
 
 total_samples = count(!=(0), data)
 for needle in (
-    "parallel_update_cost_matrix", "arc_update_cost",
-    "parallel_greedy_insertion", "parallel_greedy_path",
+    "parallel_update_cost_matrix",
+    "arc_update_cost",
+    "parallel_greedy_insertion",
+    "parallel_greedy_path",
     "dijkstra_shortest_paths",
-    "parallel_bundle_reintroduction", "bundle_reintroduction",
-    "parallel_two_node_common", "two_node_common",
-    "update_solution", "tentative",
-    "first_fit", "best_fit",
-    "compute_cost", "is_feasible",
-    "SparseArrays", "getindex", "setindex",
+    "parallel_bundle_reintroduction",
+    "bundle_reintroduction",
+    "parallel_two_node_common",
+    "two_node_common",
+    "update_solution",
+    "tentative",
+    "first_fit",
+    "best_fit",
+    "compute_cost",
+    "is_feasible",
+    "SparseArrays",
+    "getindex",
+    "setindex",
 )
     n = count_function(needle, data, lidict)
     pct = round(100 * n / max(total_samples, 1); digits=1)

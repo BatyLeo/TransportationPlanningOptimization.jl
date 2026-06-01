@@ -34,7 +34,7 @@ function run_n(label, packing, n_runs, seed_base)
         sol = deepcopy(chosen)
         Random.seed!(seed_base + i)
         t = @elapsed result = TPO.local_search!(
-            sol, sub; time_limit=LS_BUDGET, packing=packing,
+            sol, sub; time_limit=LS_BUDGET, packing=packing
         )
         ips = result.n_iter / t
         push!(iters, result.n_iter)
@@ -43,8 +43,14 @@ function run_n(label, packing, n_runs, seed_base)
         GC.gc()
     end
     ips = iters ./ times
-    @printf("  → median %.1f iter/s, min %.1f, max %.1f, mean %.1f, stddev %.1f\n",
-        median(ips), minimum(ips), maximum(ips), mean(ips), std(ips))
+    @printf(
+        "  → median %.1f iter/s, min %.1f, max %.1f, mean %.1f, stddev %.1f\n",
+        median(ips),
+        minimum(ips),
+        maximum(ips),
+        mean(ips),
+        std(ips)
+    )
     return median(ips)
 end
 

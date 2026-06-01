@@ -37,6 +37,10 @@ instance = Instance(
 );
 instance
 
-greedy_solution = greedy_heuristic(instance)
-is_feasible(greedy_solution, instance; verbose=true)
-cost(greedy_solution)
+lb_solution = lower_bound_filtering(instance);
+filtered_instance = extract_filtered_instance(instance, lb_solution)
+partial_solution = greedy_heuristic(filtered_instance);
+partial_solution = local_search!(partial_solution, filtered_instance; time_limit=120);
+full_solution = merge_solutions(lb_solution, partial_solution, instance, filtered_instance);
+is_feasible(full_solution, instance; verbose=true)
+cost(full_solution)

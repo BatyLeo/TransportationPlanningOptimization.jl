@@ -31,12 +31,14 @@ println("=== JIT warmup LS (1s, packing=$PACKING) ===")
 TPO.local_search!(deepcopy(chosen), sub; time_limit=1.0, packing=PACKING)
 GC.gc()
 
-println("=== Profile LS ($(PROFILE_BUDGET)s budget) on $PROFILE_INSTANCE, packing=$PACKING ===")
+println(
+    "=== Profile LS ($(PROFILE_BUDGET)s budget) on $PROFILE_INSTANCE, packing=$PACKING ==="
+)
 Profile.clear()
 Profile.init(; n=10_000_000, delay=0.001)
 chosen_profile = deepcopy(chosen)
 result = @profile TPO.local_search!(
-    chosen_profile, sub; time_limit=PROFILE_BUDGET, packing=PACKING,
+    chosen_profile, sub; time_limit=PROFILE_BUDGET, packing=PACKING
 )
 println("LS done: $(result.n_iter) iters, saved $(round(result.saved; digits=1))")
 println("iter/s: $(round(result.n_iter / PROFILE_BUDGET; digits=1))")

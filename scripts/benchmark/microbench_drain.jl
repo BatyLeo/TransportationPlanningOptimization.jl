@@ -24,7 +24,7 @@ chosen = TPO.choose_best_feasible(
 )
 
 println("=== Capturing real (pool, to_remove) pairs from LS for $(N_SAMPLES) calls ===")
-const LC = TPO.LightCommodity{true,Inbound.InboundCommodityInfo}
+const LC = TPO.LightCommodity{Inbound.InboundCommodityInfo}
 const SAMPLES = Vector{NTuple{2,Vector{LC}}}()
 sizehint!(SAMPLES, N_SAMPLES)
 
@@ -76,7 +76,9 @@ function time_call(impl, samples)
 end
 
 # Roll back to pure Dict implementation for comparison
-function _drain_dict_only!(pool::Vector{C}, to_remove::Vector{C}) where {C<:TPO.LightCommodity}
+function _drain_dict_only!(
+    pool::Vector{C}, to_remove::Vector{C}
+) where {C<:TPO.LightCommodity}
     isempty(to_remove) && return C[]
     counts = Dict{C,Int}()
     for c in to_remove
@@ -122,7 +124,9 @@ for (i, (p, r)) in enumerate(SAMPLES[1:min(200, length(SAMPLES))])
     if length(d1) != length(d2) || length(p1) != length(p2) || length(r1) != length(r2)
         mismatches += 1
         if mismatches <= 3
-            @warn "mismatch at sample $i" len_d=(length(d1), length(d2)) len_p=(length(p1), length(p2)) len_r=(length(r1), length(r2))
+            @warn "mismatch at sample $i" len_d = (length(d1), length(d2)) len_p = (
+                length(p1), length(p2)
+            ) len_r = (length(r1), length(r2))
         end
     end
 end
@@ -131,7 +135,9 @@ println("Mismatches: $mismatches / $(min(200, length(SAMPLES)))")
 println("\n=== Timings on $(length(SAMPLES)) samples (median to_remove ≈ small) ===")
 t_adaptive, us_adaptive = time_call(TPO._drain_first_matches!, SAMPLES)
 t_dict, us_dict = time_call(_drain_dict_only!, SAMPLES)
-@printf("Adaptive (linear<=32 + Dict): %.2f s total, %.2f μs/call\n", t_adaptive, us_adaptive)
+@printf(
+    "Adaptive (linear<=32 + Dict): %.2f s total, %.2f μs/call\n", t_adaptive, us_adaptive
+)
 @printf("Dict only:                    %.2f s total, %.2f μs/call\n", t_dict, us_dict)
 @printf("Speedup: %.2fx\n", t_dict / t_adaptive)
 
@@ -143,6 +149,11 @@ for (lo, hi) in buckets
     isempty(bucket_samples) && continue
     t_a, _ = time_call(TPO._drain_first_matches!, bucket_samples)
     t_d, _ = time_call(_drain_dict_only!, bucket_samples)
-    @printf("  to_remove ∈ [%3d,%5d): %5d calls, speedup %.2fx\n",
-        lo, hi, length(bucket_samples), t_d / t_a)
+    @printf(
+        "  to_remove ∈ [%3d,%5d): %5d calls, speedup %.2fx\n",
+        lo,
+        hi,
+        length(bucket_samples),
+        t_d / t_a
+    )
 end

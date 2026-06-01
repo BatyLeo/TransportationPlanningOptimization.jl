@@ -79,7 +79,7 @@ println("=== Running LS for $(LS_BUDGET)s with instrumentation ===")
 GC.gc()
 chosen_run = deepcopy(chosen)
 t = @elapsed result = TPO.local_search!(
-    chosen_run, sub; time_limit=LS_BUDGET, packing=PACKING,
+    chosen_run, sub; time_limit=LS_BUDGET, packing=PACKING
 )
 println("LS done: $(result.n_iter) iters in $(round(t; digits=2))s")
 println("_drain_first_matches! called $(length(DRAIN_RECORDS)) times")
@@ -108,16 +108,16 @@ show_stats("to_remove size (order commodities)", remove_sizes)
 
 println("\n=== Bucketed histogram of to_remove size ===")
 buckets = [0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 10_000]
-for i in 1:(length(buckets)-1)
-    lo, hi = buckets[i], buckets[i+1]
+for i in 1:(length(buckets) - 1)
+    lo, hi = buckets[i], buckets[i + 1]
     n = count(s -> lo <= s < hi, remove_sizes)
     pct = 100 * n / length(remove_sizes)
     @printf("  [%4d, %5d): %8d calls (%5.1f%%)\n", lo, hi, n, pct)
 end
 
 println("\n=== Bucketed histogram of pool size ===")
-for i in 1:(length(buckets)-1)
-    lo, hi = buckets[i], buckets[i+1]
+for i in 1:(length(buckets) - 1)
+    lo, hi = buckets[i], buckets[i + 1]
     n = count(s -> lo <= s < hi, pool_sizes)
     pct = 100 * n / length(pool_sizes)
     @printf("  [%4d, %5d): %8d calls (%5.1f%%)\n", lo, hi, n, pct)
@@ -132,5 +132,9 @@ println("\n=== Cost model: time per call (in hypothetical units) ===")
 # So linear is faster when min(|to_remove|, |pool|) is below a small threshold.
 threshold = 16  # heuristic: when min < 16, linear wins
 linear_better = count(((p, r),) -> min(p, r) < threshold, DRAIN_RECORDS)
-@printf("Calls where min(pool, to_remove) < %d (linear scan would likely win): %d (%.1f%%)\n",
-    threshold, linear_better, 100 * linear_better / length(DRAIN_RECORDS))
+@printf(
+    "Calls where min(pool, to_remove) < %d (linear scan would likely win): %d (%.1f%%)\n",
+    threshold,
+    linear_better,
+    100 * linear_better / length(DRAIN_RECORDS)
+)

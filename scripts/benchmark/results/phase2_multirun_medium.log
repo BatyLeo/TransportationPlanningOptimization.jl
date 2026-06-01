@@ -1,0 +1,95 @@
+Set parameter WLSAccessID
+Set parameter WLSSecret
+Set parameter LicenseID to value 2599044
+┌ Error: Error during loading of extension TransportationPlanningOptimizationGurobiExt of TransportationPlanningOptimization, use `Base.retry_load_extensions()` to retry.
+│   exception =
+│    1-element ExceptionStack:
+│    InitError: Gurobi Error 10009: License 2599044 has expired
+│    Stacktrace:
+│      [1] _check_ret
+│        @ ~/.julia/packages/Gurobi/K2XSK/src/MOI_wrapper/MOI_wrapper.jl:442 [inlined]
+│      [2] Gurobi.Env(params::Nothing; started::Bool, output_flag::Int64, memory_limit::Nothing)
+│        @ Gurobi ~/.julia/packages/Gurobi/K2XSK/src/MOI_wrapper/MOI_wrapper.jl:176
+│      [3] Env (repeats 2 times)
+│        @ ~/.julia/packages/Gurobi/K2XSK/src/MOI_wrapper/MOI_wrapper.jl:143 [inlined]
+│      [4] __init__()
+│        @ TransportationPlanningOptimizationGurobiExt ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/ext/TransportationPlanningOptimizationGurobiExt.jl:9
+│      [5] run_module_init(mod::Module, i::Int64)
+│        @ Base ./loading.jl:1443
+│      [6] register_restored_modules(sv::Core.SimpleVector, pkg::Base.PkgId, path::String)
+│        @ Base ./loading.jl:1431
+│      [7] _include_from_serialized(pkg::Base.PkgId, path::String, ocachepath::String, depmods::Vector{Any}; register::Bool)
+│        @ Base ./loading.jl:1319
+│      [8] _include_from_serialized
+│        @ ./loading.jl:1274 [inlined]
+│      [9] _require_search_from_serialized(pkg::Base.PkgId, sourcepath::String, build_id::UInt128, stalecheck::Bool; reasons::Dict{String, Int64}, DEPOT_PATH::Vector{String})
+│        @ Base ./loading.jl:2115
+│     [10] __require_prelocked(pkg::Base.PkgId, env::Nothing)
+│        @ Base ./loading.jl:2609
+│     [11] _require_prelocked(uuidkey::Base.PkgId, env::Nothing)
+│        @ Base ./loading.jl:2493
+│     [12] _require_prelocked(uuidkey::Base.PkgId)
+│        @ Base ./loading.jl:2487
+│     [13] run_extension_callbacks(extid::Base.ExtensionId)
+│        @ Base ./loading.jl:1607
+│     [14] run_extension_callbacks(pkgid::Base.PkgId)
+│        @ Base ./loading.jl:1644
+│     [15] run_package_callbacks(modkey::Base.PkgId)
+│        @ Base ./loading.jl:1460
+│     [16] _require_search_from_serialized(pkg::Base.PkgId, sourcepath::String, build_id::UInt128, stalecheck::Bool; reasons::Dict{String, Int64}, DEPOT_PATH::Vector{String})
+│        @ Base ./loading.jl:2134
+│     [17] _require_search_from_serialized
+│        @ ./loading.jl:2009 [inlined]
+│     [18] __require_prelocked(pkg::Base.PkgId, env::String)
+│        @ Base ./loading.jl:2627
+│     [19] _require_prelocked(uuidkey::Base.PkgId, env::String)
+│        @ Base ./loading.jl:2493
+│     [20] macro expansion
+│        @ ./loading.jl:2421 [inlined]
+│     [21] macro expansion
+│        @ ./lock.jl:376 [inlined]
+│     [22] __require(into::Module, mod::Symbol)
+│        @ Base ./loading.jl:2386
+│     [23] require(into::Module, mod::Symbol)
+│        @ Base ./loading.jl:2362
+│     [24] include(mapexpr::Function, mod::Module, _path::String)
+│        @ Base ./Base.jl:307
+│     [25] top-level scope
+│        @ ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/scripts/benchmark/ls_multirun.jl:2
+│     [26] include(mod::Module, _path::String)
+│        @ Base ./Base.jl:306
+│     [27] exec_options(opts::Base.JLOptions)
+│        @ Base ./client.jl:317
+│     [28] _start()
+│        @ Base ./client.jl:550
+│    during initialization of module TransportationPlanningOptimizationGurobiExt
+└ @ Base loading.jl:1617
+=== Setup TPO instance: medium ===
+┌ Warning: 1680 duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept.
+└ @ Main.Inbound ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/test/Inbound.jl:242
+=== Filter + init ===
+Progress:   1%|▎                                        |  ETA: 0:00:18[KProgress:   3%|█                                        |  ETA: 0:00:12[KProgress:   5%|██                                       |  ETA: 0:00:09[KProgress:   7%|██▊                                      |  ETA: 0:00:11[KProgress:  11%|████▍                                    |  ETA: 0:00:07[KProgress:  15%|██████                                   |  ETA: 0:00:06[KProgress:  20%|████████▏                                |  ETA: 0:00:04[KProgress:  27%|███████████▏                             |  ETA: 0:00:03[KProgress:  35%|██████████████▍                          |  ETA: 0:00:02[KProgress:  43%|█████████████████▊                       |  ETA: 0:00:02[KProgress:  52%|█████████████████████▌                   |  ETA: 0:00:01[KProgress:  62%|█████████████████████████▍               |  ETA: 0:00:01[KProgress:  72%|█████████████████████████████▌           |  ETA: 0:00:01[KProgress:  81%|█████████████████████████████████▍       |  ETA: 0:00:00[KProgress:  90%|████████████████████████████████████▊    |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:02[K
+Progress:   0%|▏                                        |  ETA: 0:00:39[KProgress:   1%|▍                                        |  ETA: 0:00:30[KProgress:   1%|▌                                        |  ETA: 0:00:28[KProgress:   2%|▉                                        |  ETA: 0:00:23[KProgress:   3%|█▏                                       |  ETA: 0:00:22[KProgress:   4%|█▌                                       |  ETA: 0:00:18[KProgress:   5%|█▉                                       |  ETA: 0:00:17[KProgress:   6%|██▍                                      |  ETA: 0:00:15[KProgress:   7%|███                                      |  ETA: 0:00:13[KProgress:   8%|███▍                                     |  ETA: 0:00:13[KProgress:   9%|███▉                                     |  ETA: 0:00:12[KProgress:  11%|████▌                                    |  ETA: 0:00:11[KProgress:  13%|█████▎                                   |  ETA: 0:00:12[KProgress:  15%|██████▏                                  |  ETA: 0:00:11[KProgress:  17%|██████▊                                  |  ETA: 0:00:10[KProgress:  18%|███████▌                                 |  ETA: 0:00:09[KProgress:  21%|████████▌                                |  ETA: 0:00:08[KProgress:  23%|█████████▍                               |  ETA: 0:00:08[KProgress:  25%|██████████▎                              |  ETA: 0:00:07[KProgress:  27%|███████████                              |  ETA: 0:00:07[KProgress:  29%|████████████                             |  ETA: 0:00:06[KProgress:  32%|█████████████                            |  ETA: 0:00:06[KProgress:  34%|█████████████▉                           |  ETA: 0:00:06[KProgress:  36%|██████████████▉                          |  ETA: 0:00:05[KProgress:  39%|███████████████▊                         |  ETA: 0:00:05[KProgress:  41%|████████████████▊                        |  ETA: 0:00:05[KProgress:  43%|█████████████████▊                       |  ETA: 0:00:04[KProgress:  46%|██████████████████▊                      |  ETA: 0:00:04[KProgress:  48%|███████████████████▉                     |  ETA: 0:00:04[KProgress:  51%|█████████████████████                    |  ETA: 0:00:03[KProgress:  54%|██████████████████████                   |  ETA: 0:00:03[KProgress:  56%|███████████████████████                  |  ETA: 0:00:03[KProgress:  59%|████████████████████████▎                |  ETA: 0:00:03[KProgress:  62%|█████████████████████████▍               |  ETA: 0:00:02[KProgress:  65%|██████████████████████████▋              |  ETA: 0:00:02[KProgress:  68%|███████████████████████████▊             |  ETA: 0:00:02[KProgress:  71%|█████████████████████████████            |  ETA: 0:00:02[KProgress:  74%|██████████████████████████████▎          |  ETA: 0:00:02[KProgress:  77%|███████████████████████████████▌         |  ETA: 0:00:01[KProgress:  80%|█████████████████████████████████        |  ETA: 0:00:01[KProgress:  84%|██████████████████████████████████▍      |  ETA: 0:00:01[KProgress:  87%|███████████████████████████████████▋     |  ETA: 0:00:01[KProgress:  90%|█████████████████████████████████████    |  ETA: 0:00:01[KProgress:  94%|██████████████████████████████████████▌  |  ETA: 0:00:00[KProgress:  97%|███████████████████████████████████████▉ |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:05[K
+=== Warmup ===
+
+============================================================
+Current TPO (drain adaptive + merge-on-add) — 4 runs each
+============================================================
+
+--- packing=:frozen (4 runs, 15.0s each, seed_base=1000) ---
+  run 1: 887 iters in 15.03s → 59.0 iter/s
+  run 2: 950 iters in 15.97s → 59.5 iter/s
+  run 3: 1261 iters in 15.01s → 84.0 iter/s
+  run 4: 1214 iters in 15.40s → 78.8 iter/s
+  → median 69.2 iter/s, min 59.0, max 84.0, mean 70.3, stddev 13.0
+
+--- packing=:ffd_union (4 runs, 15.0s each, seed_base=2000) ---
+  run 1: 453 iters in 15.27s → 29.7 iter/s
+  run 2: 634 iters in 15.01s → 42.2 iter/s
+  run 3: 587 iters in 20.34s → 28.9 iter/s
+  run 4: 373 iters in 19.07s → 19.6 iter/s
+  → median 29.3 iter/s, min 19.6, max 42.2, mean 30.1, stddev 9.3
+
+=== Median iter/s across 4 runs ===
+  :frozen     69.2 iter/s
+  :ffd_union  29.3 iter/s

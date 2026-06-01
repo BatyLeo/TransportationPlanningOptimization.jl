@@ -48,12 +48,19 @@ function count_function(needle::String, data, lidict)
 end
 
 total_samples = count(!=(0), data)
-for needle in ("update_bundle_cost_matrix", "compute_ttg_edge",
-               "dijkstra_shortest_paths", "add_bundle_path",
-               "remove_bundle_path", "ffd_cost",
-               "incremental_cost", "tentative_bin_count",
-               "lower_bound_filtering", "SparseArrays",
-               "getindex")
+for needle in (
+    "update_bundle_cost_matrix",
+    "compute_ttg_edge",
+    "dijkstra_shortest_paths",
+    "add_bundle_path",
+    "remove_bundle_path",
+    "ffd_cost",
+    "incremental_cost",
+    "tentative_bin_count",
+    "lower_bound_filtering",
+    "SparseArrays",
+    "getindex",
+)
     n = count_function(needle, data, lidict)
     pct = round(100 * n / max(total_samples, 1); digits=1)
     @printf("%-50s %8d samples (%5.1f%%)\n", needle, n, pct)
