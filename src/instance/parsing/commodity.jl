@@ -45,6 +45,7 @@ struct Commodity{is_date_arrival,ID,I}
     destination_id::ID
     "date information associated with the commodity"
     date::DateTime
+    "maximum allowed delivery time (time duration between departure and arrival)"
     max_delivery_time::Period
     "size of the commodity (we assume 1D approximation)"
     size::Float64

@@ -24,14 +24,14 @@ end
 """
 $TYPEDSIGNATURES
 
-Normalize an arc cost argument. Accepts a single `AbstractArcCostFunction` or
+Process an arc cost argument. Accepts a single `AbstractArcCostFunction` or
 a tuple of them. Returns the single cost unwrapped (no `SumArcCost` overhead
 for the common case), or a `SumArcCost` when multiple costs are provided.
 
 Throws `ArgumentError` on an empty tuple (matches `SumArcCost`'s own check).
 """
-_normalize_arc_cost(c::AbstractArcCostFunction) = c
-function _normalize_arc_cost(t::Tuple{Vararg{AbstractArcCostFunction}})
+_process_arc_cost(c::AbstractArcCostFunction) = c
+function _process_arc_cost(t::Tuple{Vararg{AbstractArcCostFunction}})
     isempty(t) && throw(ArgumentError("Arc constructor: cost cannot be an empty tuple"))
     return length(t) == 1 ? only(t) : SumArcCost(t)
 end
@@ -51,13 +51,13 @@ function Arc(;
     capacity::Int=typemax(Int),
     info=nothing,
 )
-    normalized_cost = _normalize_arc_cost(cost)
+    cost_function = _process_arc_cost(cost)
     return Arc(
         String(origin_id),
         String(destination_id),
         travel_time,
         capacity,
-        normalized_cost,
+        cost_function,
         info,
     )
 end
@@ -76,18 +76,18 @@ function Base.show(io::IO, arc::Arc)
 end
 
 """
-    collect_arcs(cost_types, arcs; validate=true)
+$TYPEDSIGNATURES
 
 Collect an iterable of `NetworkArc`s into a type-stable vector with the specified cost types.
 This is useful for creating heterogeneous arc collections with multiple cost function types
 while maintaining type stability.
 
 # Arguments
-- `cost_types`: A tuple or Union of cost function types
+- `cost_types`: a tuple or Union of cost function types
   - Tuple syntax: `(LinearArcCost, BinPackingArcCost)`
   - Union syntax: `Union{LinearArcCost, BinPackingArcCost}`
-- `arcs`: Iterable of NetworkArc objects with potentially different cost types
-- `validate`: Whether to validate that all arc cost types are included (default: true)
+- `arcs`: iterable of NetworkArc objects with potentially different cost types
+- `validate`: whether to validate that all arc cost types are included (default: true)
 
 # Examples
 ```julia

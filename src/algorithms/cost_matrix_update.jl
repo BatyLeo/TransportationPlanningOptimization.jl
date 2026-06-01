@@ -119,7 +119,7 @@ function incremental_cost!(
     # Union sizes: merge the two descending runs (no sort of the union).
     resize!(buffer.sizes, length(existing) + length(new))
     merge_desc!(buffer.sizes, buffer.existing_sizes, buffer.new_sizes)
-    # buffer.caps is reused inside ffd_count!. Safe because n_existing is already
+    # buffer.remaining_capacities is reused inside ffd_count!. Safe because n_existing is already
     # captured, so the existing-only count no longer needs it.
     n_union = ffd_count!(buffer, cap, buffer.sizes)
 

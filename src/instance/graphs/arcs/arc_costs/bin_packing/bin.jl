@@ -23,23 +23,22 @@ end
 """
 $TYPEDEF
 
-Reusable scratch buffers for the bin-packing hot path. Created once per sweep
-and threaded through `incremental_cost!` so the per-arc evaluation allocates
-nothing. Single-threaded use only (one buffer per thread when parallelism
-lands, mirroring STP's per-thread `CAPACITIES`).
+Reusable buffers for bin-packing. Created once and threaded through `incremental_cost!`
+so the per-arc evaluation allocates nothing. Single-threaded use only (one buffer per thread
+once parallelism is implemented and used).
 
 # Fields
 $TYPEDFIELDS
 """
-struct BinPackingBuffer
+struct BinPackingBuffer{T<:Real}
     "remaining capacity of each currently open bin"
-    caps::Vector{Float64}
+    remaining_capacities::Vector{T}
     "scratch for the merged (existing union new) commodity sizes, sorted descending"
-    sizes::Vector{Float64}
+    sizes::Vector{T}
     "scratch for the existing run's sizes, sorted descending"
-    existing_sizes::Vector{Float64}
+    existing_sizes::Vector{T}
     "scratch for the new run's sizes, sorted descending"
-    new_sizes::Vector{Float64}
+    new_sizes::Vector{T}
 end
 
 """
@@ -47,31 +46,95 @@ $TYPEDSIGNATURES
 
 Construct an empty `BinPackingBuffer`.
 """
-function BinPackingBuffer()
-    return BinPackingBuffer(Float64[], Float64[], Float64[], Float64[])
+function BinPackingBuffer(::Type{T}=Float64) where {T<:Real}
+    return BinPackingBuffer{T}(T[], T[], T[], T[])
 end
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+@inline function _check_oversize(largest_size::Real, cap::Real)
+    largest_size > cap + 1e-8 && throw(
+        DomainError(
+            largest_size, "Commodity size $(largest_size) exceeds bin capacity $(cap)"
+        ),
+    )
+    return nothing
+end
+
+"""
+First-Fit-Decreasing placement loop. Walks `sizes_desc` (assumed sorted
+descending), placing each into the first slot of `caps` with room, otherwise
+opening a new slot with capacity `cap - s`. Mutates `caps` in place.
+"""
+@inline function _ffd_place!(caps::Vector{T}, sizes_desc, cap::T; eps=1e-8) where {T<:Real}
+    @inbounds for s in sizes_desc
+        placed = false
+        for i in eachindex(caps)
+            if caps[i] >= s - eps
+                caps[i] -= s
+                placed = true
+                break
+            end
+        end
+        placed || push!(caps, cap - s)
+    end
+    return caps
+end
+
+"""
+Best-Fit-Decreasing placement loop. Mirror of `_ffd_place!` for BFD.
+"""
+@inline function _bfd_place!(caps::Vector{T}, sizes_desc, cap::T; eps=1e-8) where {T<:Real}
+    @inbounds for s in sizes_desc
+        best_idx = 0
+        best_left = typemax(T)
+        for i in eachindex(caps)
+            after = caps[i] - s
+            if after >= -eps && after < best_left
+                best_left = after
+                best_idx = i
+            end
+        end
+        if best_idx == 0
+            push!(caps, cap - s)
+        else
+            caps[best_idx] -= s
+        end
+    end
+    return caps
+end
+
+# Acquire the working caps vector: a buffer-owned one (cleared) or a fresh one.
+@inline _take_caps(::Nothing) = Float64[]
+@inline function _take_caps(buffer::BinPackingBuffer)
+    empty!(buffer.remaining_capacities)
+    return buffer.remaining_capacities
+end
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 """
 $TYPEDSIGNATURES
 
 First-Fit-Decreasing bin count over `sizes_desc` (already sorted descending),
-reusing `buffer.caps`. Returns the number of bins. Allocates nothing in steady
-state once `buffer.caps` has grown to the working size.
+reusing `buffer.remaining_capacities`. Returns the number of bins. Allocates nothing in steady
+state once `buffer.remaining_capacities` has grown to the working size.
+
+!!! note
+    `empty!` only resets the length to 0 without releasing the backing buffer,
+    so `buffer.remaining_capacities` grows at most to the largest working size seen and never
+    allocates after that.
 """
-function ffd_count!(buffer::BinPackingBuffer, bin_capacity::Float64, sizes_desc)
-    empty!(buffer.caps)
-    for s in sizes_desc
-        placed = false
-        @inbounds for i in eachindex(buffer.caps)
-            if buffer.caps[i] >= s - 1e-8
-                buffer.caps[i] -= s
-                placed = true
-                break
-            end
-        end
-        placed || push!(buffer.caps, bin_capacity - s)
-    end
-    return length(buffer.caps)
+function ffd_count!(
+    buffer::BinPackingBuffer{T}, bin_capacity::T, sizes_desc; eps=1e-8
+) where {T<:Real}
+    empty!(buffer.remaining_capacities)
+    _ffd_place!(buffer.remaining_capacities, sizes_desc, bin_capacity; eps)
+    return length(buffer.remaining_capacities)
 end
 
 """
@@ -129,7 +192,7 @@ bin that has room, opening a fresh bin when none fits. The result equals the
 number of bins `frozen_first_fit_add!` would open on the same inputs, so the
 incremental cost predicted here matches the committed bin count exactly.
 
-`buffer.caps` is reused as the scratch for the capacities copy. `new` is read
+`buffer.remaining_capacities` is reused as the scratch for the capacities copy. `new` is read
 into `buffer.new_sizes`, checked for descending order, and sorted only when
 needed (the common case is already descending).
 """
@@ -141,33 +204,20 @@ function frozen_incremental_count!(
 ) where {C<:LightCommodity}
     isempty(new) && return 0
 
-    # New run sizes, descending (pre-sorted at construction in the common case).
     resize!(buffer.new_sizes, length(new))
     @inbounds for (i, c) in enumerate(new)
         buffer.new_sizes[i] = c.size
     end
     _is_desc(buffer.new_sizes) || sort!(buffer.new_sizes; rev=true)
 
-    # Copy the frozen bins' remaining capacities into scratch (never mutate the
-    # committed bins here). New bins are appended to this same scratch vector.
-    empty!(buffer.caps)
+    empty!(buffer.remaining_capacities)
     for b in existing_bins
-        push!(buffer.caps, b.remaining_capacity)
+        push!(buffer.remaining_capacities, b.remaining_capacity)
     end
-    n_frozen = length(buffer.caps)
+    n_frozen = length(buffer.remaining_capacities)
 
-    @inbounds for s in buffer.new_sizes
-        placed = false
-        for i in eachindex(buffer.caps)
-            if buffer.caps[i] >= s - 1e-8
-                buffer.caps[i] -= s
-                placed = true
-                break
-            end
-        end
-        placed || push!(buffer.caps, bin_capacity - s)
-    end
-    return length(buffer.caps) - n_frozen
+    _ffd_place!(buffer.remaining_capacities, buffer.new_sizes, bin_capacity)
+    return length(buffer.remaining_capacities) - n_frozen
 end
 
 """
@@ -190,14 +240,7 @@ function frozen_first_fit_add!(
 ) where {C<:LightCommodity}
     isempty(new) && return bins
     sorted_new = sort(new; by=c -> c.size, rev=true)
-    if sorted_new[1].size > bin_capacity + 1e-8
-        throw(
-            DomainError(
-                sorted_new[1],
-                "Commodity size $(sorted_new[1].size) exceeds bin capacity $(bin_capacity)",
-            ),
-        )
-    end
+    _check_oversize(sorted_new[1].size, bin_capacity)
     for c in sorted_new
         placed = false
         @inbounds for i in eachindex(bins)
@@ -227,28 +270,15 @@ function compute_bin_assignments(
 ) where {C<:LightCommodity}
     isempty(commodities) && return Bin{C}[]
 
-    # Sort commodities in non-increasing order of size, unless the caller
-    # guarantees they already are.
     sorted_commodities =
         presorted ? commodities : sort(commodities; by=c -> c.size, rev=true)
+    _check_oversize(sorted_commodities[1].size, arc_f.bin_capacity)
 
-    # Check for oversized commodities after sorting (in case of numerical issues)
-    if sorted_commodities[1].size > arc_f.bin_capacity + 1e-8
-        throw(
-            DomainError(
-                sorted_commodities[1],
-                "Commodity size $(sorted_commodities[1].size) exceeds bin capacity $(arc_f.bin_capacity)",
-            ),
-        )
-    end
-
-    # Temporary storage for bin contents and remaining capacities
     bin_contents = Vector{C}[]
     bin_rem_caps = Float64[]
 
     for c in sorted_commodities
         placed = false
-        # Try to fit in the first available bin (allow a small numerical tolerance)
         for i in eachindex(bin_contents)
             if bin_rem_caps[i] >= c.size - 1e-8
                 push!(bin_contents[i], c)
@@ -257,15 +287,12 @@ function compute_bin_assignments(
                 break
             end
         end
-
-        # If it doesn't fit in any existing bin, open a new one
         if !placed
             push!(bin_contents, [c])
             push!(bin_rem_caps, arc_f.bin_capacity - c.size)
         end
     end
 
-    # Convert to Bin objects
     return [
         Bin(
             bin_contents[i],
@@ -290,60 +317,29 @@ evaluations where the `BinPackingArcCost` evaluates to
 `cost_per_bin * n_bins`). Use `compute_bin_assignments` when the actual
 bin contents are needed downstream.
 
+Pass `buffer` to reuse a `BinPackingBuffer`'s `caps` vector and avoid the
+per-call allocation; otherwise a fresh `Vector{Float64}` is used.
+
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
 function tentative_bin_count(
-    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
+    arc_f::BinPackingArcCost,
+    commodities::Vector{C};
+    presorted::Bool=false,
+    buffer::Union{Nothing,BinPackingBuffer}=nothing,
 ) where {C<:LightCommodity}
     isempty(commodities) && return 0
-    cap = arc_f.bin_capacity
+    cap = Float64(arc_f.bin_capacity)
+    caps = _take_caps(buffer)
     if presorted
-        # First element is the largest under the descending-by-size invariant.
-        first_size = commodities[1].size
-        first_size > cap + 1e-8 && throw(
-            DomainError(
-                first_size, "Commodity size $(first_size) exceeds bin capacity $(cap)"
-            ),
-        )
-        bin_caps = Float64[]
-        for c in commodities
-            s = c.size
-            placed = false
-            for i in eachindex(bin_caps)
-                if bin_caps[i] >= s - 1e-8
-                    bin_caps[i] -= s
-                    placed = true
-                    break
-                end
-            end
-            placed || push!(bin_caps, cap - s)
-        end
-        return length(bin_caps)
+        _check_oversize(commodities[1].size, cap)
+        _ffd_place!(caps, (c.size for c in commodities), cap)
+    else
+        sorted_sizes = sort([c.size for c in commodities]; rev=true)
+        _check_oversize(sorted_sizes[1], cap)
+        _ffd_place!(caps, sorted_sizes, cap)
     end
-    sorted_sizes = sort([c.size for c in commodities]; rev=true)
-    if sorted_sizes[1] > cap + 1e-8
-        throw(
-            DomainError(
-                sorted_sizes[1],
-                "Commodity size $(sorted_sizes[1]) exceeds bin capacity $(cap)",
-            ),
-        )
-    end
-    bin_caps = Float64[]
-    for s in sorted_sizes
-        placed = false
-        for i in eachindex(bin_caps)
-            if bin_caps[i] >= s - 1e-8
-                bin_caps[i] -= s
-                placed = true
-                break
-            end
-        end
-        if !placed
-            push!(bin_caps, cap - s)
-        end
-    end
-    return length(bin_caps)
+    return length(caps)
 end
 
 """
@@ -358,67 +354,29 @@ length(compute_bin_assignments_bfd(arc_f, items))` for any input.
 Use this alongside `tentative_bin_count` in `bin_packing_improvement!` to
 gate the BFD-vs-FFD choice without materializing either packing.
 
+Pass `buffer` to reuse a `BinPackingBuffer`'s `caps` vector and avoid the
+per-call allocation; otherwise a fresh `Vector{Float64}` is used.
+
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
 function tentative_best_fit_count(
-    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
+    arc_f::BinPackingArcCost,
+    commodities::Vector{C};
+    presorted::Bool=false,
+    buffer::Union{Nothing,BinPackingBuffer}=nothing,
 ) where {C<:LightCommodity}
     isempty(commodities) && return 0
-    cap = arc_f.bin_capacity
+    cap = Float64(arc_f.bin_capacity)
+    caps = _take_caps(buffer)
     if presorted
-        first_size = commodities[1].size
-        first_size > cap + 1e-8 && throw(
-            DomainError(
-                first_size, "Commodity size $(first_size) exceeds bin capacity $(cap)"
-            ),
-        )
-        bin_caps = Float64[]
-        for c in commodities
-            s = c.size
-            best_idx = 0
-            best_left = Inf
-            for i in eachindex(bin_caps)
-                after = bin_caps[i] - s
-                if after >= -1e-8 && after < best_left
-                    best_left = after
-                    best_idx = i
-                end
-            end
-            if best_idx == 0
-                push!(bin_caps, cap - s)
-            else
-                bin_caps[best_idx] -= s
-            end
-        end
-        return length(bin_caps)
+        _check_oversize(commodities[1].size, cap)
+        _bfd_place!(caps, (c.size for c in commodities), cap)
+    else
+        sorted_sizes = sort([c.size for c in commodities]; rev=true)
+        _check_oversize(sorted_sizes[1], cap)
+        _bfd_place!(caps, sorted_sizes, cap)
     end
-    sorted_sizes = sort([c.size for c in commodities]; rev=true)
-    if sorted_sizes[1] > cap + 1e-8
-        throw(
-            DomainError(
-                sorted_sizes[1],
-                "Commodity size $(sorted_sizes[1]) exceeds bin capacity $(cap)",
-            ),
-        )
-    end
-    bin_caps = Float64[]
-    for s in sorted_sizes
-        best_idx = 0
-        best_left = Inf
-        for i in eachindex(bin_caps)
-            after = bin_caps[i] - s
-            if after >= -1e-8 && after < best_left
-                best_left = after
-                best_idx = i
-            end
-        end
-        if best_idx == 0
-            push!(bin_caps, cap - s)
-        else
-            bin_caps[best_idx] -= s
-        end
-    end
-    return length(bin_caps)
+    return length(caps)
 end
 
 """
@@ -437,14 +395,7 @@ function compute_bin_assignments_bfd(
     isempty(commodities) && return Bin{C}[]
     sorted_commodities =
         presorted ? commodities : sort(commodities; by=c -> c.size, rev=true)
-    if sorted_commodities[1].size > arc_f.bin_capacity + 1e-8
-        throw(
-            DomainError(
-                sorted_commodities[1],
-                "Commodity size $(sorted_commodities[1].size) exceeds bin capacity $(arc_f.bin_capacity)",
-            ),
-        )
-    end
+    _check_oversize(sorted_commodities[1].size, arc_f.bin_capacity)
     bin_contents = Vector{C}[]
     bin_rem_caps = Float64[]
     for c in sorted_commodities
