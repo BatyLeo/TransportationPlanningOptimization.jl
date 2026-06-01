@@ -13,6 +13,13 @@ struct NetworkGraph{G<:MetaGraph}
     graph::G
 end
 
+function Base.show(io::IO, ng::NetworkGraph)
+    return println(
+        io,
+        "Network Graph with $(Graphs.nv(ng.graph)) nodes and $(Graphs.ne(ng.graph)) arcs",
+    )
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -44,8 +51,9 @@ $TYPEDSIGNATURES
 Constructor for `NetworkGraph`.
 
 Ensures node IDs are unique. Multiple arcs between the same `(origin_id, destination_id)`
-pair are accepted: the graph keeps a single edge whose data is auto-promoted to a
-`MultiModalArc` carrying every mode declared for that leg.
+pair are rejected by default with an `ArgumentError`. Pass `allow_multimodal=true` to
+opt into multi-modal legs: the graph then keeps a single edge whose data is auto-promoted
+to a `MultiModalArc` carrying every mode declared for that leg.
 
 `arcs` must be concretely typed as `Vector{Tuple{String,String,NA}}` for a single
 `NA<:NetworkArc`. Pre-built `MultiModalArc` values are not accepted in the input vector:
@@ -57,7 +65,9 @@ should narrow it through [`collect_arcs`](@ref) (or an equivalent step) before c
 this constructor, which is the standard entry path used by [`Instance`](@ref).
 """
 function NetworkGraph(
-    nodes::Vector{<:NetworkNode}, arcs::Vector{Tuple{String,String,NA}}
+    nodes::Vector{<:NetworkNode},
+    arcs::Vector{Tuple{String,String,NA}};
+    allow_multimodal::Bool=false,
 ) where {NA<:NetworkArc}
     network_graph = MetaGraph(
         Graphs.DiGraph();
@@ -65,11 +75,11 @@ function NetworkGraph(
         vertex_data_type=eltype(nodes),
         edge_data_type=Union{NA,MultiModalArc{NA}},
     )
-    _fill_network_graph!(network_graph, nodes, arcs)
+    _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal)
     return NetworkGraph(network_graph)
 end
 
-function _fill_network_graph!(network_graph, nodes, arcs)
+function _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal::Bool=false)
     for node in nodes
         if haskey(network_graph, node.id)
             prev_idx = findfirst(x -> x.id == node.id, nodes)
@@ -86,6 +96,17 @@ function _fill_network_graph!(network_graph, nodes, arcs)
     for (origin_id, destination_id, arc) in arcs
         if MetaGraphsNext.haskey(network_graph, origin_id, destination_id)
             existing = network_graph[origin_id, destination_id]
+            if !allow_multimodal
+                throw(
+                    ArgumentError(
+                        """Duplicate arc detected for leg ($(repr(origin_id)), $(repr(destination_id))):
+                          - existing arc : $(existing)
+                          - duplicate    : $(arc)
+                        Multi-modal legs are disabled by default. Pass `allow_multimodal=true` to the constructor to opt in (duplicate legs will then be promoted to a `MultiModalArc`).
+                        """,
+                    ),
+                )
+            end
             network_graph[origin_id, destination_id] = _promote_to_multi_modal(
                 existing, arc
             )
@@ -113,11 +134,4 @@ end
 
 function _promote_to_multi_modal(existing::MultiModalArc, new_arc::MultiModalArc)
     return MultiModalArc(vcat(existing.modes, new_arc.modes))
-end
-
-function Base.show(io::IO, ng::NetworkGraph)
-    return println(
-        io,
-        "Network Graph with $(Graphs.nv(ng.graph)) nodes and $(Graphs.ne(ng.graph)) arcs",
-    )
 end

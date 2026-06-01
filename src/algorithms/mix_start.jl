@@ -50,7 +50,7 @@ function mix_greedy_and_lower_bound(
     mixed_sol = Solution(instance)
 
     # One bin-packing scratch buffer reused across every bundle and arc.
-    buffer = BinPackingBuffer(instance)
+    buffer = BinPackingBuffer()
 
     @showprogress for (i, bundle_idx) in enumerate(sorted_indices)
         bundle_arcs = ttg.bundle_arcs[bundle_idx]

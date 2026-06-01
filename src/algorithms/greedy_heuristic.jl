@@ -9,7 +9,7 @@ function insert_bundle!(
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
-    buffer::BinPackingBuffer=BinPackingBuffer(instance),
+    buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 )
     ttg = instance.travel_time_graph
@@ -73,7 +73,7 @@ function greedy_heuristic(
     # Sort bundles by decreasing max single-order pack size (matches STP).
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     # One bin-packing scratch buffer reused across every bundle and arc.
-    buffer = BinPackingBuffer(instance)
+    buffer = BinPackingBuffer()
     # Then, insert them one by one into the solution
     @showprogress for i in sorted_indices
         insert_bundle!(solution, instance, i, mode_selector; buffer=buffer, packing=packing)

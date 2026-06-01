@@ -89,7 +89,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
     @test is_feasible(sol, instance)
 

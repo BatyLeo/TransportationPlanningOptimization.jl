@@ -810,7 +810,7 @@ function update_bundle_cost_matrix!(
     bundle_arcs::Vector{Tuple{Int,Int}},
     mode_selector::AbstractModeSelector=CheapestMode();
     cost_fn::Function=compute_ttg_edge_incremental_cost,
-    buffer::BinPackingBuffer=BinPackingBuffer(instance),
+    buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 )
     ttg = instance.travel_time_graph
@@ -863,7 +863,7 @@ function update_bundle_cost_matrix!(
     bundle_idx::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
     cost_fn::Function=compute_ttg_edge_incremental_cost,
-    buffer::BinPackingBuffer=BinPackingBuffer(instance),
+    buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 )
     return update_bundle_cost_matrix!(

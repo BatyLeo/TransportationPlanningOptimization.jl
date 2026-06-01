@@ -3,14 +3,7 @@ $TYPEDEF
 
 Precomputed integer-indexed lookup tables for the construction hot path, derived
 once from the instance graphs and never mutated. They replace MetaGraphsNext
-label-to-code hashing (the dominant construction cost) with flat array indexing.
-
-The spatial code is the MetaGraphsNext code of a node in `network_graph.graph`
-(a dense integer in `1:nv`). Because `IndexCache` is a type parameter of
-`Instance` (the `IC` slot), all fields, including `arc_of` and `node_cost_of`,
-are accessed type-stably. The dispatch quality for `arc_of` and `node_cost_of`
-is the same as a direct MetaGraph lookup: union-splitting over the concrete
-arc and node-cost types that were present at construction time.
+label-to-code hashing with flat array indexing.
 
 # Fields
 $TYPEDFIELDS
@@ -33,9 +26,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Build the [`IndexCache`](@ref) from the instance graphs. Runs once at the end of
-`build_instance`. Cost is `O(N_ttg + N_tsg + N_arcs)`, negligible against a
-sweep.
+Build the [`IndexCache`](@ref) from the instance graphs.
+Runs once at the end of `build_instance`.
 """
 function build_index_cache(
     network_graph::NetworkGraph,

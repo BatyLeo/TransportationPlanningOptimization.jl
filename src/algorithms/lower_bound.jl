@@ -23,7 +23,7 @@ function lower_bound!(
     # post-insertion `cost(lb_sol)` competitive with greedy.
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     # One bin-packing scratch buffer reused across every bundle and arc.
-    buffer = BinPackingBuffer(instance)
+    buffer = BinPackingBuffer()
     @showprogress for i in sorted_indices
         update_bundle_cost_matrix!(
             empty_sol,
@@ -154,7 +154,7 @@ function lower_bound_filtering!(
     # packing in the resulting solution.
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     # One bin-packing scratch buffer reused across every bundle and arc.
-    buffer = BinPackingBuffer(instance)
+    buffer = BinPackingBuffer()
     @showprogress for i in sorted_indices
         update_bundle_cost_matrix!(
             empty_sol,

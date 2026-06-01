@@ -1,7 +1,8 @@
 """
 $TYPEDEF
 
-An `Instance` represents a transportation planning problem instance, containing bundles of orders, a network graph, and a time horizon.
+An `Instance` represents a transportation planning problem instance, containing bundles of
+orders, a network graph, and a time horizon.
 
 # Fields
 $TYPEDFIELDS
@@ -27,12 +28,12 @@ $TYPEDFIELDS
     index_cache::IC
 end
 
-"""
-$TYPEDSIGNATURES
+# """
+# $TYPEDSIGNATURES
 
-Convenience constructor for sweep callers. Equivalent to `BinPackingBuffer()`.
-"""
-BinPackingBuffer(::Instance) = BinPackingBuffer()
+# Convenience constructor for sweep callers. Equivalent to `BinPackingBuffer()`.
+# """
+# BinPackingBuffer(::Instance) = BinPackingBuffer()
 
 """
 $TYPEDSIGNATURES
@@ -75,7 +76,7 @@ function Base.show(io::IO, instance::Instance)
     println(io, "Instance Summary:")
     println(
         io,
-        "  • Horizon: $(lpad(string(instance.time_horizon_length) * " time steps", 0)) ($(instance.time_step) per step)",
+        "  • Horizon: $(instance.time_horizon_length) time steps ($(instance.time_step) per step)",
     )
     println(io, "  • Commodities: $(lpad(nb_commodities, padding))")
     println(io, "  • Orders:      $(lpad(nb_orders, padding))")
@@ -95,7 +96,7 @@ function time_horizon(instance::Instance)
     return 1:(instance.time_horizon_length)
 end
 
-# By default, group by origin and destination IDs
+# Default: no additional grouping beyond origin, destination, and time step.
 function _default_group_by(::Commodity)
     return nothing
 end
@@ -181,24 +182,34 @@ $TYPEDSIGNATURES
 
 Build an `Instance` from normalized inputs.
 
-This function expects `nodes` and `arcs` already in `NetworkGraph` form (i.e., `arcs` are tuples `(origin_id, destination_id, NetworkArc)`), and `commodities` are user-facing `Commodity` objects. In brief, it:
-
-- Determines the instance start date (arrival- or departure-based) and converts dates into discrete time step indices using `period_steps`.
-- Expands each `Commodity` into `LightCommodity` items and groups them into `Order`s (by time step, origin, destination and `group_by`) and `Bundle`s (by origin, destination and group).
-- Computes `time_horizon_length` (accounting for `max_delivery_time` unless `wrap_time=true`), constructs `TimeSpaceGraph` and `TravelTimeGraph`, and returns a populated `Instance`.
+This function expects `nodes` and `arcs` already in `NetworkGraph` form
+(i.e., `arcs` are tuples `(origin_id, destination_id, NetworkArc)`),
+and `commodities` are user-facing `Commodity` objects. In brief, it:
+- Determines the instance start date (arrival or departure-based) and converts dates into
+discrete time step indices using `period_steps`.
+- Expands each `Commodity` into `LightCommodity` items and groups them into `Order`s
+(by time step, origin, destination and `group_by`) and `Bundle`s (by origin, destination and
+group).
+- Computes `time_horizon_length` (accounting for `max_delivery_time` unless
+`wrap_time=true`), constructs `TimeSpaceGraph` and `TravelTimeGraph`, and returns a
+populated `Instance`.
 
 Arguments:
 - `nodes::Vector{<:NetworkNode}`
-- `arcs::Vector{Tuple{String,String,NA}}` where `NA<:NetworkArc`. Multi-modal legs are expressed as multiple `NetworkArc` entries on the same `(origin_id, destination_id)`. Pre-built `MultiModalArc` values are not accepted.
+- `arcs::Vector{Tuple{String,String,NA}}` where `NA<:NetworkArc`. Multi-modal 
+require `allow_multimodal=true`, otherwise duplicate legs raise an `ArgumentError`.
+Pre-built `MultiModalArc` values are not accepted.
 - `commodities::Vector{Commodity}`
 - `time_step::Period`
 
 Keywords:
 - `group_by` (default: `_default_group_by`): function grouping commodities into orders
 - `wrap_time` (default: false): whether the time horizon wraps (cyclic)
-- `check_bundle_feasibility` (default: true): whether to validate that bundles have feasible paths after applying forbidden constraints
-
-See also: the `Instance` constructor which accepts `Arc` inputs and performs automatic cost-type inference.
+- `check_bundle_feasibility` (default: true): whether to validate that bundles have
+feasible paths after applying forbidden constraints
+- `allow_multimodal` (default: false): opt-in switch for multi-modal legs.
+When false, duplicate `(origin_id, destination_id)` arcs raise an `ArgumentError`.
+When true, duplicates are auto-promoted to a `MultiModalArc`.
 """
 function build_instance(
     nodes::Vector{<:NetworkNode},
@@ -208,9 +219,10 @@ function build_instance(
     group_by=_default_group_by,
     wrap_time=false,
     check_bundle_feasibility=true,
+    allow_multimodal::Bool=false,
 ) where {is_date_arrival,ID,I,NA<:NetworkArc}
     # Building the network graph (arcs are provided as (origin_id,destination_id,NetworkArc))
-    network_graph = NetworkGraph(nodes, arcs)
+    network_graph = NetworkGraph(nodes, arcs; allow_multimodal)
 
     # Wrapping commodities into light commodities
     # Pre-allocate with total quantity to avoid reallocations
@@ -425,12 +437,7 @@ This is a runtime operation that enables automatic cost type detection, but the 
 can be passed to type-stable inner functions via function barriers.
 """
 function infer_cost_types(arcs::Vector{<:Arc})
-    if isempty(arcs)
-        return ()
-    end
-    # Collect unique cost types
-    types = unique(typeof(arc.cost) for arc in arcs)
-    return Tuple(types)
+    return Tuple(unique(typeof(arc.cost) for arc in arcs))
 end
 
 """
@@ -438,7 +445,7 @@ $TYPEDSIGNATURES
 
 Build an `Instance` from `raw_arcs::Vector{<:Arc}` with explicit `arc_cost_types` for type stability.
 
-This variant converts `raw_arcs` into `NetworkArc`s using `collect_arcs(arc_cost_types, raw_arcs, time_step)` and then delegates to `build_instance(nodes, arcs, commodities, time_step; group_by, wrap_time)`.
+This variant converts `raw_arcs` into `NetworkArc`s using `collect_arcs(arc_cost_types, raw_arcs, time_step)` and then delegates to the tuple-arc variant of `build_instance`, forwarding all keyword arguments (`group_by`, `wrap_time`, `check_bundle_feasibility`, `allow_multimodal`).
 """
 function build_instance(
     nodes::Vector{<:NetworkNode},
@@ -449,6 +456,7 @@ function build_instance(
     group_by=_default_group_by,
     wrap_time=false,
     check_bundle_feasibility=true,
+    allow_multimodal::Bool=false,
 ) where {is_date_arrival,ID,I}
     arcs = collect_arcs(arc_cost_types, raw_arcs, time_step)
     return build_instance(
@@ -459,6 +467,7 @@ function build_instance(
         group_by=group_by,
         wrap_time=wrap_time,
         check_bundle_feasibility=check_bundle_feasibility,
+        allow_multimodal=allow_multimodal,
     )
 end
 
@@ -472,24 +481,34 @@ end
         wrap_time=false,
     ) where {is_date_arrival,ID,I}
 
-Construct an `Instance` from high-level `Arc` inputs by automatically inferring cost function types.
+Construct an `Instance` from high-level `Arc` inputs by automatically inferring cost
+function types.
 
 # Arguments
 - `nodes::Vector{<:NetworkNode}`: List of nodes in the spatial network.
-- `arcs::Vector{<:Arc}`: Arcs in the spatial network. `Instance` infers cost types and narrows the vector internally via [`collect_arcs`](@ref) before building the `NetworkGraph`.
+- `arcs::Vector{<:Arc}`: Arcs in the spatial network. `Instance` infers cost types and
+narrows the vector internally via [`collect_arcs`](@ref) before building the `NetworkGraph`.
 - `commodities::Vector{Commodity}`: User-facing commodity specifications.
 - `time_step::Period`: The discrete time step size (e.g., `Hour(1)`, `Day(1)`).
 
 Keywords:
-- `group_by` (default: `_default_group_by`): Optional function to group commodities into `Order`s (default: no additional grouping).
+- `group_by` (default: `_default_group_by`): Optional function to group commodities into
+`Order`s (default: no additional grouping).
 - `wrap_time` (default: false): whether the time horizon should wrap (cyclic)
-- `check_bundle_feasibility` (default: true): whether to validate that bundles have feasible paths after applying forbidden constraints
+- `check_bundle_feasibility` (default: true): whether to validate that bundles have feasible
+paths after applying forbidden constraints
+- `allow_multimodal` (default: false): opt-in switch for multi-modal legs. When false,
+duplicate `(origin_id, destination_id)` arcs raise an `ArgumentError`. When true,
+duplicates are auto-promoted to a `MultiModalArc`.
 
 # Discretization and Normalization
-1. **Start Date**: The time horizon starts at the earliest release date (for departure-based) or the earliest possible start (for arrival-based).
+1. **Start Date**: The time horizon starts at the earliest release date
+(for departure-based) or the earliest possible start (for arrival-based).
 2. **Time Steps**: Dates and periods are converted to discrete steps using `period_steps`.
-3. **Consolidation**: Commodities with the same origin, destination, and delivery step are grouped into `Order`s. Orders with the same origin and destination are grouped into `Bundle`s for routing.
-4. **Graphs**: Both `TimeSpaceGraph` (absolute time) and `TravelTimeGraph` (relative time) are constructed.
+3. **Consolidation**: Commodities with the same origin, destination, and delivery step are
+grouped into `Order`s. Orders with the same origin and destination are grouped into
+`Bundle`s for routing.
+4. **Graphs**: Both `TimeSpaceGraph` and `TravelTimeGraph` are constructed.
 """
 function Instance(
     nodes::Vector{<:NetworkNode},
@@ -499,6 +518,7 @@ function Instance(
     group_by=_default_group_by,
     wrap_time=false,
     check_bundle_feasibility=true,
+    allow_multimodal::Bool=false,
 ) where {is_date_arrival,ID,I}
     # Infer cost types from the arcs
     cost_types = infer_cost_types(raw_arcs)
@@ -512,5 +532,6 @@ function Instance(
         group_by,
         wrap_time,
         check_bundle_feasibility,
+        allow_multimodal,
     )
 end

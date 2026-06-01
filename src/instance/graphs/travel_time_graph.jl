@@ -72,7 +72,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Check if the travel-time graph has an edge between `label_1` and `label_2`.
+Check if the travel-time graph has an arc between `label_1` and `label_2`.
 """
 function MetaGraphsNext.haskey(travel_time_graph::TravelTimeGraph, label_1, label_2)
     return haskey(travel_time_graph.graph, label_1, label_2)
@@ -262,8 +262,7 @@ $TYPEDSIGNATURES
 
 Project a `MultiModalArc` into the travel-time graph. Modes are grouped by
 `travel_time_steps`. Each singleton group emits a plain `NetworkArc` edge.
-Groups of two or more modes with the same transit time emit a single
-`MultiModalArc` edge carrying just that subset (case 2).
+Groups of two or more modes with the same transit time emit a single `MultiModalArc`.
 """
 function _add_network_arc_to_travel_time_graph!(
     g::MetaGraph,

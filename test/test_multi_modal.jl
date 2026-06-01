@@ -20,12 +20,16 @@ const _NODES_AB = [
 ]
 
 function _ng_case1()
-    return NetworkGraph(_NODES_AB, [("A", "B", _TRUCK), ("A", "B", _TRAIN)])
+    return NetworkGraph(
+        _NODES_AB, [("A", "B", _TRUCK), ("A", "B", _TRAIN)]; allow_multimodal=true
+    )
 end
 
 function _ng_case2()
     same_speed_train = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(5.0))
-    return NetworkGraph(_NODES_AB, [("A", "B", _TRUCK), ("A", "B", same_speed_train)])
+    return NetworkGraph(
+        _NODES_AB, [("A", "B", _TRUCK), ("A", "B", same_speed_train)]; allow_multimodal=true
+    )
 end
 
 function _bundle_AB(; max_transit_steps=3)
@@ -128,7 +132,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
 
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
@@ -176,7 +180,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance)
 
     @test is_feasible(sol, instance)
@@ -222,7 +226,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     @test_throws ArgumentError greedy_heuristic(instance)
 end
 
@@ -259,7 +263,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
     @test is_feasible(sol, instance)
@@ -302,7 +306,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
     @test is_feasible(sol, instance)
@@ -371,7 +375,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     @test_throws ArgumentError greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 end
 
@@ -401,7 +405,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
     # Cheap train wins: 1 unit * 5.0 = 5.0
@@ -443,7 +447,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
     # Linear: 2 units * 5.0 = 10. Bin-packing: 1 bin (capacity 10) * 100.0 = 100.
@@ -498,7 +502,9 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1); wrap_time=true)
+    instance = Instance(
+        nodes, arcs, commodities, Day(1); wrap_time=true, allow_multimodal=true
+    )
 
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
@@ -548,7 +554,25 @@ end
     @test_throws MethodError NetworkGraph(_NODES_AB, abstract_vec)
 
     # The supported entry path with two NetworkArc entries on the same leg still
-    # promotes to a MultiModalArc edge inside the graph.
-    ng = NetworkGraph(_NODES_AB, [("A", "B", truck), ("A", "B", train)])
+    # promotes to a MultiModalArc edge inside the graph when opt-in is set.
+    ng = NetworkGraph(
+        _NODES_AB, [("A", "B", truck), ("A", "B", train)]; allow_multimodal=true
+    )
+    @test ng.graph["A", "B"] isa MultiModalArc
+end
+
+@testset "NetworkGraph rejects duplicate legs unless allow_multimodal=true" begin
+    truck = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
+    train = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
+
+    # Default (strict): duplicate (origin, destination) raises ArgumentError.
+    @test_throws ArgumentError NetworkGraph(
+        _NODES_AB, [("A", "B", truck), ("A", "B", train)]
+    )
+
+    # Opt-in: the same input promotes to a MultiModalArc.
+    ng = NetworkGraph(
+        _NODES_AB, [("A", "B", truck), ("A", "B", train)]; allow_multimodal=true
+    )
     @test ng.graph["A", "B"] isa MultiModalArc
 end
