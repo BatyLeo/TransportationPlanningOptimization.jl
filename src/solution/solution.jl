@@ -9,22 +9,22 @@ key metrics such as commodity distributions on arcs and individual arc costs.
 $TYPEDFIELDS
 """
 struct Solution{C<:LightCommodity}
-    "Paths for each bundle in the instance. `bundle_paths[i]` is a sequence of node codes in the `TravelTimeGraph` for the i-th bundle."
+    "Paths for each bundle in the instance. `bundle_paths[i]` is a sequence of node codes in the
+    `TravelTimeGraph` for the i-th bundle."
     bundle_paths::Vector{Vector{Int}}
-    "Per-edge assignment payload, keyed by `(u_tsg_code, v_tsg_code)`. Values are `SingleAssignment{C}` for single-mode edges and `MultiAssignment{C}` for multi-modal edges. The 2-element union lets Julia apply union-splitting at all dispatch sites."
+    "Per-edge assignment, keyed by time-space graph codes `(u_tsg_code, v_tsg_code)`.
+    Values are `SingleAssignment{C}` for single-mode edges and `MultiAssignment{C}` for multi-modal
+    edges."
     assignments::Dict{Tuple{Int,Int},Union{SingleAssignment{C},MultiAssignment{C}}}
 end
 
 function Base.show(io::IO, sol::Solution)
     nb_trucks = sum(_bin_count(a) for a in values(sol.assignments); init=0)
-    return print(io, "Solution(num_trucks=$(nb_trucks), assignments=$(sol.assignments))")
+    return print(io, "Solution(num_trucks=$(nb_trucks), cost=$(cost(sol)))")
 end
 
-_bin_count(a::SingleAssignment) = length(a.bins)
-_bin_count(a::MultiAssignment) = sum(length(slot.bins) for slot in a.per_mode; init=0)
-
 """
-    Solution(instance::Instance)
+$TYPEDSIGNATURES
 
 Initialize an empty solution for the given instance.
 """
@@ -46,7 +46,7 @@ Feasibility requires:
 3. Every path must start at the bundle's designated entry node (`origin_codes`).
 4. Every path must end at the bundle's designated exit node (`destination_codes`).
 """
-function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
+function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol=1e-8)
     (; travel_time_graph, time_space_graph) = instance
     for (bundle_idx, path) in enumerate(sol.bundle_paths)
         if isempty(path)
@@ -155,12 +155,12 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false)
         end
     end
 
-    # Capacity checks ------------------------------------------------------
+    # Capacity checks
     # 1) For bin-packing arcs, ensure no bin exceeds its capacity (remaining
     #    capacity < 0 within tolerance means total > max).
     for (edge, assignment) in sol.assignments
         for b in bins_of(assignment)
-            if b.remaining_capacity < -1e-8
+            if b.remaining_capacity < -tol
                 verbose &&
                     @warn "Bin on edge $(edge) exceeds capacity by $(-b.remaining_capacity)"
                 return false
@@ -190,14 +190,17 @@ end
 """
 $TYPEDSIGNATURES
 
-Project a node code from the `TravelTimeGraph` to a node code in the `TimeSpaceGraph` for a specific order.
-The projection converts the graph-specific time `τ` (budget or elapsed) into absolute time `t` in the `TimeSpaceGraph`.
+Project a node code from the `TravelTimeGraph` to a node code in the `TimeSpaceGraph` for a
+specific order.
+The projection converts the graph-specific time `τ` (budget or elapsed) into absolute time `t` in
+the `TimeSpaceGraph`.
 
 # Time Projection Formulas
 - If `is_date_arrival = true`: `t = deadline - τ`
 - If `is_date_arrival = false`: `t = release + τ`
 
-Throws a `DomainError` if the resulting `t` is outside the instance time horizon `[1, time_horizon_length]`.
+Throws a `DomainError` if the resulting `t` is outside the instance time horizon
+`[1, time_horizon_length]`.
 """
 function project_to_time_space_graph(
     ttg_node_code::Int, order::Order{is_date_arrival}, instance::Instance
@@ -244,51 +247,17 @@ function project_to_time_space_graph(
     return tsg_code
 end
 
-"""
-$TYPEDSIGNATURES
-
-Project bundle paths to order paths on the Time Space Graph.
-Returns a Dict mapping Order to a Vector of TSG node codes (Int).
-"""
-function project_bundle_path_to_order_paths(sol::Solution, instance::Instance)
-    order_paths = Dict{Order,Vector{Int}}()
-
-    for (bundle_idx, path) in enumerate(sol.bundle_paths)
-        bundle = instance.bundles[bundle_idx]
-        for order in bundle.orders
-            tsg_path = [
-                project_to_time_space_graph(node_code, order, instance) for
-                node_code in path
-            ]
-            order_paths[order] = tsg_path
-        end
-    end
-    return order_paths
-end
-
-"""
-$TYPEDSIGNATURES
-
-Incrementally add a path (sequence of TTG node codes) for a bundle and update the solution.
-This updates `bundle_paths` and the per-edge entries in `assignments`.
-"""
-function _is_shortcut_arc(::NetworkArc)
-    return false
-end
-
+# Helper to check if an arc is a shortcut arc.
+_is_shortcut_arc(::NetworkArc) = false
+_is_shortcut_arc(arc::MultiModalArc) = false
 function _is_shortcut_arc(arc::NetworkArc{ShortcutArcCost,K}) where {K}
     return travel_time_steps(arc) == 0
 end
 
-_is_shortcut_arc(arc::MultiModalArc) = false
-
 """
 $TYPEDSIGNATURES
 
-Ensure `slot.commodities` is in descending order by `.size`, sorting in place
-if not already. Sets `slot.sorted = true`. After this returns, the LS hot path
-can skip the bin-packing internal sort by passing `presorted=true` to FFD/BFD
-helpers.
+Ensure `slot.commodities` is in descending order by `.size`, sorting in place if not already.
 """
 function _ensure_sorted!(slot::SingleAssignment)
     slot.sorted && return slot
@@ -302,28 +271,18 @@ $TYPEDSIGNATURES
 
 Append `new_commodities` into `slot.commodities` while preserving the
 descending-by-size invariant. `new_commodities` is assumed to already be in
-descending order (which is the `Order.commodities` invariant established at
-instance construction). When `slot.sorted` is true, this performs an in-place
-two-pointer merge in O(`|slot.commodities|` + `|new_commodities|`) and keeps
-`slot.sorted = true`. When the slot's order is not known (the fallback case
-hit by ad-hoc external constructors), we append and re-sort just like before.
-
-Hot path during LS — replaces the previous `append! + slot.sorted = false`
-pattern, which forced the next `_ensure_sorted!` call to re-sort the full
-pool. The instrumented LS profile showed that re-sort accounting for ~15% of
-LS time at `packing=:frozen`.
+descending order.
 """
 function _merge_sorted_into_slot!(
     slot::SingleAssignment{C}, new_commodities::Vector{C}
 ) where {C<:LightCommodity}
     isempty(new_commodities) && return slot
+    # If the existing slot is unsorted, we can't guarantee the invariant, so just append.
     if !slot.sorted
-        # Fallback for slots not maintained under the invariant. Hot path
-        # never enters this branch because every slot starts with sorted=true
-        # (0-arg ctor) and we now keep it that way on every add.
         append!(slot.commodities, new_commodities)
         return slot
     end
+    # Else
     n = length(slot.commodities)
     k = length(new_commodities)
     if n == 0
@@ -359,46 +318,48 @@ function _merge_sorted_into_slot!(
 end
 
 function _update_single_assignment_cost!(
-    slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction
-) where {C}
+    slot::SingleAssignment, arc_cost::AbstractArcCostFunction
+)
     _ensure_sorted!(slot)
-    if arc_cost isa BinPackingArcCost
-        bins = compute_bin_assignments(arc_cost, slot.commodities; presorted=true)
-        slot.bins = bins
-        slot.cost = arc_cost.cost_per_bin * length(bins)
-    else
-        # When SumArcCost wraps a BinPackingArcCost term, refresh slot.bins so
-        # the cached bin count stays consistent with slot.commodities (read by
-        # incremental_cost! to skip the FFD-on-existing pass).
-        if arc_cost isa SumArcCost
-            bp = _find_bin_packing(arc_cost)
-            if bp !== nothing
-                slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
-            end
-        end
-        slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
+    slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
+    return nothing
+end
+
+# Cost update helpers for `SingleAssignment` slots.
+function _update_single_assignment_cost!(
+    slot::SingleAssignment, arc_cost::BinPackingArcCost
+)
+    _ensure_sorted!(slot)
+    slot.bins = compute_bin_assignments(arc_cost, slot.commodities; presorted=true)
+    slot.cost = arc_cost.cost_per_bin * length(slot.bins)
+    return nothing
+end
+
+function _update_single_assignment_cost!(slot::SingleAssignment, arc_cost::SumArcCost)
+    _ensure_sorted!(slot)
+    # When SumArcCost wraps a BinPackingArcCost term, refresh slot.bins so the
+    # cached bin count stays consistent with slot.commodities (read by
+    # incremental_cost! to skip the FFD-on-existing pass).
+    bp = _find_bin_packing(arc_cost)
+    if bp !== nothing
+        slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
     end
+    slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
     return nothing
 end
 
 """
 $TYPEDSIGNATURES
 
-Frozen-bin commit for a single-mode slot. `slot.commodities` has already had
-`new_comms` appended by the caller. Instead of re-packing the union (the
-`:ffd_union` path via `_update_single_assignment_cost!`), this adds only
-`new_comms` to the cached `slot.bins` via first-fit, keeping the existing bins
-frozen. The result mirrors `frozen_incremental_count!` exactly, so the committed
-bin count matches what the frozen incremental cost predicted.
-
-Dispatch by cost type:
-- `BinPackingArcCost`: grow `slot.bins` via `frozen_first_fit_add!` and set
-  `slot.cost = cost_per_bin * length(slot.bins)`.
-- `SumArcCost`: grow the bin-packing term's `slot.bins` via first-fit and set
-  `slot.cost = cost_per_bin * length(slot.bins)` plus `evaluate` of the
-  non-bin-packing terms (linear in volume, hence mode-independent).
-- any other (linear, shortcut): identical to `_update_single_assignment_cost!`.
+Frozen-bin commit for a single-mode slot.  Instead of re-packing, this adds only
+`new_comms` to the cached `slot.bins` via first-fit, keeping the existing bins frozen.
 """
+function _frozen_commit_single_assignment!(
+    slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction, ::Vector{C}
+) where {C}
+    return _update_single_assignment_cost!(slot, arc_cost)
+end
+
 function _frozen_commit_single_assignment!(
     slot::SingleAssignment{C}, arc_cost::BinPackingArcCost, new_comms::Vector{C}
 ) where {C}
@@ -407,27 +368,26 @@ function _frozen_commit_single_assignment!(
     return nothing
 end
 
+@inline function _frozen_term_commit!(
+    slot::SingleAssignment, term::BinPackingArcCost, new_comms::Vector
+)
+    frozen_first_fit_add!(slot.bins, Float64(term.bin_capacity), new_comms)
+    return term.cost_per_bin * length(slot.bins)
+end
+@inline _frozen_term_commit!(
+    slot::SingleAssignment, term::AbstractArcCostFunction, ::Vector
+) = evaluate(term, slot.commodities)
+
+@inline _sum_frozen_commit!(::SingleAssignment, ::Tuple{}, ::Vector) = 0.0
+@inline _sum_frozen_commit!(slot::SingleAssignment, terms::Tuple, new_comms::Vector) =
+    _frozen_term_commit!(slot, first(terms), new_comms) +
+    _sum_frozen_commit!(slot, Base.tail(terms), new_comms)
+
 function _frozen_commit_single_assignment!(
     slot::SingleAssignment{C}, arc_cost::SumArcCost, new_comms::Vector{C}
 ) where {C}
-    total = 0.0
-    for t in arc_cost.terms
-        if t isa BinPackingArcCost
-            frozen_first_fit_add!(slot.bins, Float64(t.bin_capacity), new_comms)
-            total += t.cost_per_bin * length(slot.bins)
-        else
-            total += evaluate(t, slot.commodities)
-        end
-    end
-    slot.cost = total
+    slot.cost = _sum_frozen_commit!(slot, arc_cost.terms, new_comms)
     return nothing
-end
-
-function _frozen_commit_single_assignment!(
-    slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction, ::Vector{C}
-) where {C}
-    # Non-bin-packing costs are identical under both packing modes.
-    return _update_single_assignment_cost!(slot, arc_cost)
 end
 
 """
@@ -438,9 +398,7 @@ each mode up to its remaining capacity before moving to the next.
 
 Returns `(partition, overflow)` where `partition[i]` is the subset of
 `new_comms` assigned to `arc.modes[i]`, and `overflow` is `true` if the combined
-remaining capacity across all modes is insufficient to absorb `new_comms`. When
-`overflow` is `true`, `partition` contains only the items that could legitimately
-be placed (the leftover is not stuffed onto any mode).
+remaining capacity across all modes is insufficient to absorb `new_comms`.
 """
 function _fill_then_spill_partition(
     arc::MultiModalArc, existing_per_mode::Vector{Vector{C}}, new_comms::Vector{C}
@@ -481,6 +439,11 @@ function _fill_then_spill_partition(
     return per_mode_new, overflow
 end
 
+"""
+$TYPEDSIGNATURES
+
+Add `new_commodities` to the edge assignment for `edge` following the `FillThenSpillMode` logic.
+"""
 function _fill_then_spill_assign!(
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
@@ -1053,15 +1016,6 @@ Compute the cost of the solution by summing individual arc costs.
 """
 function cost(sol::Solution)
     return sum(cost_of(a) for a in values(sol.assignments); init=0.0)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Compute the cost of the solution (legacy signature for compatibility).
-"""
-function cost(sol::Solution, instance::Instance)
-    return cost(sol)
 end
 
 """

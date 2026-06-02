@@ -113,3 +113,7 @@ $TYPEDSIGNATURES
 Total cost across all modes on the edge represented by `a`.
 """
 cost_of(a::MultiAssignment) = sum(cost_of, a.per_mode; init=0.0)
+
+# Internal helper for counting commodities on an edge assignment, used in cost calculations.
+_bin_count(a::SingleAssignment) = length(a.bins)
+_bin_count(a::MultiAssignment) = sum(length(slot.bins) for slot in a.per_mode; init=0)
