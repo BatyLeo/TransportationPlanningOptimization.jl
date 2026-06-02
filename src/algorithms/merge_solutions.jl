@@ -2,17 +2,25 @@
 $TYPEDSIGNATURES
 
 Stitch `sub_solution` (defined on `sub_instance`) back onto `full_solution`
-(defined on `full_instance`). For each bundle of `full_instance`:
+(defined on `full_instance`) and return a freshly constructed `Solution` on
+`full_instance`.
+
+For each bundle of `full_instance`:
 
 - If a matching bundle exists in `sub_instance` (matched by
   `(origin_id, destination_id)`), the path stored in `sub_solution` is
-  projected back into the full TTG via spatial labels and substituted into
-  `full_solution` via `remove_bundle_path!` + `add_bundle_path!`.
-- Otherwise, `full_solution`'s path is left untouched.
+  projected back into the full TTG via spatial labels and used as that
+  bundle's path in the merged solution.
+- Otherwise, `full_solution`'s path for that bundle is reused.
 
-Returns the modified `full_solution`. The caller is expected to have run
-`lower_bound_filtering!` (or similar) on `full_solution` first, so every
-bundle already has a path.
+The merged solution is then built in one batched pass via the
+`Solution(bundle_paths, instance)` constructor, so each arc's commodities
+are packed exactly once with their final commodity set. This avoids the
+quadratic-in-arc-load FFD-repack cost of the previous bundle-by-bundle
+`remove_bundle_path!` / `add_bundle_path!` loop.
+
+The caller is expected to have run `lower_bound_filtering!` (or similar) on
+`full_solution` first, so every bundle of `full_instance` already has a path.
 
 Assumes the default `group_by` (no extra grouping). Two bundles in the same
 instance must therefore have distinct `(origin_id, destination_id)` pairs.
@@ -46,6 +54,7 @@ function merge_solutions(
         sub_idx_of_bundle[key] = i
     end
 
+    fused_paths = Vector{Vector{Int}}(undef, length(full_instance.bundles))
     seen_full_keys = Set{Tuple{String,String}}()
     for (full_i, bundle) in enumerate(full_instance.bundles)
         key = (bundle.origin_id, bundle.destination_id)
@@ -60,22 +69,19 @@ function merge_solutions(
             )
         end
         push!(seen_full_keys, key)
-        haskey(sub_idx_of_bundle, key) || continue
-        sub_i = sub_idx_of_bundle[key]
-        sub_path = sub_solution.bundle_paths[sub_i]
-        # Project sub-TTG codes back to full-TTG codes via spatial label
-        full_path = Int[
-            MetaGraphsNext.code_for(
-                full_ttg.graph, MetaGraphsNext.label_for(sub_ttg.graph, code)
-            ) for code in sub_path
-        ]
-        remove_bundle_path!(full_solution, full_instance, full_i)
-        # `remove_bundle_path!` re-packs the affected arcs with FFD-union, so the
-        # re-add stays on FFD-union to keep the merged solution self-consistent
-        # (frozen packing is order-dependent and would not match the re-pack).
-        add_bundle_path!(
-            full_solution, full_instance, full_i, full_path; packing=:ffd_union
-        )
+
+        fused_paths[full_i] = if haskey(sub_idx_of_bundle, key)
+            sub_path = sub_solution.bundle_paths[sub_idx_of_bundle[key]]
+            # Project sub-TTG codes back to full-TTG codes via spatial label
+            Int[
+                MetaGraphsNext.code_for(
+                    full_ttg.graph, MetaGraphsNext.label_for(sub_ttg.graph, code)
+                ) for code in sub_path
+            ]
+        else
+            full_solution.bundle_paths[full_i]
+        end
     end
-    return full_solution
+
+    return Solution(fused_paths, full_instance)
 end
