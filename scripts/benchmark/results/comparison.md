@@ -1,16 +1,17 @@
-# TPO vs STP full-pipeline comparison (with LS iter counts)
+# TPO vs STP full-pipeline comparison
 
-Generated: 2026-05-29T12:39:09.346
+Generated: 2026-06-02T12:49:46.604
 
-Ratios are TPO / STP (< 1 means TPO is cheaper / faster / does more).
+Ratios are TPO / STP (< 1 means TPO is cheaper / faster).
 
-| instance | n_bundles | tpo_build_s | stp_build_s | tpo_filter_s | stp_filter_s | tpo_init_cost | stp_init_cost | init_cost_ratio | tpo_init_s | stp_init_s | tpo_ls_cost | stp_ls_cost | ls_cost_ratio | tpo_ls_s | stp_ls_s | tpo_ls_iters | stp_ls_iters | tpo_ls_iter_per_s | stp_ls_iter_per_s | tpo_ls_saved | stp_ls_saved | tpo_init_feasible | stp_init_feasible | tpo_ls_feasible | stp_ls_feasible |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| small | 312 | 0.11 | 0.17 | 0.41 | 0.52 | 3.3028158e6 | 3.2528658e6 | 1.0154 | 1.1 | 1.14 | 3.2173008e6 | 3.212839e6 | 1.0014 | 10.01 | 10.06 | 1613 | 6341 | 161.2 | 630.5 | 120433.8 | 42203.6 | true | true | true | true |
-| medium | 632 | 0.4 | 0.51 | 2.13 | 1.97 | 1.16288637e7 | 1.14904797e7 | 1.012 | 5.15 | 4.53 | 1.14331567e7 | 1.13502689e7 | 1.0073 | 31.84 | 30.22 | 866 | 10294 | 27.2 | 340.7 | 254835.5 | 147846.6 | true | true | true | true |
-| large | 1165 | 1.13 | 1.2 | 3.34 | 1.87 | 2.58619736e7 | 2.59438485e7 | 0.9968 | 3.16 | 5.38 | 2.5153589e7 | 2.52069576e7 | 0.9979 | 60.13 | 60.25 | 8258 | 41746 | 137.3 | 692.9 | 930005.9 | 736218.3 | true | true | true | true |
+| instance | n_bundles | tpo_build_s | stp_build_s | tpo_filter_s | stp_filter_s | tpo_init_cost | stp_init_cost | init_cost_ratio | tpo_init_s | stp_init_s | tpo_ls_cost | stp_ls_cost | ls_cost_ratio | tpo_ls_s | stp_ls_s | tpo_init_feasible | stp_init_feasible | tpo_ls_feasible | stp_ls_feasible |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| small | 312 | 0.1 | 0.14 | 0.44 | 0.46 | 3.3059387e6 | 3.2528658e6 | 1.0163 | 1.51 | 1.05 | 3.2212438e6 | 3.2087222e6 | 1.0039 | 10.0 | 10.06 | true | true | true | true |
+| medium | 632 | 0.35 | 0.4 | 2.11 | 1.42 | 1.1635755e7 | 1.14904797e7 | 1.0126 | 5.48 | 3.89 | 1.1454869e7 | 1.13453326e7 | 1.0097 | 30.01 | 30.24 | true | true | true | true |
+| large | 1165 | 1.13 | 0.76 | 3.21 | 1.97 | 2.58672789e7 | 2.59438485e7 | 0.997 | 5.01 | 4.76 | 2.51614216e7 | 2.52068189e7 | 0.9982 | 60.0 | 60.2 | true | true | true | true |
+| extra_large | 2521 | 5.25 | 6.69 | 42.57 | 17.58 | 7.81994388e7 | 7.80533972e7 | 1.0019 | 48.9 | 65.95 | 7.76852795e7 | 7.73609283e7 | 1.0042 | 123.3 | 121.18 | true | true | true | true |
 
 ## Summary
 
-- Geometric-mean init-cost ratio (TPO/STP): 1.0080
-- Geometric-mean LS-cost ratio (TPO/STP): 1.0022
+- Geometric-mean init-cost ratio (TPO/STP): 1.0069
+- Geometric-mean LS-cost ratio (TPO/STP): 1.0040

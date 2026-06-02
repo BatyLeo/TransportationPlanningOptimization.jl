@@ -3,7 +3,7 @@ using TransportationPlanningOptimization
 includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
 using .Inbound
 
-instance_name = "extra_large"
+instance_name = "world"
 datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 # datadir = joinpath(@__DIR__, "..", "..", "test", "public")
 nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
@@ -24,3 +24,4 @@ local_search!(partial_solution, filtered_instance; time_limit=30);
 full_solution = merge_solutions(lb_solution, partial_solution, instance, filtered_instance);
 is_feasible(full_solution, instance; verbose=true)
 cost(full_solution)
+full_solution
