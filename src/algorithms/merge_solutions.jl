@@ -19,7 +19,7 @@ are packed exactly once with their final commodity set. This avoids the
 quadratic-in-arc-load FFD-repack cost of the previous bundle-by-bundle
 `remove_bundle_path!` / `add_bundle_path!` loop.
 
-The caller is expected to have run `lower_bound_filtering!` (or similar) on
+The caller is expected to have run `lower_bound_filtering` (or similar) on
 `full_solution` first, so every bundle of `full_instance` already has a path.
 
 Assumes the default `group_by` (no extra grouping). Two bundles in the same
