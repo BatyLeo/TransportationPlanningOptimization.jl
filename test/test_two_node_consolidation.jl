@@ -102,7 +102,7 @@ end
     @test issubset(Set(src_codes), Set(dst_codes))
 end
 
-@testset "two_node_common_incremental! feasibility on small" begin
+@testset "TPO.two_node_common_incremental! feasibility on small" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -124,13 +124,13 @@ end
     end
     @assert matched_src != 0 "no arc with >= 2 bundles found on small greedy solution"
 
-    saved = two_node_common_incremental!(sol, instance, matched_src, matched_dst)
+    saved = TPO.two_node_common_incremental!(sol, instance, matched_src, matched_dst)
     @test is_feasible(sol, instance; verbose=true)
     @test saved >= -1e-6
     @test isapprox(cost_before - cost(sol), saved; atol=1e-6)
 end
 
-@testset "two_node_common_incremental! with refine stays feasible" begin
+@testset "TPO.two_node_common_incremental! with refine stays feasible" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -151,7 +151,7 @@ end
     end
     @assert matched_src != 0
 
-    saved = two_node_common_incremental!(
+    saved = TPO.two_node_common_incremental!(
         sol, instance, matched_src, matched_dst; refine=true
     )
     @test is_feasible(sol, instance; verbose=true)
@@ -159,7 +159,7 @@ end
     @test cost(sol) <= cost_before + 1e-6
 end
 
-@testset "loop_two_nodes! smoke test on small" begin
+@testset "TPO.loop_two_nodes! smoke test on small" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -171,7 +171,7 @@ end
     c0 = cost(sol)
 
     rng = MersenneTwister(20260524)
-    saved = loop_two_nodes!(sol, instance; time_limit=10.0, refine=false, rng=rng)
+    saved = TPO.loop_two_nodes!(sol, instance; time_limit=10.0, refine=false, rng=rng)
 
     @test is_feasible(sol, instance; verbose=true)
     @test saved >= -1e-6

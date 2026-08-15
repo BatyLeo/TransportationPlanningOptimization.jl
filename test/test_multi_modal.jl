@@ -9,6 +9,8 @@ using Graphs
 using Dates
 using TransportationPlanningOptimization
 
+const TPO = TransportationPlanningOptimization
+
 # ── Shared fixtures ────────────────────────────────────────────────────────────
 
 const _TRUCK = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
@@ -140,7 +142,7 @@ end
     @test cost(sol) == 5.0
 
     assignment = only(values(sol.assignments))
-    @test assignment isa MultiAssignment
+    @test assignment isa TPO.MultiAssignment
     @test length(assignment.per_mode) == 2
     # Exactly one mode slot received the commodity
     @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 1
@@ -188,7 +190,7 @@ end
     @test cost(sol) == 20.0
 
     assignment = only(values(sol.assignments))
-    @test assignment isa MultiAssignment
+    @test assignment isa TPO.MultiAssignment
     # Only the expensive mode (modes[2]) carries commodities
     @test isempty(commodities_of(assignment.per_mode[1]))
     @test length(commodities_of(assignment.per_mode[2])) == 2
@@ -271,7 +273,7 @@ end
     @test cost(sol) == 15.0
 
     assignment = only(values(sol.assignments))
-    @test assignment isa MultiAssignment
+    @test assignment isa TPO.MultiAssignment
     @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 2
 end
 

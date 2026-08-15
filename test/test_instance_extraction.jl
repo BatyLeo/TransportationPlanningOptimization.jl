@@ -2,7 +2,9 @@ using Test
 using TransportationPlanningOptimization
 using Dates
 
-@testset "extract_filtered_instance shrinks bundle count" begin
+const TPO = TransportationPlanningOptimization
+
+@testset "TPO.extract_filtered_instance shrinks bundle count" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -11,7 +13,7 @@ using Dates
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     filt = lower_bound_filtering(instance)
-    sub = extract_filtered_instance(instance, filt)
+    sub = TPO.extract_filtered_instance(instance, filt)
 
     expected_kept = count(p -> length(p) > 2, filt.bundle_paths)
     @test bundle_count(sub) == expected_kept
@@ -27,7 +29,7 @@ using Dates
     end
 end
 
-@testset "extract_filtered_instance preserves graph consistency" begin
+@testset "TPO.extract_filtered_instance preserves graph consistency" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -36,7 +38,7 @@ end
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     filt = lower_bound_filtering(instance)
-    sub = extract_filtered_instance(instance, filt)
+    sub = TPO.extract_filtered_instance(instance, filt)
 
     # The sub-instance shares the same time horizon and step.
     @test sub.time_horizon_length == instance.time_horizon_length
@@ -51,7 +53,7 @@ end
     end
 end
 
-@testset "extract_filtered_instance with all single-hop bundles emits a warning" begin
+@testset "TPO.extract_filtered_instance with all single-hop bundles emits a warning" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -69,14 +71,14 @@ end
     ]
     fake_filt = Solution(direct_paths, instance)
 
-    @test_logs (:warn,) match_mode = :any extract_filtered_instance(instance, fake_filt)
-    sub = (@test_logs (:warn,) match_mode = :any extract_filtered_instance(
+    @test_logs (:warn,) match_mode = :any TPO.extract_filtered_instance(instance, fake_filt)
+    sub = (@test_logs (:warn,) match_mode = :any TPO.extract_filtered_instance(
         instance, fake_filt
     ))
     @test bundle_count(sub) == 0
 end
 
-@testset "merge_solutions produces a feasible full solution" begin
+@testset "TPO.merge_solutions produces a feasible full solution" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -85,10 +87,10 @@ end
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     filt = lower_bound_filtering(instance)
-    sub = extract_filtered_instance(instance, filt)
+    sub = TPO.extract_filtered_instance(instance, filt)
     sub_sol = greedy_heuristic(sub)
 
-    merged = merge_solutions(filt, sub_sol, instance, sub)
+    merged = TPO.merge_solutions(filt, sub_sol, instance, sub)
 
     @test is_feasible(merged, instance; verbose=true)
 end
@@ -105,9 +107,9 @@ end
     greedy_cost = cost(greedy_heuristic(instance))
 
     filt = lower_bound_filtering(instance)
-    sub = extract_filtered_instance(instance, filt)
+    sub = TPO.extract_filtered_instance(instance, filt)
     sub_sol = greedy_heuristic(sub)
-    merged = merge_solutions(filt, sub_sol, instance, sub)
+    merged = TPO.merge_solutions(filt, sub_sol, instance, sub)
 
     @test is_feasible(merged, instance)
     # The filter-greedy pipeline should not blow up cost relative to vanilla greedy.
@@ -116,8 +118,8 @@ end
     @test cost(merged) <= 1.5 * greedy_cost
 end
 
-@testset "merge_solutions errors on duplicate OD pairs" begin
-    # `merge_solutions` keys by `(origin_id, destination_id)` and assumes the
+@testset "TPO.merge_solutions errors on duplicate OD pairs" begin
+    # `TPO.merge_solutions` keys by `(origin_id, destination_id)` and assumes the
     # default `group_by`. If `Instance(...; group_by=f)` is used such that two
     # bundles share an OD pair, the merge cannot disambiguate. The function
     # detects this and throws `ArgumentError` rather than silently picking one.
@@ -127,7 +129,7 @@ end
     # `Instance(; ...)` constructor to bypass the natural construction path
     # (which would not produce a duplicate). The resulting `dup_instance` is
     # not semantically valid for solving, but is good enough to exercise the
-    # OD-uniqueness check in `merge_solutions`.
+    # OD-uniqueness check in `TPO.merge_solutions`.
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -156,8 +158,8 @@ end
     sub_sol = greedy_heuristic(instance)
 
     # Duplicate in sub_instance triggers the error.
-    @test_throws ArgumentError merge_solutions(sol, sub_sol, instance, dup_instance)
+    @test_throws ArgumentError TPO.merge_solutions(sol, sub_sol, instance, dup_instance)
 
     # Duplicate in full_instance triggers the error too.
-    @test_throws ArgumentError merge_solutions(sol, sub_sol, dup_instance, instance)
+    @test_throws ArgumentError TPO.merge_solutions(sol, sub_sol, dup_instance, instance)
 end

@@ -2,7 +2,9 @@ using Test
 using TransportationPlanningOptimization
 using Dates
 
-@testset "remove_bundle_path! on tiny instance" begin
+const TPO = TransportationPlanningOptimization
+
+@testset "TPO.remove_bundle_path! on tiny instance" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -16,14 +18,14 @@ using Dates
     @test !isempty(sol.bundle_paths[1])
     saved_path = copy(sol.bundle_paths[1])
 
-    remove_bundle_path!(sol, instance, 1)
+    TPO.remove_bundle_path!(sol, instance, 1)
     @test isempty(sol.bundle_paths[1])
 
-    add_bundle_path!(sol, instance, 1, saved_path)
+    TPO.add_bundle_path!(sol, instance, 1, saved_path)
     @test sol.bundle_paths[1] == saved_path
 end
 
-@testset "remove_bundle_path! preserves cost after add-remove-add cycle" begin
+@testset "TPO.remove_bundle_path! preserves cost after add-remove-add cycle" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -32,7 +34,7 @@ end
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     # The round-trip cost-preservation invariant holds only under
-    # order-independent packing: `remove_bundle_path!` always re-packs the
+    # order-independent packing: `TPO.remove_bundle_path!` always re-packs the
     # affected arcs with FFD-union, so re-adding the same commodities must use
     # the same FFD-union semantics to recover the original cost. The production
     # default (`:frozen`) is order-dependent (it grows cached bins in insertion
@@ -44,18 +46,18 @@ end
     saved_paths = [copy(p) for p in sol.bundle_paths]
 
     for i in eachindex(saved_paths)
-        remove_bundle_path!(sol, instance, i)
+        TPO.remove_bundle_path!(sol, instance, i)
     end
     @test all(isempty, sol.bundle_paths)
     @test isapprox(cost(sol), 0.0; atol=1e-6)
 
     for i in eachindex(saved_paths)
-        add_bundle_path!(sol, instance, i, saved_paths[i]; packing=:ffd_union)
+        TPO.add_bundle_path!(sol, instance, i, saved_paths[i]; packing=:ffd_union)
     end
     @test isapprox(cost(sol), c_before; atol=1e-6)
 end
 
-@testset "remove_bundle_path! on MultiModalArc add-remove-add cycle" begin
+@testset "TPO.remove_bundle_path! on MultiModalArc add-remove-add cycle" begin
     # Two parallel modes with the same transit time collapse to a single
     # MultiModalArc edge in the TSG, exercising the MultiAssignment dispatch
     # of _remove_commodities_from_assignment!.
@@ -97,16 +99,16 @@ end
     saved_path = copy(sol.bundle_paths[1])
     @test !isempty(saved_path)
 
-    remove_bundle_path!(sol, instance, 1)
+    TPO.remove_bundle_path!(sol, instance, 1)
     @test isempty(sol.bundle_paths[1])
     @test isapprox(cost(sol), 0.0; atol=1e-6)
 
-    add_bundle_path!(sol, instance, 1, saved_path; mode_selector=FillThenSpillMode())
+    TPO.add_bundle_path!(sol, instance, 1, saved_path; mode_selector=FillThenSpillMode())
     @test sol.bundle_paths[1] == saved_path
     @test isapprox(cost(sol), c_before; atol=1e-6)
 end
 
-@testset "double remove_bundle_path! is a no-op" begin
+@testset "double TPO.remove_bundle_path! is a no-op" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -117,9 +119,9 @@ end
     sol = greedy_heuristic(instance)
     c_before = cost(sol)
 
-    remove_bundle_path!(sol, instance, 1)
+    TPO.remove_bundle_path!(sol, instance, 1)
     cost_once = cost(sol)
-    remove_bundle_path!(sol, instance, 1)
+    TPO.remove_bundle_path!(sol, instance, 1)
     cost_twice = cost(sol)
 
     @test isapprox(cost_once, cost_twice; atol=1e-6)
@@ -137,11 +139,11 @@ end
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
 
-    remove_bundle_path!(sol, instance, 1)
+    TPO.remove_bundle_path!(sol, instance, 1)
     @test !is_feasible(sol, instance; verbose=false)
 end
 
-@testset "add_bundle_path! and remove_bundle_path! return cost deltas" begin
+@testset "TPO.add_bundle_path! and TPO.remove_bundle_path! return cost deltas" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -153,12 +155,12 @@ end
     c0 = cost(sol)
     saved_path = copy(sol.bundle_paths[1])
 
-    removed_delta = remove_bundle_path!(sol, instance, 1)
+    removed_delta = TPO.remove_bundle_path!(sol, instance, 1)
     c1 = cost(sol)
     @test isapprox(removed_delta, c1 - c0; atol=1e-6)
     @test removed_delta <= 1e-9  # non-positive (allow tiny FP slack)
 
-    added_delta = add_bundle_path!(sol, instance, 1, saved_path)
+    added_delta = TPO.add_bundle_path!(sol, instance, 1, saved_path)
     c2 = cost(sol)
     @test isapprox(added_delta, c2 - c1; atol=1e-6)
     @test added_delta >= -1e-9

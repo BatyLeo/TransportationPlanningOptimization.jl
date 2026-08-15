@@ -68,7 +68,6 @@ println("Total cost: ", cost(solution))
 Pages = [
     "getting_started.md",
     "tutorials/basic_example.md",
-    "tutorials/csv_example.md",
     "guides/cost_functions.md",
     "guides/forbidden_constraints.md",
     "api.md",

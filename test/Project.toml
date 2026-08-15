@@ -10,13 +10,11 @@ JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 MetaGraphsNext = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-ShipperTransportationPlanning = "3c6a3ad8-7161-46d3-acc7-0d276dae7e7d"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 
 [sources]
-ShipperTransportationPlanning = {url = "https://github.com/mathbri/ShipperTransportationPlanning.jl.git"}
 TransportationPlanningOptimization = {path = ".."}
 
 [compat]

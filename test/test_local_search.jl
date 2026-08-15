@@ -3,7 +3,9 @@ using TransportationPlanningOptimization
 using Dates
 using Random
 
-@testset "bin_packing_improvement! does not increase cost" begin
+const TPO = TransportationPlanningOptimization
+
+@testset "TPO.bin_packing_improvement! does not increase cost" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -14,7 +16,7 @@ using Random
     sol = greedy_heuristic(instance)
     c0 = cost(sol)
 
-    saved = bin_packing_improvement!(sol, instance)
+    saved = TPO.bin_packing_improvement!(sol, instance)
 
     @test is_feasible(sol, instance)
     @test cost(sol) <= c0 + 1e-6
@@ -22,7 +24,7 @@ using Random
     @test isapprox(c0 - cost(sol), saved; atol=1e-6)
 end
 
-@testset "bundle_reinsertion_improvement! does not increase cost" begin
+@testset "TPO.bundle_reinsertion_improvement! does not increase cost" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -33,7 +35,7 @@ end
     sol = greedy_heuristic(instance)
     c0 = cost(sol)
 
-    saved = bundle_reinsertion_improvement!(sol, instance)
+    saved = TPO.bundle_reinsertion_improvement!(sol, instance)
 
     @test is_feasible(sol, instance)
     @test cost(sol) <= c0 + 1e-6
@@ -41,7 +43,7 @@ end
     @test isapprox(c0 - cost(sol), saved; atol=1e-6)
 end
 
-@testset "bundle_reinsertion_improvement! saved matches cost(sol) delta for small" begin
+@testset "TPO.bundle_reinsertion_improvement! saved matches cost(sol) delta for small" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -51,7 +53,7 @@ end
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     sol = greedy_heuristic(instance)
     c0 = cost(sol)
-    saved = bundle_reinsertion_improvement!(sol, instance)
+    saved = TPO.bundle_reinsertion_improvement!(sol, instance)
     @test isapprox(c0 - cost(sol), saved; atol=1e-3)
     @test saved > 0.0  # on small, reinsertion is expected to improve (~84k from earlier benchmark)
 end
@@ -75,7 +77,7 @@ end
     @test res.n_iter >= 1
 end
 
-@testset "tentative_best_fit_count parity with compute_bin_assignments_bfd" begin
+@testset "TPO.tentative_best_fit_count parity with compute_bin_assignments_bfd" begin
     using Random
     rng = MersenneTwister(20260522)
     arc_f = BinPackingArcCost(10.0, 100)
@@ -90,7 +92,7 @@ end
                 info=nothing,
             ) for _ in 1:n
         ]
-        @test tentative_best_fit_count(arc_f, items) == length(
+        @test TPO.tentative_best_fit_count(arc_f, items) == length(
             TransportationPlanningOptimization.compute_bin_assignments_bfd(arc_f, items)
         )
     end
@@ -108,14 +110,14 @@ end
         for s in sizes
     ]
 
-    ffd = tentative_bin_count(arc_f, items)
-    bfd = tentative_best_fit_count(arc_f, items)
+    ffd = TPO.tentative_bin_count(arc_f, items)
+    bfd = TPO.tentative_best_fit_count(arc_f, items)
     @test bfd < ffd  # sanity: this input is indeed divergent
 
     # Pre-install the FFD packing as the current state, then call _repack_assignment!
     # directly. _repack_assignment! only reads `arc.cost`, so a minimal NetworkArc is enough.
     fake_bins = TransportationPlanningOptimization.compute_bin_assignments(arc_f, items)
-    slot = SingleAssignment{C}(items, fake_bins, arc_f.cost_per_bin * length(fake_bins))
+    slot = TPO.SingleAssignment{C}(items, fake_bins, arc_f.cost_per_bin * length(fake_bins))
     net_arc = NetworkArc(; travel_time_steps=1, cost=arc_f)
 
     saved = TransportationPlanningOptimization._repack_assignment!(slot, net_arc)
@@ -133,7 +135,7 @@ end
         for s in [60, 50, 40, 30, 20]
     ]
     bins = TransportationPlanningOptimization.compute_bin_assignments(arc_f, items)
-    slot = SingleAssignment{C}(items, bins, arc_f.cost_per_bin * length(bins))
+    slot = TPO.SingleAssignment{C}(items, bins, arc_f.cost_per_bin * length(bins))
     bins_id = objectid(slot.bins)
     net_arc = NetworkArc(; travel_time_steps=1, cost=arc_f)
 
@@ -142,7 +144,7 @@ end
     @test objectid(slot.bins) == bins_id  # gate: bins object not replaced
 end
 
-@testset "bundle_reinsertion_improvement! cost_threshold filter" begin
+@testset "TPO.bundle_reinsertion_improvement! cost_threshold filter" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "small_nodes.csv"),
@@ -152,11 +154,11 @@ end
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
     sol_no_filter = greedy_heuristic(instance)
-    saved_no_filter = bundle_reinsertion_improvement!(sol_no_filter, instance)
+    saved_no_filter = TPO.bundle_reinsertion_improvement!(sol_no_filter, instance)
 
     sol_filtered = greedy_heuristic(instance)
     huge_threshold = 1e12  # filter everything
-    saved_filtered = bundle_reinsertion_improvement!(
+    saved_filtered = TPO.bundle_reinsertion_improvement!(
         sol_filtered, instance; cost_threshold=huge_threshold
     )
     @test saved_filtered == 0.0  # nothing should pass the filter
@@ -165,7 +167,7 @@ end
     # A modest threshold should let SOME but not all bundles through
     sol_modest = greedy_heuristic(instance)
     modest_threshold = 0.5 * saved_no_filter  # roughly half of total improvement
-    saved_modest = bundle_reinsertion_improvement!(
+    saved_modest = TPO.bundle_reinsertion_improvement!(
         sol_modest, instance; cost_threshold=modest_threshold
     )
     @test 0 <= saved_modest <= saved_no_filter + 1e-6
@@ -229,7 +231,7 @@ end
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
     sol_solo = greedy_heuristic(instance)
-    bundle_reinsertion_improvement!(sol_solo, instance)
+    TPO.bundle_reinsertion_improvement!(sol_solo, instance)
     cost_solo = cost(sol_solo)
 
     sol_ls = greedy_heuristic(instance)

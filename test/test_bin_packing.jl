@@ -2,6 +2,8 @@ using Test
 using Dates
 using TransportationPlanningOptimization
 
+const TPO = TransportationPlanningOptimization
+
 isdefined(Main, :Inbound) || include("Inbound.jl")
 using .Inbound
 
@@ -70,8 +72,8 @@ end
     for i in 1:(length(tsg_path) - 1)
         edge = (tsg_path[i], tsg_path[i + 1])
         C = eltype(order.commodities)
-        sol.assignments[edge] = SingleAssignment{C}(
-            collect(order.commodities), [Bin{C}(C[], -59.02)], 0.0
+        sol.assignments[edge] = TPO.SingleAssignment{C}(
+            collect(order.commodities), [TPO.Bin{C}(C[], -59.02)], 0.0
         )
     end
     @test !is_feasible(sol, instance; verbose=false)

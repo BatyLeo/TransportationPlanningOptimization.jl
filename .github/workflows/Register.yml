@@ -8,8 +8,6 @@ on:
 jobs:
   register:
     runs-on: ubuntu-latest
-    permissions:
-        contents: write
     steps:
       - uses: julia-actions/RegisterAction@latest
         with:

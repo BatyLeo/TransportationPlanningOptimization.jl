@@ -77,7 +77,4 @@ using .Inbound
             include("test_inbound_extensions.jl")
         end
     end
-    @testset "Cross-package comparison vs ShipperTransportationPlanning" begin
-        include("test_compare_to_shipper.jl")
-    end
 end

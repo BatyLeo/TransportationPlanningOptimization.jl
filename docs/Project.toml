@@ -5,3 +5,9 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
+
+[compat]
+CSV = "0.10"
+DataFrames = "1"
+Documenter = "1"
+Literate = "2"

@@ -50,36 +50,30 @@ include("algorithms/local_search.jl")
 include("algorithms/two_node_consolidation.jl")
 include("algorithms/solve.jl")
 
-export LightCommodity
-export Instance, Bundle, Order, Commodity
-export bundle_count, order_count, commodity_count, total_size, max_pack_size
-export write_solution_csv, read_solution_csv
+# Types
+export LightCommodity, Commodity, Order, Bundle, Instance
 export NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
 export AbstractNodeCostFunction, NoNodeCost
-export NetworkGraph
-
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost, SumArcCost
-export Bin, tentative_bin_count, tentative_best_fit_count, compute_bin_assignments_bfd
-export collect_arcs
+export NetworkGraph, TimeSpaceGraph, TravelTimeGraph
+export Solution
+export AbstractModeSelector, CheapestMode, FillThenSpillMode
 
-export evaluate
-
-export TimeSpaceGraph, TravelTimeGraph
-
+# Instance queries
+export bundle_count, order_count, commodity_count, total_size, max_pack_size
 export time_horizon
 
-export Solution, is_feasible, cost, cost_with_nodes, add_bundle_path!, remove_bundle_path!
-export AbstractArcAssignment, SingleAssignment, MultiAssignment
+# Cost function interface
+export evaluate
+
+# Solution interface
+export is_feasible, cost, cost_with_nodes
 export commodities_of, bins_of, cost_of
-export AbstractModeSelector, CheapestMode, FillThenSpillMode
-export greedy_heuristic, lower_bound, lower_bound!
-export lower_bound_filtering, lower_bound_filtering!
-export mix_greedy_and_lower_bound, choose_best_feasible
-export solve_filtered
-export extract_filtered_instance
-export merge_solutions
-export bin_packing_improvement!, bundle_reinsertion_improvement!, local_search!
-export two_node_common_incremental!, loop_two_nodes!
+export write_solution_csv, read_solution_csv
+
+# Algorithms
+export greedy_heuristic, lower_bound, lower_bound_filtering
+export mix_greedy_and_lower_bound, local_search!, solve_filtered
 
 """
     gurobi_optimizer()

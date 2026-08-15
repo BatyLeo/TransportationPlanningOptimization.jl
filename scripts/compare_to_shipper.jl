@@ -8,9 +8,7 @@ using Graphs: nv, ne
 using MetaGraphsNext: MetaGraphsNext, label_for, labels, code_for
 using SparseArrays: SparseArrays
 
-# Already in Main from runtests.jl, but be defensive in case the file is loaded
-# standalone via include from the REPL.
-isdefined(Main, :Inbound) || include("Inbound.jl")
+include(joinpath(@__DIR__, "..", "test", "Inbound.jl"))
 using .Inbound: parse_inbound_instance
 
 """
@@ -39,7 +37,7 @@ Known limitations:
 """
 
 const COMPARISON_INSTANCES = ["tiny", "small"]
-const DATA_DIR = joinpath(@__DIR__, "public")
+const DATA_DIR = joinpath(@__DIR__, "..", "test", "public")
 
 "Ratio between STP commodity sizes and TPO raw sizes (STP's `VOLUME_FACTOR`)."
 const STP_VOLUME_FACTOR = 100
