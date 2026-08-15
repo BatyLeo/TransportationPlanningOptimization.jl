@@ -22,7 +22,9 @@ function run_tpo_no_ls(name::String)
     com_file = joinpath(DATA_DIR, "$(name)_commodities.csv")
     local instance
     build_time = @elapsed begin
-        (; nodes, arcs, commodities) = parse_inbound_instance(nodes_file, legs_file, com_file)
+        (; nodes, arcs, commodities) = parse_inbound_instance(
+            nodes_file, legs_file, com_file
+        )
         instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     end
     local filtering_sol, sub
@@ -34,7 +36,7 @@ function run_tpo_no_ls(name::String)
     init_time = @elapsed begin
         candidates = TPO.mix_greedy_and_lower_bound(sub)
         chosen = TPO.choose_best_feasible(
-            [candidates.mixed, candidates.greedy, candidates.lower_bound], sub,
+            [candidates.mixed, candidates.greedy, candidates.lower_bound], sub
         )
     end
     init_full = TPO.merge_solutions(filtering_sol, chosen, instance, sub)
@@ -42,7 +44,11 @@ function run_tpo_no_ls(name::String)
     init_feasible = TPO.is_feasible(init_full, instance)
     return (;
         n_bundles=length(instance.bundles),
-        build_time, filter_time, init_time, init_cost, init_feasible,
+        build_time,
+        filter_time,
+        init_time,
+        init_cost,
+        init_feasible,
     )
 end
 
@@ -72,7 +78,11 @@ function run_stp_no_ls(name::String)
     init_feasible = STP.is_feasible(instance, init_full)
     return (;
         n_bundles=length(instance.bundles),
-        build_time, filter_time, init_time, init_cost, init_feasible,
+        build_time,
+        filter_time,
+        init_time,
+        init_cost,
+        init_feasible,
     )
 end
 
@@ -92,13 +102,23 @@ for name in INSTANCES
     tpo = run_tpo_no_ls(name)
     @printf(
         "TPO  bundles=%d  build=%.2fs  filter=%.2fs  init=%.2fs  cost=%.6e  feasible=%s\n",
-        tpo.n_bundles, tpo.build_time, tpo.filter_time, tpo.init_time, tpo.init_cost, tpo.init_feasible,
+        tpo.n_bundles,
+        tpo.build_time,
+        tpo.filter_time,
+        tpo.init_time,
+        tpo.init_cost,
+        tpo.init_feasible,
     )
     flush(stdout)
     stp = run_stp_no_ls(name)
     @printf(
         "STP  bundles=%d  build=%.2fs  filter=%.2fs  init=%.2fs  cost=%.6e  feasible=%s\n",
-        stp.n_bundles, stp.build_time, stp.filter_time, stp.init_time, stp.init_cost, stp.init_feasible,
+        stp.n_bundles,
+        stp.build_time,
+        stp.filter_time,
+        stp.init_time,
+        stp.init_cost,
+        stp.init_feasible,
     )
     flush(stdout)
     cost_ratio = tpo.init_cost / stp.init_cost
@@ -117,6 +137,7 @@ for name in INSTANCES
         tpo_init_feasible=tpo.init_feasible,
         stp_init_feasible=stp.init_feasible,
     ))
-    @printf("[%s] cost ratio TPO/STP = %.4f\n", name, cost_ratio); flush(stdout)
+    @printf("[%s] cost ratio TPO/STP = %.4f\n", name, cost_ratio)
+    flush(stdout)
 end
 println("\nDone, rows in $OUT_CSV")
