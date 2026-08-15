@@ -7,7 +7,7 @@ PkgBenchmark = "32113eaa-f34f-5b0d-bd6c-c81e245fc73d"
 TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 
 [sources]
-TransportationPlanningOptimization = {path = ".."}
+TransportationPlanningOptimization = {path = "/Users/taleboy/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl"}
 
 [compat]
 BenchmarkTools = "1"
