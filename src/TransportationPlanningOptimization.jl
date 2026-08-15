@@ -25,8 +25,8 @@ include("instance/graphs/arcs/arc_costs/bin_packing/bin.jl")
 include("instance/graphs/arcs/arc_costs/sum_arc_cost.jl")
 include("instance/graphs/arcs/network_arc.jl")
 
-include("instance/parsing/commodity.jl")
-include("instance/parsing/arc.jl")
+include("instance/input/commodity.jl")
+include("instance/input/arc.jl")
 
 include("instance/graphs/network_graph.jl")
 include("instance/graphs/time_space_graph.jl")
