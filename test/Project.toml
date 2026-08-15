@@ -18,9 +18,8 @@ TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 TransportationPlanningOptimization = {path = ".."}
 
 [compat]
-Aqua = "0.8.14"
-CSV = "0.10.15"
-Dates = "1"
+Aqua = "0.8"
+CSV = "0.10"
+JET = "0.12"
 JuliaFormatter = "1"
 ProgressMeter = "1"
-Test = "1"
