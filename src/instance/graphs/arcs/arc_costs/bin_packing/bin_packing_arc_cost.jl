@@ -25,12 +25,3 @@ function evaluate(
 )
     return arc_f.cost_per_bin * tentative_bin_count(arc_f, commodities; presorted)
 end
-
-# algebraic data types
-# multi criteria
-struct VectorPackingArcCost <: AbstractArcCostFunction end
-
-# grid: discretized km, m3, kg -> cost per m3
-struct GridLinearArcCost <: AbstractArcCostFunction end
-
-# cout arc de douane (qui passe par un point de douane)

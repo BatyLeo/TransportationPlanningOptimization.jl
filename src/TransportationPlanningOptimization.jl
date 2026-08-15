@@ -37,7 +37,10 @@ include("instance/instance.jl")
 
 include("solution/arc_assignment.jl")
 include("algorithms/mode_selector.jl")
+include("solution/assignment_operations.jl")
 include("solution/solution.jl")
+include("solution/path_operations.jl")
+include("solution/feasibility.jl")
 include("solution/parsing.jl")
 
 include("algorithms/cost_matrix_update.jl")

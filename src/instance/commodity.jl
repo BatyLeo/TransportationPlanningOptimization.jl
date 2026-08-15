@@ -3,7 +3,7 @@ $TYPEDEF
 
 A `LightCommodity` represents a commodity in the transportation planning problem.
 A commodity is defined by its origin and destination nodes, its size, and any additional
-problem-specific information. This data structure does include date information,
+problem-specific information. This data structure does not include date information,
 as it is stored in [`Order`](@ref) instead.
 
 # Fields

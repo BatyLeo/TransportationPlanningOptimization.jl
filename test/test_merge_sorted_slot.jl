@@ -1,12 +1,3 @@
-using Test
-using TransportationPlanningOptimization
-using Dates
-const TPO = TransportationPlanningOptimization
-
-function _mk(size::Float64, sup::String="S", cust::String="C")
-    return TPO.LightCommodity(; origin_id=sup, destination_id=cust, size=size, info=nothing)
-end
-
 const LC = typeof(_mk(1.0))
 
 function _slot(comms::Vector{LC}; sorted::Bool=true)

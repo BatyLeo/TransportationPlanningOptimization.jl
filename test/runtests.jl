@@ -76,5 +76,11 @@ using .Inbound
         @testset "Inbound extensions" begin
             include("test_inbound_extensions.jl")
         end
+        @testset "Drain first matches" begin
+            include("test_drain_first_matches.jl")
+        end
+        @testset "Merge sorted slot" begin
+            include("test_merge_sorted_slot.jl")
+        end
     end
 end

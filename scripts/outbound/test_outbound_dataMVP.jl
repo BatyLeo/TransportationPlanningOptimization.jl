@@ -2,9 +2,9 @@ using Test
 using TransportationPlanningOptimization
 const TPO = TransportationPlanningOptimization
 
-include(joinpath(@__DIR__, "..", "scripts", "outbound", "Outbound.jl"))
+include(joinpath(@__DIR__, "Outbound.jl"))
 
-const DATAMVP_DIR = joinpath(@__DIR__, "..", "data", "outbound", "dataMVP")
+const DATAMVP_DIR = joinpath(@__DIR__, "..", "..", "data", "outbound", "dataMVP")
 
 @testset "Outbound dataMVP parser" begin
     parsed = Outbound.parse_dataMVP_instance(DATAMVP_DIR)
