@@ -9,6 +9,7 @@ using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey, code_for, label_for
 using ProgressMeter: @showprogress
 using SparseArrays: SparseArrays, SparseMatrixCSC, sparse
 
+include("constants.jl")
 include("utils.jl")
 
 include("instance/commodity.jl")

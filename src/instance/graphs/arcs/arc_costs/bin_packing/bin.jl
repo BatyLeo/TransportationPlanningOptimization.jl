@@ -77,7 +77,7 @@ precondition that the `new` run arrives pre-sorted descending.
 end
 
 # Throws `DomainError` if oversize
-@inline function _check_oversize(largest_size::Real, cap::Real; eps=1e-8)
+@inline function _check_oversize(largest_size::Real, cap::Real; eps=EPS)
     largest_size > cap + eps && throw(
         DomainError(
             largest_size, "Commodity size $(largest_size) exceeds bin capacity $(cap)"
@@ -89,23 +89,55 @@ end
 """
 $TYPEDSIGNATURES
 
+Return the index of the first bin in `remaining_capacities` that can fit an
+item of size `s`, or `0` if none can.
+"""
+@inline function _first_fit_index(remaining_capacities, s; eps=EPS)
+    @inbounds for i in eachindex(remaining_capacities)
+        remaining_capacities[i] >= s - eps && return i
+    end
+    return 0
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return the index of the best-fit bin in `remaining_capacities` for an item of
+size `s` (tightest fit), or `0` if none can accommodate it.
+"""
+@inline function _best_fit_index(
+    remaining_capacities::AbstractVector{T}, s; eps=EPS
+) where {T<:Real}
+    best_idx = 0
+    best_left = typemax(T)
+    @inbounds for i in eachindex(remaining_capacities)
+        after = remaining_capacities[i] - s
+        if after >= -eps && after < best_left
+            best_left = after
+            best_idx = i
+        end
+    end
+    return best_idx
+end
+
+"""
+$TYPEDSIGNATURES
+
 First-Fit-Decreasing placement loop. Walks `sizes_desc` (assumed sorted
 descending), placing each into the first slot of `caps` with room, otherwise
 opening a new slot with capacity `cap - s`. Mutates `caps` in place.
 """
 @inline function _ffd_place!(
-    remaining_capacities::Vector{T}, sizes_desc, cap::T; eps=1e-8
+    remaining_capacities::Vector{T}, sizes_desc, cap::T; eps=EPS
 ) where {T<:Real}
     @inbounds for s in sizes_desc
-        placed = false
-        for i in eachindex(remaining_capacities)
-            if remaining_capacities[i] >= s - eps
-                remaining_capacities[i] -= s
-                placed = true
-                break
-            end
+        idx = _first_fit_index(remaining_capacities, s; eps)
+        # If a bin was found, subtract the size from its remaining capacity.
+        if idx > 0
+            remaining_capacities[idx] -= s
+        else # else, create a new bin with remaining capacity `cap - s`.
+            push!(remaining_capacities, cap - s)
         end
-        placed || push!(remaining_capacities, cap - s)
     end
     return remaining_capacities
 end
@@ -118,19 +150,17 @@ reading `c.size` per element. Equivalent to `_ffd_place!(caps, (c.size for c in 
 `items` must be sorted descending by `.size`.
 """
 @inline function _ffd_place_commodities!(
-    remaining_capacities::Vector{Float64}, items::AbstractVector{C}, cap::Float64; eps=1e-8
+    remaining_capacities::Vector{Float64}, items::AbstractVector{C}, cap::Float64; eps=EPS
 ) where {C<:LightCommodity}
     @inbounds for c in items
         s = c.size
-        placed = false
-        for i in eachindex(remaining_capacities)
-            if remaining_capacities[i] >= s - eps
-                remaining_capacities[i] -= s
-                placed = true
-                break
-            end
+        idx = _first_fit_index(remaining_capacities, s; eps)
+        # If a bin was found, subtract the size from its remaining capacity.
+        if idx > 0
+            remaining_capacities[idx] -= s
+        else # else, create a new bin with remaining capacity `cap - s`.
+            push!(remaining_capacities, cap - s)
         end
-        placed || push!(remaining_capacities, cap - s)
     end
     return remaining_capacities
 end
@@ -148,7 +178,7 @@ commodity sizes into a separate buffer.
     a::AbstractVector{Float64},
     b::AbstractVector{C},
     cap::Float64;
-    eps=1e-8,
+    eps=EPS,
 ) where {C<:LightCommodity}
     i, j = 1, 1
     na, nb = length(a), length(b)
@@ -172,15 +202,13 @@ commodity sizes into a separate buffer.
                 vb
             end
         end
-        placed = false
-        for k in eachindex(remaining_capacities)
-            if remaining_capacities[k] >= s - eps
-                remaining_capacities[k] -= s
-                placed = true
-                break
-            end
+        idx = _first_fit_index(remaining_capacities, s; eps)
+        # If a bin was found, subtract the size from its remaining capacity.
+        if idx > 0
+            remaining_capacities[idx] -= s
+        else # else, create a new bin with remaining capacity `cap - s`.
+            push!(remaining_capacities, cap - s)
         end
-        placed || push!(remaining_capacities, cap - s)
     end
     return remaining_capacities
 end
@@ -198,7 +226,7 @@ the merged vector. Equivalent to `_ffd_place!(caps, merged, cap)` where
     a::AbstractVector{T},
     b::AbstractVector{T},
     cap::T;
-    eps=1e-8,
+    eps=EPS,
 ) where {T<:Real}
     i, j = 1, 1
     na, nb = length(a), length(b)
@@ -220,15 +248,13 @@ the merged vector. Equivalent to `_ffd_place!(caps, merged, cap)` where
             j += 1
             x
         end
-        placed = false
-        for k in eachindex(remaining_capacities)
-            if remaining_capacities[k] >= s - eps
-                remaining_capacities[k] -= s
-                placed = true
-                break
-            end
+        idx = _first_fit_index(remaining_capacities, s; eps)
+        # If a bin was found, subtract the size from its remaining capacity.
+        if idx > 0
+            remaining_capacities[idx] -= s
+        else # else, create a new bin with remaining capacity `cap - s`.
+            push!(remaining_capacities, cap - s)
         end
-        placed || push!(remaining_capacities, cap - s)
     end
     return remaining_capacities
 end
@@ -239,22 +265,15 @@ $TYPEDSIGNATURES
 Best-Fit-Decreasing placement loop. Mirror of `_ffd_place!` for BFD.
 """
 @inline function _bfd_place!(
-    remaining_capacities::Vector{T}, sizes_desc, cap::T; eps=1e-8
+    remaining_capacities::Vector{T}, sizes_desc, cap::T; eps=EPS
 ) where {T<:Real}
     @inbounds for s in sizes_desc
-        best_idx = 0
-        best_left = typemax(T)
-        for i in eachindex(remaining_capacities)
-            after = remaining_capacities[i] - s
-            if after >= -eps && after < best_left
-                best_left = after
-                best_idx = i
-            end
-        end
-        if best_idx == 0
+        idx = _best_fit_index(remaining_capacities, s; eps)
+        # If a bin was found, subtract the size from its remaining capacity.
+        if idx > 0
+            remaining_capacities[idx] -= s
+        else # else, create a new bin with remaining capacity `cap - s`.
             push!(remaining_capacities, cap - s)
-        else
-            remaining_capacities[best_idx] -= s
         end
     end
     return remaining_capacities
@@ -274,20 +293,17 @@ capacity `remaining_capacities[i]`).
     remaining_capacities::Vector{Float64},
     sorted_commodities,
     cap::Float64;
-    eps=1e-8,
+    eps=EPS,
 ) where {C<:LightCommodity}
     @inbounds for c in sorted_commodities
         s = c.size
-        placed = false
-        for i in eachindex(remaining_capacities)
-            if remaining_capacities[i] >= s - eps
-                push!(bin_contents[i], c)
-                remaining_capacities[i] -= s
-                placed = true
-                break
-            end
-        end
-        if !placed
+        idx = _first_fit_index(remaining_capacities, s; eps)
+        # If a bin was found, subtract the size from its remaining capacity,
+        # and add the commodity to that bin's contents.
+        if idx > 0
+            push!(bin_contents[idx], c)
+            remaining_capacities[idx] -= s
+        else # else, create a new bin with remaining capacity `cap - s` and add the commodity to it.
             push!(bin_contents, [c])
             push!(remaining_capacities, cap - s)
         end
@@ -305,25 +321,17 @@ Materializing Best-Fit-Decreasing placement. Mirror of `_ffd_assign!` for BFD.
     caps::Vector{Float64},
     sorted_commodities,
     cap::Float64;
-    eps=1e-8,
+    eps=EPS,
 ) where {C<:LightCommodity}
     @inbounds for c in sorted_commodities
         s = c.size
-        best_idx = 0
-        best_left = Inf
-        for i in eachindex(caps)
-            after = caps[i] - s
-            if after >= -eps && after < best_left
-                best_left = after
-                best_idx = i
-            end
-        end
-        if best_idx == 0
+        idx = _best_fit_index(caps, s; eps)
+        if idx > 0
+            push!(bin_contents[idx], c)
+            caps[idx] -= s
+        else
             push!(bin_contents, [c])
             push!(caps, cap - s)
-        else
-            push!(bin_contents[best_idx], c)
-            caps[best_idx] -= s
         end
     end
     return bin_contents
@@ -347,7 +355,7 @@ working size.
     allocates after that.
 """
 function ffd_count!(
-    buffer::BinPackingBuffer{T}, bin_capacity::T, sizes_desc; eps=1e-8
+    buffer::BinPackingBuffer{T}, bin_capacity::T, sizes_desc; eps=EPS
 ) where {T<:Real}
     empty!(buffer.remaining_capacities)
     _ffd_place!(buffer.remaining_capacities, sizes_desc, bin_capacity; eps)
@@ -401,18 +409,16 @@ function frozen_first_fit_add!(
     isempty(new) && return bins
     sorted_new = sort(new; by=c -> c.size, rev=true)
     _check_oversize(sorted_new[1].size, bin_capacity)
+    caps = [b.remaining_capacity for b in bins]
     for c in sorted_new
-        placed = false
-        @inbounds for i in eachindex(bins)
-            if bins[i].remaining_capacity >= c.size - 1e-8
-                push!(bins[i].commodities, c)
-                bins[i].remaining_capacity -= c.size
-                placed = true
-                break
-            end
-        end
-        if !placed
+        idx = _first_fit_index(caps, c.size)
+        if idx > 0
+            push!(bins[idx].commodities, c)
+            bins[idx].remaining_capacity -= c.size
+            caps[idx] -= c.size
+        else
             push!(bins, Bin([c], bin_capacity - c.size))
+            push!(caps, bin_capacity - c.size)
         end
     end
     return bins
