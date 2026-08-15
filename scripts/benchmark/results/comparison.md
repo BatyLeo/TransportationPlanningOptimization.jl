@@ -1,17 +1,38 @@
-# TPO vs STP full-pipeline comparison
+# TPO vs STP Comparison
 
-Generated: 2026-06-02T12:49:46.604
+Generated: 2026-08-15T16:57:46.720
 
-Ratios are TPO / STP (< 1 means TPO is cheaper / faster).
+Ratios are TPO / STP.
+< 1 means TPO is cheaper or faster.
 
-| instance | n_bundles | tpo_build_s | stp_build_s | tpo_filter_s | stp_filter_s | tpo_init_cost | stp_init_cost | init_cost_ratio | tpo_init_s | stp_init_s | tpo_ls_cost | stp_ls_cost | ls_cost_ratio | tpo_ls_s | stp_ls_s | tpo_init_feasible | stp_init_feasible | tpo_ls_feasible | stp_ls_feasible |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| small | 312 | 0.1 | 0.14 | 0.44 | 0.46 | 3.3059387e6 | 3.2528658e6 | 1.0163 | 1.51 | 1.05 | 3.2212438e6 | 3.2087222e6 | 1.0039 | 10.0 | 10.06 | true | true | true | true |
-| medium | 632 | 0.35 | 0.4 | 2.11 | 1.42 | 1.1635755e7 | 1.14904797e7 | 1.0126 | 5.48 | 3.89 | 1.1454869e7 | 1.13453326e7 | 1.0097 | 30.01 | 30.24 | true | true | true | true |
-| large | 1165 | 1.13 | 0.76 | 3.21 | 1.97 | 2.58672789e7 | 2.59438485e7 | 0.997 | 5.01 | 4.76 | 2.51614216e7 | 2.52068189e7 | 0.9982 | 60.0 | 60.2 | true | true | true | true |
-| extra_large | 2521 | 5.25 | 6.69 | 42.57 | 17.58 | 7.81994388e7 | 7.80533972e7 | 1.0019 | 48.9 | 65.95 | 7.76852795e7 | 7.73609283e7 | 1.0042 | 123.3 | 121.18 | true | true | true | true |
+## Cost Quality (TPO / STP ratio at each step)
 
-## Summary
+| Instance | Bundles | Greedy | LB | Mixed | Init | LS |
+|---|---|---|---|---|---|---|
+| small | 312 | 1.0163 | 1.0006 | 1.0009 | 1.0163 | 1.0013 |
+| medium | 632 | 1.0126 | 0.9999 | 1.0019 | 1.0126 | 1.0047 |
+| large | 1165 | 0.9970 | 0.9982 | 0.9989 | 0.9970 | 0.9979 |
+| extra_large | 2521 | 1.0019 | 0.9992 | 0.9999 | 1.0019 | 1.0058 |
 
-- Geometric-mean init-cost ratio (TPO/STP): 1.0069
-- Geometric-mean LS-cost ratio (TPO/STP): 1.0040
+Geometric-mean init-cost ratio: **1.0069**
+
+Geometric-mean LS-cost ratio: **1.0024**
+
+## Timing (seconds)
+
+| Instance | TPO build | STP build | TPO filter | STP filter | TPO init | STP init |
+|---|---|---|---|---|---|---|
+| small | 0.10 | 0.18 | 0.39 | 0.53 | 1.50 | 1.20 |
+| medium | 0.36 | 0.49 | 2.05 | 1.80 | 5.56 | 4.80 |
+| large | 1.04 | 0.92 | 3.37 | 2.18 | 3.88 | 5.26 |
+| extra_large | 6.39 | 7.02 | 53.74 | 21.61 | 51.65 | 85.32 |
+
+## Local Search Throughput
+
+| Instance | TPO iters | STP iters | TPO iter/s | STP iter/s | Ratio |
+|---|---|---|---|---|---|
+| small | 1280 | 7349 | 110.7 | 730.4 | 0.152 |
+| medium | 1334 | 10033 | 40.9 | 332.0 | 0.123 |
+| large | 6637 | 38918 | 107.7 | 646.2 | 0.167 |
+| extra_large | 1539 | 20516 | 12.3 | 169.7 | 0.072 |
+

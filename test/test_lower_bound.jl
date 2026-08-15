@@ -3,7 +3,7 @@ using TransportationPlanningOptimization
 using Dates
 
 @testset "lower_bound produces a feasible solution with non-empty paths" begin
-    # Note: `cost(lb_sol)` is the cost of the path set `lower_bound!` mutated as
+    # Note: `cost(lb_sol)` is the cost of the path set `lower_bound` mutated as
     # a byproduct of computing the LB cost matrix. The LB itself is the sum of
     # Dijkstra distances, not `cost(lb_sol)`. The path set is inserted in
     # `eachindex` order without size-decreasing reordering, so its post-
@@ -40,7 +40,7 @@ end
 end
 
 @testset "lower_bound error message format" begin
-    # The empty-path branch in `lower_bound!` / `lower_bound_filtering!` is hard
+    # The empty-path branch in `lower_bound` / `lower_bound_filtering` is hard
     # to provoke in practice: `Instance` construction already runs a BFS-based
     # feasibility check, and even with `check_bundle_feasibility=false` the
     # cost matrix only sets Inf on arcs in `bundle_arcs`, so Dijkstra can still
