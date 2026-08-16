@@ -1,5 +1,5 @@
 """
-    period_steps(p::Period, step::Period; roundup=floor)::Int
+$TYPEDSIGNATURES
 
 Compute how many complete `step` units fit into period `p`.
 

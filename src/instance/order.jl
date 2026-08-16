@@ -8,18 +8,18 @@ Commodities in an `Order` share the same:
 - Delivery date (interpreted as a deadline or release depending on `is_date_arrival` value)
 
 # Type Parameters
-- `is_date_arrival::Bool`: `true` for deadline-driven, `false` for release-driven.
+- `is_date_arrival::Bool`: `true` for deadline-driven, `false` for release-driven orders.
 - `I`: Additional problem-specific information.
 
 # Fields
 $TYPEDFIELDS
 """
 struct Order{is_date_arrival,I}
-    "list of commodities in the order, kept sorted by descending size"
+    "list of commodities in the order, **kept sorted by descending size**"
     commodities::Vector{LightCommodity{I}}
     "time step corresponding to the delivery arrival or departure date"
     time_step::Int
-    "maximum number of time steps for delivery among all commodities in the order"
+    "maximum number of time steps for delivery (among all commodities in the order)"
     max_transit_steps::Int
 
     function Order{is_date_arrival,I}(

@@ -6,15 +6,17 @@ node costs participate in path scoring exactly like arc costs, so they expose th
 `evaluate` / `incremental_cost` / `lower_bound_incremental_cost` interface.
 
 Concrete subtypes **must** implement:
-- `evaluate(c::T, commodities) -> Float64` — total node cost for `commodities`.
+- `evaluate(c::T, commodities) -> Float64`: total node cost for `commodities`.
 
-Concrete subtypes **may** overload (sensible defaults are provided in terms of `evaluate`):
-- `incremental_cost(c::T, existing, new) -> Float64` — marginal cost of adding `new` to a
-  node that already holds `existing`. Defaults to `evaluate(c, existing ∪ new) - evaluate(c, existing)`.
+Concrete subtypes **may** overload (defaults are provided):
+- `incremental_cost(c::T, existing, new) -> Float64`: marginal cost of adding `new` to a
+  node that already holds `existing`.
+  Defaults to `evaluate(c, existing ∪ new) - evaluate(c, existing)`.
   Overload it when a closed form is cheaper than two `evaluate` calls (and to avoid the
-  `vcat` allocation in the hot routing loop).
-- `lower_bound_incremental_cost(c::T, existing, new) -> Float64` — a relaxation of
-  `incremental_cost` used by the lower-bound / filtering pass. Defaults to `incremental_cost`.
+  `vcat` allocation).
+- `lower_bound_incremental_cost(c::T, existing, new) -> Float64`: a relaxation of
+  `incremental_cost` used by the lower-bound / filtering pass.
+  Defaults to `incremental_cost`.
   Overload it only when the lower bound differs from the true cost (it must under-estimate
   for the bound to stay valid).
 
@@ -25,9 +27,8 @@ abstract type AbstractNodeCostFunction end
 """
 $TYPEDSIGNATURES
 
-Default marginal node cost: evaluate the union and subtract the existing total. Any
-`AbstractNodeCostFunction` subtype inherits this from its `evaluate`; specialize for
-efficiency.
+Default marginal node cost: evaluate the union and subtract the existing total.
+It is recommended to specialize this method when possible, for efficiency reasons.
 """
 function incremental_cost(
     node_f::AbstractNodeCostFunction, existing::Vector{C}, new::Vector{C}
@@ -39,8 +40,8 @@ end
 $TYPEDSIGNATURES
 
 Lower-bound variant of [`incremental_cost`](@ref) for node costs. By default it forwards to
-`incremental_cost`, so any new subtype inherits a sane default. Specialize this for node
-costs whose lower bound differs from their actual cost.
+`incremental_cost`.
+Specialize this for node costs whose lower bound differs from their actual cost.
 """
 function lower_bound_incremental_cost(
     node_f::AbstractNodeCostFunction, existing::Vector{C}, new::Vector{C}
@@ -52,6 +53,7 @@ end
 $TYPEDEF
 
 Default zero-valued node cost.
+Use this node cost when there is no incurred cost at the considered node
 """
 struct NoNodeCost <: AbstractNodeCostFunction end
 

@@ -22,8 +22,8 @@ function _shortest_path_assign!(
         origin = ttg.origin_codes[i]     # origin node of bundle i in ttg
         dest = ttg.destination_codes[i]  # destination node of bundle i in ttg
         # Compute the shortest path between origin and dest
-        res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-        path = Graphs.enumerate_paths(res, dest)
+        parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+        path = trace_path(parents, origin, dest)
         # Throw an error if no path was found (i.e. there is no feasible path)
         if isempty(path)
             bundle = instance.bundles[i]

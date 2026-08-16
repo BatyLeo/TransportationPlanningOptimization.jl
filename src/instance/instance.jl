@@ -211,26 +211,16 @@ feasible paths after applying forbidden constraints
 When false, duplicate `(origin_id, destination_id)` arcs raise an `ArgumentError`.
 When true, duplicates are auto-promoted to a `MultiModalArc`.
 """
-function build_instance(
-    nodes::Vector{<:NetworkNode},
-    arcs::Vector{Tuple{String,String,NA}},
+function _expand_commodities(
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
-    time_step::Period;
-    group_by=_default_group_by,
-    wrap_time=false,
-    check_bundle_feasibility=true,
-    allow_multimodal::Bool=false,
-) where {is_date_arrival,ID,I,NA<:NetworkArc}
-    # Building the network graph (arcs are provided as (origin_id,destination_id,NetworkArc))
-    network_graph = NetworkGraph(nodes, arcs; allow_multimodal)
-
-    # Wrapping commodities into light commodities
-    # Pre-allocate with total quantity to avoid reallocations
+    time_step::Period,
+    group_by,
+    wrap_time::Bool,
+) where {is_date_arrival,ID,I}
     total_quantity = sum(c.quantity for c in commodities)
     full_commodities = LightCommodity{I}[]
     sizehint!(full_commodities, total_quantity)
 
-    # Key is (time_step_idx, origin_id, destination_id), value is (vector of LightCommodity, min_time_steps)
     first_key = (
         1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
     )
@@ -239,7 +229,6 @@ function build_instance(
     start_date = _compute_start_date(commodities, wrap_time)
 
     for commodity in commodities
-        # Create light commodity once, then push multiple times to avoid repeated property access
         light_commodity = LightCommodity(;
             origin_id=commodity.origin_id,
             destination_id=commodity.destination_id,
@@ -256,7 +245,6 @@ function build_instance(
         max_transit_steps = period_steps(
             commodity.max_delivery_time, time_step; roundup=floor
         )
-        # time_step_idx relative to the earliest arrival_date (discretized by time_step)
         time_step_idx =
             period_steps(
                 Dates.Date(commodity.date) - start_date, time_step; roundup=floor
@@ -268,14 +256,12 @@ function build_instance(
             group_by(commodity),
         )
 
-        # Reference the slice we just added
         to_append = view(
             full_commodities, light_commodities_start_idx:light_commodities_end_idx
         )
 
         if haskey(order_dict, key)
             commodities_list, min_steps = order_dict[key]
-            # Append by pushing indices (commodities_list is already part of full_commodities)
             append!(commodities_list, to_append)
             order_dict[key] = (commodities_list, min(min_steps, max_transit_steps))
         else
@@ -293,19 +279,25 @@ function build_instance(
         end
     end
 
-    # Build orders and bundles simultaneously in one pass
+    return order_dict, time_horizon_length, start_date
+end
+
+function _build_bundles(
+    order_dict,
+    commodities::Vector{Commodity{is_date_arrival,ID,I}},
+    group_by,
+    time_horizon_length::Int,
+) where {is_date_arrival,ID,I}
     first_group_key = (
         commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
     )
     bundle_dict = Dict{
         Tuple{String,String,eltype(first_group_key)},Vector{Order{is_date_arrival,I}}
     }()
-    # Track forbidden constraints per bundle as we process commodities
     bundle_forbidden_dict = Dict{
         Tuple{String,String,eltype(first_group_key)},
         Tuple{Set{String},Set{Tuple{String,String}}},
     }()
-    orders = Order{is_date_arrival,I}[]
 
     for key in keys(order_dict)
         time_step_idx, origin_id, destination_id, group_key = key
@@ -314,7 +306,6 @@ function build_instance(
         # `Order`'s constructor sorts the commodities by size descending (the
         # invariant the bin-packing hot path relies on), so no sort is needed here.
         order = Order{is_date_arrival,I}(commodities_list, time_step_idx, min_steps)
-        push!(orders, order)
 
         bundle_key = (origin_id, destination_id, group_key)
         if haskey(bundle_dict, bundle_key)
@@ -324,7 +315,7 @@ function build_instance(
         end
     end
 
-    # Aggregate forbidden constraints from commodities (already processed earlier)
+    # Aggregate forbidden constraints from commodities
     for commodity in commodities
         bundle_key = (commodity.origin_id, commodity.destination_id, group_by(commodity))
         if haskey(bundle_forbidden_dict, bundle_key)
@@ -338,7 +329,6 @@ function build_instance(
         end
     end
 
-    # Create bundles with aggregated forbidden constraints
     bundles = Bundle{Order{is_date_arrival,I}}[]
     for key in keys(bundle_dict)
         origin_id, destination_id, _ = key
@@ -346,7 +336,6 @@ function build_instance(
             bundle_forbidden_dict, key, (Set{String}(), Set{Tuple{String,String}}())
         )
 
-        # Validate that bundle doesn't forbid its own origin or destination
         if origin_id in forbidden_nodes
             throw(
                 ArgumentError(
@@ -370,51 +359,97 @@ function build_instance(
         push!(bundles, bundle)
     end
 
-    # Build mapping from time step index to date
-    time_step_to_date = [start_date + (i - 1) * time_step for i in 1:time_horizon_length]
+    return bundles
+end
 
+function _validate_bundles_feasibility(ttg::TravelTimeGraph, bundles)
+    infeasible_bundles = Tuple{Int,String,String}[]
+    for (bundle_idx, bundle) in enumerate(bundles)
+        if !validate_bundle_feasibility(ttg, bundle_idx, bundle)
+            push!(infeasible_bundles, (bundle_idx, bundle.origin_id, bundle.destination_id))
+        end
+    end
+
+    isempty(infeasible_bundles) && return nothing
+
+    error_msg = "Found $(length(infeasible_bundles)) infeasible bundle(s) with no path from origin to destination"
+    has_forbidden = any(
+        !isempty(bundles[idx].forbidden_nodes) || !isempty(bundles[idx].forbidden_arcs) for
+        (idx, _, _) in infeasible_bundles
+    )
+    if has_forbidden
+        error_msg *= " after applying forbidden constraints"
+    else
+        error_msg *= " (network may be ill-defined)"
+    end
+    error_msg *= ":\n"
+    for (idx, origin, dest) in infeasible_bundles
+        error_msg *= "  • Bundle $idx: $origin → $dest\n"
+    end
+    if has_forbidden
+        error_msg *= "Consider relaxing forbidden node/arc constraints for these bundles."
+    end
+    return throw(ArgumentError(error_msg))
+end
+
+"""
+$TYPEDSIGNATURES
+
+Build an `Instance` from normalized inputs.
+
+This function expects `nodes` and `arcs` already in `NetworkGraph` form
+(i.e., `arcs` are tuples `(origin_id, destination_id, NetworkArc)`),
+and `commodities` are user-facing `Commodity` objects. In brief, it:
+- Determines the instance start date (arrival or departure-based) and converts dates into
+discrete time step indices using `period_steps`.
+- Expands each `Commodity` into `LightCommodity` items and groups them into `Order`s
+(by time step, origin, destination and `group_by`) and `Bundle`s (by origin, destination and
+group).
+- Computes `time_horizon_length` (accounting for `max_delivery_time` unless
+`wrap_time=true`), constructs `TimeSpaceGraph` and `TravelTimeGraph`, and returns a
+populated `Instance`.
+
+Arguments:
+- `nodes::Vector{<:NetworkNode}`
+- `arcs::Vector{Tuple{String,String,NA}}` where `NA<:NetworkArc`. Multi-modal
+require `allow_multimodal=true`, otherwise duplicate legs raise an `ArgumentError`.
+Pre-built `MultiModalArc` values are not accepted.
+- `commodities::Vector{Commodity}`
+- `time_step::Period`
+
+Keywords:
+- `group_by` (default: `_default_group_by`): function grouping commodities into orders
+- `wrap_time` (default: false): whether the time horizon wraps (cyclic)
+- `check_bundle_feasibility` (default: true): whether to validate that bundles have
+feasible paths after applying forbidden constraints
+- `allow_multimodal` (default: false): opt-in switch for multi-modal legs.
+When false, duplicate `(origin_id, destination_id)` arcs raise an `ArgumentError`.
+When true, duplicates are auto-promoted to a `MultiModalArc`.
+"""
+function build_instance(
+    nodes::Vector{<:NetworkNode},
+    arcs::Vector{Tuple{String,String,NA}},
+    commodities::Vector{Commodity{is_date_arrival,ID,I}},
+    time_step::Period;
+    group_by=_default_group_by,
+    wrap_time=false,
+    check_bundle_feasibility=true,
+    allow_multimodal::Bool=false,
+) where {is_date_arrival,ID,I,NA<:NetworkArc}
+    network_graph = NetworkGraph(nodes, arcs; allow_multimodal)
+    order_dict, time_horizon_length, start_date = _expand_commodities(
+        commodities, time_step, group_by, wrap_time
+    )
+    bundles = _build_bundles(order_dict, commodities, group_by, time_horizon_length)
+    time_step_to_date = [start_date + (i - 1) * time_step for i in 1:time_horizon_length]
     time_space_graph = TimeSpaceGraph(
         network_graph, time_horizon_length; wrap_time=wrap_time
     )
     travel_time_graph = TravelTimeGraph(network_graph, bundles)
-
-    # Validate bundle feasibility if requested
     if check_bundle_feasibility
-        infeasible_bundles = Tuple{Int,String,String}[]
-        for (bundle_idx, bundle) in enumerate(bundles)
-            if !validate_bundle_feasibility(travel_time_graph, bundle_idx, bundle)
-                push!(
-                    infeasible_bundles,
-                    (bundle_idx, bundle.origin_id, bundle.destination_id),
-                )
-            end
-        end
-
-        if !isempty(infeasible_bundles)
-            error_msg = "Found $(length(infeasible_bundles)) infeasible bundle(s) with no path from origin to destination"
-            # Check if any have forbidden constraints
-            has_forbidden = any(
-                !isempty(bundles[idx].forbidden_nodes) ||
-                !isempty(bundles[idx].forbidden_arcs) for (idx, _, _) in infeasible_bundles
-            )
-            if has_forbidden
-                error_msg *= " after applying forbidden constraints"
-            else
-                error_msg *= " (network may be ill-defined)"
-            end
-            error_msg *= ":\n"
-            for (idx, origin, dest) in infeasible_bundles
-                error_msg *= "  • Bundle $idx: $origin → $dest\n"
-            end
-            if has_forbidden
-                error_msg *= "Consider relaxing forbidden node/arc constraints for these bundles."
-            end
-            throw(ArgumentError(error_msg))
-        end
+        _validate_bundles_feasibility(travel_time_graph, bundles)
     end
-
     index_cache = build_index_cache(network_graph, travel_time_graph, time_space_graph)
-
     return Instance(;
         time_horizon_length,
         time_step,

@@ -2,6 +2,7 @@ module TransportationPlanningOptimization
 
 using CSV: CSV
 using DataFrames: DataFrame, names
+using DataStructures: DataStructures
 using Dates: Dates, DateTime, Period
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
@@ -44,6 +45,7 @@ include("solution/path_operations.jl")
 include("solution/feasibility.jl")
 include("solution/parsing.jl")
 
+include("algorithms/shortest_path.jl")
 include("algorithms/cost/incremental_cost.jl")
 include("algorithms/cost/edge_cost.jl")
 include("algorithms/cost/cost_matrix_update.jl")

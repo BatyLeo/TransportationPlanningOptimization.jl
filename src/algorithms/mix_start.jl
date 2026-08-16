@@ -72,8 +72,8 @@ function mix_greedy_and_lower_bound(
         for (u, v) in bundle_arcs
             greedy_snapshot[(u, v)] = ttg.cost_matrix[u, v]
         end
-        greedy_res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-        greedy_path = Graphs.enumerate_paths(greedy_res, destination)
+        greedy_parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+        greedy_path = trace_path(greedy_parents, origin, destination)
         if isempty(greedy_path)
             throw(
                 ArgumentError(
@@ -96,8 +96,8 @@ function mix_greedy_and_lower_bound(
             cost_fn=compute_ttg_edge_lower_bound_cost,
             buffer=buffer,
         )
-        lb_res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-        lb_path = Graphs.enumerate_paths(lb_res, destination)
+        lb_parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+        lb_path = trace_path(lb_parents, origin, destination)
         if isempty(lb_path)
             throw(
                 ArgumentError(
@@ -120,8 +120,8 @@ function mix_greedy_and_lower_bound(
             greedy_cost = greedy_snapshot[(u, v)]
             ttg.cost_matrix[u, v] = w_greedy * greedy_cost + w_lb * lb_cost
         end
-        mix_res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-        mix_path = Graphs.enumerate_paths(mix_res, destination)
+        mix_parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+        mix_path = trace_path(mix_parents, origin, destination)
         if isempty(mix_path)
             throw(
                 ArgumentError(

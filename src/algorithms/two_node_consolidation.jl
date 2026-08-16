@@ -178,6 +178,7 @@ function two_node_common_incremental!(
     cost_threshold::Real=0.0,
     refine::Bool=true,
     packing::Symbol=:ffd_union,
+    cost_packing::Symbol=:frozen,
 )
     lifted_idxs = bundles_through_arc(sol, src, dst)
     isempty(lifted_idxs) && return 0.0
@@ -199,11 +200,11 @@ function two_node_common_incremental!(
     virtual_bundle, virtual_arcs = merge_bundles(instance, lifted_idxs)
 
     update_bundle_cost_matrix!(
-        sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing
+        sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing=cost_packing
     )
     ttg = instance.travel_time_graph
-    res = Graphs.dijkstra_shortest_paths(ttg.graph, src, ttg.cost_matrix)
-    new_sub_path = Graphs.enumerate_paths(res, dst)
+    parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix)
+    new_sub_path = trace_path(parents, src, dst)
 
     if isempty(new_sub_path)
         for (k, i) in enumerate(lifted_idxs)
@@ -219,7 +220,7 @@ function two_node_common_incremental!(
 
     if refine
         for i in Random.shuffle(lifted_idxs)
-            _try_reinsert_bundle!(sol, instance, i, mode_selector; packing)
+            _try_reinsert_bundle!(sol, instance, i, mode_selector; packing, cost_packing)
         end
     end
 
@@ -263,6 +264,7 @@ function loop_two_nodes!(
     refine::Bool=true,
     rng::Random.AbstractRNG=Random.default_rng(),
     packing::Symbol=:ffd_union,
+    cost_packing::Symbol=:frozen,
 )
     src_codes, dst_codes = compute_candidate_nodes(instance.travel_time_graph)
     (isempty(src_codes) || isempty(dst_codes)) && return 0.0
@@ -280,7 +282,15 @@ function loop_two_nodes!(
     while time() - t_start < time_limit
         (src, dst) = rand(rng, valid_pairs)
         saved += two_node_common_incremental!(
-            sol, instance, src, dst; mode_selector, cost_threshold, refine, packing
+            sol,
+            instance,
+            src,
+            dst;
+            mode_selector,
+            cost_threshold,
+            refine,
+            packing,
+            cost_packing,
         )
     end
     return saved

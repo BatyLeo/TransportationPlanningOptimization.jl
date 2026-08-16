@@ -25,8 +25,8 @@ function insert_bundle!(
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]
 
-    res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-    path = Graphs.enumerate_paths(res, destination)
+    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+    path = trace_path(parents, origin, destination)
 
     if isempty(path)
         throw(ArgumentError("No feasible path found for bundle $bundle_idx, ($path)"))

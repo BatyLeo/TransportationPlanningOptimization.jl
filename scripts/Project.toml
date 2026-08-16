@@ -11,4 +11,4 @@ TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 
 [sources]
 ShipperTransportationPlanning = {path = "../../ShipperTransportationPlanning.jl"}
-TransportationPlanningOptimization = {path = ".."}
+TransportationPlanningOptimization = {path = "/Users/taleboy/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl"}

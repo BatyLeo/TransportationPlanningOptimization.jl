@@ -12,6 +12,7 @@ struct NetworkNode{J,N<:AbstractNodeCostFunction}
     id::String
     "type of node: :origin, :destination, or :other"
     node_type::Symbol
+    ""
     cost::Float64
     "capacity of the node (in size units)"
     capacity::Int
@@ -51,6 +52,7 @@ function NetworkNode(;
     info=nothing,
     node_cost::AbstractNodeCostFunction=NoNodeCost(),
 )
+    @assert (node_type == :origin || node_type == :destination || node_type == :other) "Invalid node type: $node_type. Must be :origin, :destination, or :other."
     return NetworkNode{typeof(info),typeof(node_cost)}(
         id, node_type, cost, capacity, info, node_cost
     )

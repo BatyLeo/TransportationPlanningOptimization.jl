@@ -121,12 +121,13 @@ Used by `bundle_reinsertion_improvement!` as its per-bundle inner step and by
 `two_node_common_incremental!` (Phase 3.7) as the refine step. Bundles whose
 path is already empty return `0.0` without side effects.
 
-The `packing` keyword defaults to `:ffd_union` because the remove-then-readd
-cycle requires order-independent re-packing: `remove_bundle_path!` re-packs the
-remaining commodities from scratch (FFD), so the cost matrix and the commit
-must use the same FFD-union semantics for the net-delta accept test to be
-exact. Frozen packing is order-dependent and would make a remove-readd cycle
-change the cost even when the path is unchanged, so it is not used here.
+The `packing` keyword defaults to `:ffd_union` for the commit operations
+(`remove_bundle_path!`, `add_bundle_path!`) so the net-delta accept test
+is exact. The cost matrix (Dijkstra edge weights) uses `:frozen` packing
+by default: it packs new items onto the existing bins' remaining capacities
+without re-sorting the union, which is much cheaper (O(n_new) vs
+O(n_existing + n_new)) and produces a good-enough estimate for path selection.
+The `cost_packing` keyword controls this independently of the commit packing.
 """
 function _try_reinsert_bundle!(
     sol::Solution,
@@ -134,17 +135,20 @@ function _try_reinsert_bundle!(
     bundle_idx::Int,
     mode_selector::AbstractModeSelector;
     packing::Symbol=:ffd_union,
+    cost_packing::Symbol=:frozen,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
 
     old_path = copy(sol.bundle_paths[bundle_idx])
     cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
-    update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector; packing)
+    update_bundle_cost_matrix!(
+        sol, instance, bundle_idx, mode_selector; packing=cost_packing
+    )
     origin = ttg.origin_codes[bundle_idx]
     dest = ttg.destination_codes[bundle_idx]
-    res = Graphs.dijkstra_shortest_paths(ttg.graph, origin, ttg.cost_matrix)
-    new_path = Graphs.enumerate_paths(res, dest)
+    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+    new_path = trace_path(parents, origin, dest)
 
     if isempty(new_path)
         add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
@@ -206,6 +210,7 @@ function bundle_reinsertion_improvement!(
     time_limit::Real=Inf,
     cost_threshold::Real=0.0,
     packing::Symbol=:ffd_union,
+    cost_packing::Symbol=:frozen,
 )
     saved = 0.0
     t_start = time()
@@ -216,7 +221,9 @@ function bundle_reinsertion_improvement!(
             bundle_estimated_removal_cost(sol, instance, i) <= cost_threshold
             continue
         end
-        saved += _try_reinsert_bundle!(sol, instance, i, mode_selector; packing)
+        saved += _try_reinsert_bundle!(
+            sol, instance, i, mode_selector; packing, cost_packing
+        )
     end
     return saved
 end
@@ -255,10 +262,10 @@ Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type
 (useful for ablation studies). Setting both to false skips straight to the
 final repack.
 
-The `packing` keyword defaults to `:ffd_union` and is forwarded to both moves.
-The remove-readd cycle inside each move needs order-independent re-packing (see
-`_try_reinsert_bundle!`), so it stays on FFD-union even when the initial
-solution was built with the `:frozen` default.
+The `packing` keyword defaults to `:ffd_union` and controls the commit
+operations (remove/add path). The `cost_packing` keyword defaults to
+`:frozen` and controls the cost matrix estimation for Dijkstra. Frozen
+packing is cheaper (O(n_new) vs O(n_existing + n_new)) and a good estimate.
 
 Returns a `NamedTuple` with diagnostic info:
 
@@ -284,6 +291,7 @@ function local_search!(
     allow_consolidate::Bool=true,
     allow_repack::Bool=true,
     packing::Symbol=:ffd_union,
+    cost_packing::Symbol=:frozen,
     rng::Random.AbstractRNG=Random.default_rng(),
     sample_every::Int=1000,
 )
@@ -318,7 +326,15 @@ function local_search!(
             end
 
             improved = if take_reintro
-                _run_reintro_step!(sol, instance, mode_selector, rng, cost_threshold, packing)
+                _run_reintro_step!(
+                    sol,
+                    instance,
+                    mode_selector,
+                    rng,
+                    cost_threshold,
+                    packing,
+                    cost_packing,
+                )
             else
                 _run_two_node_step!(
                     sol,
@@ -329,6 +345,7 @@ function local_search!(
                     cost_threshold,
                     allow_reintro,
                     packing,
+                    cost_packing,
                 )
             end
 
@@ -380,6 +397,7 @@ function _run_reintro_step!(
     rng::Random.AbstractRNG,
     cost_threshold::Float64,
     packing::Symbol,
+    cost_packing::Symbol,
 )
     n = length(instance.bundles)
     n == 0 && return 0.0
@@ -389,7 +407,9 @@ function _run_reintro_step!(
         bundle_estimated_removal_cost(sol, instance, bundle_idx) <= cost_threshold
         return 0.0
     end
-    return _try_reinsert_bundle!(sol, instance, bundle_idx, mode_selector; packing)
+    return _try_reinsert_bundle!(
+        sol, instance, bundle_idx, mode_selector; packing, cost_packing
+    )
 end
 
 """
@@ -410,10 +430,19 @@ function _run_two_node_step!(
     cost_threshold::Float64,
     refine::Bool,
     packing::Symbol,
+    cost_packing::Symbol,
 )
     isempty(valid_pairs) && return 0.0
     (src, dst) = rand(rng, valid_pairs)
     return two_node_common_incremental!(
-        sol, instance, src, dst; mode_selector, cost_threshold, refine, packing
+        sol,
+        instance,
+        src,
+        dst;
+        mode_selector,
+        cost_threshold,
+        refine,
+        packing,
+        cost_packing,
     )
 end
