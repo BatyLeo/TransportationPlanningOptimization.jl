@@ -21,6 +21,7 @@ function _merge_sorted_into_slot!(
     slot::SingleAssignment{C}, new_commodities::Vector{C}
 ) where {C<:LightCommodity}
     isempty(new_commodities) && return slot
+    slot.total_size += sum(c.size for c in new_commodities; init=0.0)
     # If the existing slot is unsorted, we can't guarantee the invariant, so just append.
     if !slot.sorted
         append!(slot.commodities, new_commodities)
@@ -61,11 +62,41 @@ function _merge_sorted_into_slot!(
     return slot
 end
 
+@inline function _evaluate_with_total_size(
+    arc_f::AbstractArcCostFunction,
+    commodities::Vector{<:LightCommodity},
+    ::Float64;
+    presorted::Bool=false,
+)
+    return evaluate(arc_f, commodities; presorted)
+end
+
+@inline function _evaluate_with_total_size(
+    arc_f::LinearArcCost,
+    ::Vector{<:LightCommodity},
+    total_size::Float64;
+    presorted::Bool=false,
+)
+    return arc_f.cost_per_unit_size * total_size
+end
+
+@inline _sum_evaluate_with_total_size(
+    ::Tuple{}, ::Vector{C}, ::Float64
+) where {C<:LightCommodity} = 0.0
+@inline function _sum_evaluate_with_total_size(
+    terms::Tuple, comms::Vector{C}, total_size::Float64
+) where {C<:LightCommodity}
+    return _evaluate_with_total_size(first(terms), comms, total_size; presorted=true) +
+           _sum_evaluate_with_total_size(Base.tail(terms), comms, total_size)
+end
+
 function _update_single_assignment_cost!(
     slot::SingleAssignment, arc_cost::AbstractArcCostFunction
 )
     _ensure_sorted!(slot)
-    slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
+    slot.cost = _evaluate_with_total_size(
+        arc_cost, slot.commodities, slot.total_size; presorted=true
+    )
     return nothing
 end
 
@@ -76,6 +107,7 @@ function _update_single_assignment_cost!(
     _ensure_sorted!(slot)
     slot.bins = compute_bin_assignments(arc_cost, slot.commodities; presorted=true)
     slot.cost = arc_cost.cost_per_bin * length(slot.bins)
+    slot.bins_dirty = false
     return nothing
 end
 
@@ -88,7 +120,41 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_cost::SumAr
     if bp !== nothing
         slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
     end
-    slot.cost = evaluate(arc_cost, slot.commodities; presorted=true)
+    slot.cost = _sum_evaluate_with_total_size(
+        arc_cost.terms, slot.commodities, slot.total_size
+    )
+    slot.bins_dirty = false
+    return nothing
+end
+
+# Removal-only cost update: recompute `slot.cost` without materializing bins.
+# Matches STP's "does not refill bins" semantics. The `slot.bins` vector becomes
+# stale, and `bins_dirty` is set so downstream code can fall back to non-frozen
+# cost estimation. The next `_update_single_assignment_cost!` (on add) will
+# recompute bins and clear the flag.
+function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::AbstractArcCostFunction)
+    _ensure_sorted!(slot)
+    slot.cost = _evaluate_with_total_size(
+        arc_cost, slot.commodities, slot.total_size; presorted=true
+    )
+    return nothing
+end
+
+function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::BinPackingArcCost)
+    _ensure_sorted!(slot)
+    slot.cost =
+        arc_cost.cost_per_bin *
+        tentative_bin_count(arc_cost, slot.commodities; presorted=true)
+    slot.bins_dirty = true
+    return nothing
+end
+
+function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::SumArcCost)
+    _ensure_sorted!(slot)
+    slot.cost = _sum_evaluate_with_total_size(
+        arc_cost.terms, slot.commodities, slot.total_size
+    )
+    slot.bins_dirty = true
     return nothing
 end
 
@@ -107,6 +173,9 @@ end
 function _frozen_commit_single_assignment!(
     slot::SingleAssignment{C}, arc_cost::BinPackingArcCost, new_comms::Vector{C}
 ) where {C}
+    if slot.bins_dirty
+        return _update_single_assignment_cost!(slot, arc_cost)
+    end
     frozen_first_fit_add!(slot.bins, Float64(arc_cost.bin_capacity), new_comms)
     slot.cost = arc_cost.cost_per_bin * length(slot.bins)
     return nothing
@@ -115,12 +184,17 @@ end
 @inline function _frozen_term_commit!(
     slot::SingleAssignment, term::BinPackingArcCost, new_comms::Vector
 )
-    frozen_first_fit_add!(slot.bins, Float64(term.bin_capacity), new_comms)
+    if slot.bins_dirty
+        slot.bins = compute_bin_assignments(term, slot.commodities; presorted=true)
+        slot.bins_dirty = false
+    else
+        frozen_first_fit_add!(slot.bins, Float64(term.bin_capacity), new_comms)
+    end
     return term.cost_per_bin * length(slot.bins)
 end
 @inline _frozen_term_commit!(
     slot::SingleAssignment, term::AbstractArcCostFunction, ::Vector
-) = evaluate(term, slot.commodities)
+) = _evaluate_with_total_size(term, slot.commodities, slot.total_size)
 
 @inline _sum_frozen_commit!(::SingleAssignment, ::Tuple{}, ::Vector) = 0.0
 @inline _sum_frozen_commit!(slot::SingleAssignment, terms::Tuple, new_comms::Vector) =
@@ -145,7 +219,10 @@ Returns `(partition, overflow)` where `partition[i]` is the subset of
 remaining capacity across all modes is insufficient to absorb `new_comms`.
 """
 function _fill_then_spill_partition(
-    arc::MultiModalArc, existing_per_mode::Vector{Vector{C}}, new_comms::Vector{C}
+    arc::MultiModalArc,
+    existing_per_mode::Vector{Vector{C}},
+    new_comms::Vector{C};
+    existing_total_sizes::Vector{Float64}=Float64[],
 ) where {C<:LightCommodity}
     mode_costs = [
         incremental_cost(arc.modes[i].cost, existing_per_mode[i], new_comms) for
@@ -155,11 +232,16 @@ function _fill_then_spill_partition(
 
     per_mode_new = [C[] for _ in eachindex(arc.modes)]
     remaining = copy(new_comms)
+    have_cached_sizes = !isempty(existing_total_sizes)
 
     for mode_idx in sorted_indices
         isempty(remaining) && break
         mode = arc.modes[mode_idx]
-        existing_size = sum(c.size for c in existing_per_mode[mode_idx]; init=0.0)
+        existing_size = if have_cached_sizes
+            existing_total_sizes[mode_idx]
+        else
+            sum(c.size for c in existing_per_mode[mode_idx]; init=0.0)
+        end
         cap_left = Float64(mode.capacity) - existing_size
 
         placed = C[]
@@ -195,8 +277,9 @@ function _fill_then_spill_assign!(
     new_commodities::Vector{C},
 ) where {C<:LightCommodity}
     existing_per_mode = [slot.commodities for slot in assignment.per_mode]
+    cached_sizes = [slot.total_size for slot in assignment.per_mode]
     partition, overflow = _fill_then_spill_partition(
-        arc, existing_per_mode, new_commodities
+        arc, existing_per_mode, new_commodities; existing_total_sizes=cached_sizes
     )
     if overflow
         throw(
@@ -256,7 +339,7 @@ function _add_order_to_assignment!(
     end::MultiAssignment{C}
     mode_costs = [
         if _mode_has_capacity(
-            arc.modes[i], assignment.per_mode[i].commodities, new_commodities
+            arc.modes[i], assignment.per_mode[i].total_size, new_commodities
         )
             _commit_mode_incremental(
                 arc.modes[i].cost, assignment.per_mode[i], new_commodities, packing
@@ -335,6 +418,14 @@ function _mode_has_capacity(
     return existing_size + new_size <= mode.capacity + 1e-8
 end
 
+function _mode_has_capacity(
+    mode::NetworkArc, existing_total_size::Float64, new_comms::Vector{<:LightCommodity}
+)
+    mode.capacity == typemax(Int) && return true
+    new_size = sum(c.size for c in new_comms; init=0.0)
+    return existing_total_size + new_size <= mode.capacity + 1e-8
+end
+
 function _remove_commodities_from_assignment!(
     assignment::SingleAssignment{C}, arc::NetworkArc, removed_comms::Vector{C}
 ) where {C<:LightCommodity}
@@ -348,7 +439,8 @@ function _remove_commodities_from_assignment!(
             ),
         )
     end
-    _update_single_assignment_cost!(assignment, arc.cost)
+    assignment.total_size -= sum(c.size for c in removed_comms; init=0.0)
+    _update_cost_skip_bins!(assignment, arc.cost)
     return assignment.cost - before
 end
 
@@ -361,7 +453,8 @@ function _remove_commodities_from_assignment!(
         isempty(remaining) && break
         dropped = _drain_first_matches!(slot.commodities, remaining)
         if !isempty(dropped)
-            _update_single_assignment_cost!(slot, arc.modes[i].cost)
+            slot.total_size -= sum(c.size for c in dropped; init=0.0)
+            _update_cost_skip_bins!(slot, arc.modes[i].cost)
         end
     end
     if !isempty(remaining)

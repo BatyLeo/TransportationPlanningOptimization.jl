@@ -28,12 +28,14 @@ end
 
 function _repack_assignment!(a::SingleAssignment, arc::NetworkArc)
     arc.cost isa BinPackingArcCost || return 0.0
-    current_count = length(a.bins)
     ps = a.sorted
     ffd_count = tentative_bin_count(arc.cost, a.commodities; presorted=ps)
     bfd_count = tentative_best_fit_count(arc.cost, a.commodities; presorted=ps)
     new_count = min(ffd_count, bfd_count)
-    new_count >= current_count && return 0.0  # gate: no improvement possible
+    current_count = a.bins_dirty ? ffd_count : length(a.bins)
+    if !a.bins_dirty && new_count >= current_count
+        return 0.0
+    end
 
     before = a.cost
     a.bins = if ffd_count <= bfd_count
@@ -42,6 +44,7 @@ function _repack_assignment!(a::SingleAssignment, arc::NetworkArc)
         compute_bin_assignments_bfd(arc.cost, a.commodities; presorted=ps)
     end
     a.cost = arc.cost.cost_per_bin * length(a.bins)
+    a.bins_dirty = false
     return before - a.cost
 end
 
@@ -50,12 +53,14 @@ function _repack_assignment!(a::MultiAssignment, arc::MultiModalArc)
     for (i, slot) in enumerate(a.per_mode)
         mode_cost = arc.modes[i].cost
         mode_cost isa BinPackingArcCost || continue
-        current_count = length(slot.bins)
         ps = slot.sorted
         ffd_count = tentative_bin_count(mode_cost, slot.commodities; presorted=ps)
         bfd_count = tentative_best_fit_count(mode_cost, slot.commodities; presorted=ps)
         new_count = min(ffd_count, bfd_count)
-        new_count >= current_count && continue
+        current_count = slot.bins_dirty ? ffd_count : length(slot.bins)
+        if !slot.bins_dirty && new_count >= current_count
+            continue
+        end
 
         before = slot.cost
         slot.bins = if ffd_count <= bfd_count
@@ -64,6 +69,7 @@ function _repack_assignment!(a::MultiAssignment, arc::MultiModalArc)
             compute_bin_assignments_bfd(mode_cost, slot.commodities; presorted=ps)
         end
         slot.cost = mode_cost.cost_per_bin * length(slot.bins)
+        slot.bins_dirty = false
         saved += before - slot.cost
     end
     return saved

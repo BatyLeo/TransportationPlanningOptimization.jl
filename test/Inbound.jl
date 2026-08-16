@@ -85,6 +85,14 @@ function TPO.evaluate(
 )
     return c.carbon_per_unit_volume * sum(x.size for x in comms; init=0.0)
 end
+@inline function TPO._evaluate_with_total_size(
+    c::CarbonArcCost,
+    ::Vector{<:TPO.LightCommodity},
+    total_size::Float64;
+    presorted::Bool=false,
+)
+    return c.carbon_per_unit_volume * total_size
+end
 function TPO.incremental_cost(
     c::CarbonArcCost, _::Vector{C}, new::Vector{C}
 ) where {C<:TPO.LightCommodity}
@@ -140,6 +148,14 @@ end
 
 function TPO.evaluate(c::NodeVolumeCost, comms::Vector{<:TPO.LightCommodity})
     return c.volume_cost * sum(x.size for x in comms; init=0.0)
+end
+@inline function TPO._evaluate_with_total_size(
+    c::NodeVolumeCost,
+    ::Vector{<:TPO.LightCommodity},
+    total_size::Float64;
+    presorted::Bool=false,
+)
+    return c.volume_cost * total_size
 end
 function TPO.incremental_cost(
     c::NodeVolumeCost, _::Vector{C}, new::Vector{C}

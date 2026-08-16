@@ -153,7 +153,7 @@ function _capacity_feasible(
     arc::NetworkArc, assignment::AbstractArcAssignment, arc_labels; verbose::Bool
 )
     arc.capacity == typemax(Int) && return true
-    total_size = sum(c.size for c in commodities_of(assignment); init=0.0)
+    total_size = total_size_of(assignment)
     if total_size > arc.capacity + 1e-8
         verbose &&
             @warn "Arc $(arc_labels) exceeds capacity: $(total_size) > $(arc.capacity)"
@@ -167,7 +167,7 @@ function _capacity_feasible(
 )
     for (i, (mode, slot)) in enumerate(zip(arc.modes, assignment.per_mode))
         mode.capacity == typemax(Int) && continue
-        total_size = sum(c.size for c in slot.commodities; init=0.0)
+        total_size = slot.total_size
         if total_size > mode.capacity + 1e-8
             verbose &&
                 @warn "Arc $(arc_labels) mode $(i) exceeds capacity: $(total_size) > $(mode.capacity)"

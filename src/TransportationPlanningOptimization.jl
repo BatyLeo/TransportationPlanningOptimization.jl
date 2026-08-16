@@ -76,7 +76,7 @@ export evaluate
 
 # Solution interface
 export is_feasible, cost, cost_with_nodes
-export commodities_of, bins_of, cost_of
+export commodities_of, bins_of, cost_of, total_size_of
 export write_solution_csv, read_solution_csv
 
 # Algorithms

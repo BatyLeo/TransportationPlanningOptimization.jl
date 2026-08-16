@@ -66,8 +66,9 @@ function _edge_incremental_cost(
     if packing === :frozen
         return _frozen_edge_incremental_cost(buffer, arc.cost, existing, new_comms)
     end
+    n_ex = existing.bins_dirty ? -1 : length(existing.bins)
     return incremental_cost!(
-        buffer, arc.cost, existing.commodities, new_comms; n_existing=length(existing.bins)
+        buffer, arc.cost, existing.commodities, new_comms; n_existing=n_ex
     )
 end
 
@@ -85,6 +86,9 @@ function _frozen_edge_incremental_cost(
     existing::SingleAssignment{C},
     new_comms::Vector{C},
 ) where {C<:LightCommodity}
+    if existing.bins_dirty
+        return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
+    end
     return frozen_incremental_cost!(buffer, arc_f, existing.bins, new_comms)
 end
 
@@ -94,6 +98,9 @@ function _frozen_edge_incremental_cost(
     existing::SingleAssignment{C},
     new_comms::Vector{C},
 ) where {C<:LightCommodity}
+    if existing.bins_dirty
+        return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
+    end
     return frozen_incremental_cost!(
         buffer, arc_f, existing.bins, existing.commodities, new_comms
     )
@@ -106,8 +113,9 @@ function _frozen_edge_incremental_cost(
     new_comms::Vector{C},
 ) where {C<:LightCommodity}
     # Linear and node-style costs are identical under both packing modes.
+    n_ex = existing.bins_dirty ? -1 : length(existing.bins)
     return incremental_cost!(
-        buffer, arc_f, existing.commodities, new_comms; n_existing=length(existing.bins)
+        buffer, arc_f, existing.commodities, new_comms; n_existing=n_ex
     )
 end
 
@@ -128,7 +136,7 @@ function _edge_incremental_cost(
 ) where {C<:LightCommodity}
     # No existing load: both modes pack `new` from scratch and agree.
     return minimum(
-        if _mode_has_capacity(mode, C[], new_comms)
+        if _mode_has_capacity(mode, 0.0, new_comms)
             incremental_cost!(buffer, mode.cost, C[], new_comms)
         else
             Inf
@@ -152,18 +160,23 @@ function _edge_incremental_cost(
     packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     return minimum(
-        if _mode_has_capacity(arc.modes[i], existing.per_mode[i].commodities, new_comms)
+        if _mode_has_capacity(arc.modes[i], existing.per_mode[i].total_size, new_comms)
             if packing === :frozen
                 _frozen_edge_incremental_cost(
                     buffer, arc.modes[i].cost, existing.per_mode[i], new_comms
                 )
             else
+                n_ex = if existing.per_mode[i].bins_dirty
+                    -1
+                else
+                    length(existing.per_mode[i].bins)
+                end
                 incremental_cost!(
                     buffer,
                     arc.modes[i].cost,
                     existing.per_mode[i].commodities,
                     new_comms;
-                    n_existing=length(existing.per_mode[i].bins),
+                    n_existing=n_ex,
                 )
             end
         else
@@ -214,17 +227,17 @@ function _edge_incremental_cost(
 ) where {C<:LightCommodity}
     # FillThenSpillMode always uses ffd_union semantics (its commit re-packs too).
     existing_per_mode = [slot.commodities for slot in existing.per_mode]
-    partition, overflow = _fill_then_spill_partition(arc, existing_per_mode, new_comms)
+    cached_sizes = [slot.total_size for slot in existing.per_mode]
+    partition, overflow = _fill_then_spill_partition(
+        arc, existing_per_mode, new_comms; existing_total_sizes=cached_sizes
+    )
     overflow && return Inf
     total = 0.0
     for i in eachindex(arc.modes)
         isempty(partition[i]) && continue
+        n_ex = existing.per_mode[i].bins_dirty ? -1 : length(existing.per_mode[i].bins)
         total += incremental_cost!(
-            buffer,
-            arc.modes[i].cost,
-            existing_per_mode[i],
-            partition[i];
-            n_existing=length(existing.per_mode[i].bins),
+            buffer, arc.modes[i].cost, existing_per_mode[i], partition[i]; n_existing=n_ex
         )
     end
     return total

@@ -248,11 +248,9 @@ not the cheapest path for an actual solver, but it is a valid lower bound
 when summed across paths and used for filtering.
 """
 function lower_bound_incremental_cost(
-    arc_f::BinPackingArcCost, existing_commodities::Vector{C}, new_commodities::Vector{C}
+    arc_f::BinPackingArcCost, ::Vector{C}, new_commodities::Vector{C}
 ) where {C<:LightCommodity}
-    existing_size = sum(c.size for c in existing_commodities; init=0.0)
+    # (existing + new) / cap - existing / cap = new / cap
     new_size = sum(c.size for c in new_commodities; init=0.0)
-    n_bins_with = (existing_size + new_size) / arc_f.bin_capacity
-    n_bins_without = existing_size / arc_f.bin_capacity
-    return arc_f.cost_per_bin * (n_bins_with - n_bins_without)
+    return arc_f.cost_per_bin * new_size / arc_f.bin_capacity
 end
