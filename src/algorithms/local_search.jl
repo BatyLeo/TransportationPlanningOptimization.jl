@@ -114,26 +114,99 @@ function _assignment_commodity_count(a::MultiAssignment)
     return sum(length(slot.commodities) for slot in a.per_mode; init=0)
 end
 
+# --- Snapshot helpers for assignment state (used by _try_reinsert_bundle!) ---
+
+struct _SingleAssignmentSnapshot{C<:LightCommodity}
+    commodities::Vector{C}
+    bins::Vector{Bin{C}}
+    cost::Float64
+    sorted::Bool
+    total_size::Float64
+    bins_dirty::Bool
+end
+
+function _snapshot_assignment(a::SingleAssignment{C}) where {C}
+    return _SingleAssignmentSnapshot{C}(
+        copy(a.commodities), a.bins, a.cost, a.sorted, a.total_size, a.bins_dirty
+    )
+end
+
+function _restore_assignment!(a::SingleAssignment, snap::_SingleAssignmentSnapshot)
+    a.commodities = snap.commodities
+    a.bins = snap.bins
+    a.cost = snap.cost
+    a.sorted = snap.sorted
+    a.total_size = snap.total_size
+    a.bins_dirty = snap.bins_dirty
+    return nothing
+end
+
+struct _MultiAssignmentSnapshot{C<:LightCommodity}
+    per_mode::Vector{_SingleAssignmentSnapshot{C}}
+end
+
+function _snapshot_assignment(a::MultiAssignment{C}) where {C}
+    return _MultiAssignmentSnapshot{C}([_snapshot_assignment(slot) for slot in a.per_mode])
+end
+
+function _restore_assignment!(a::MultiAssignment, snap::_MultiAssignmentSnapshot)
+    for (slot, slot_snap) in zip(a.per_mode, snap.per_mode)
+        _restore_assignment!(slot, slot_snap)
+    end
+    return nothing
+end
+
+function _snapshot_path_assignments(
+    sol::Solution{C}, instance::Instance, bundle_idx::Int
+) where {C}
+    path = sol.bundle_paths[bundle_idx]
+    bundle = instance.bundles[bundle_idx]
+    snapshots = Dict{Tuple{Int,Int},Any}()
+    for order in bundle.orders
+        for k in 1:(length(path) - 1)
+            u_tsg = project_to_time_space_graph(path[k], order, instance)
+            v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
+            edge = (u_tsg, v_tsg)
+            haskey(snapshots, edge) && continue
+            haskey(sol.assignments, edge) || continue
+            snapshots[edge] = _snapshot_assignment(sol.assignments[edge])
+        end
+    end
+    return snapshots
+end
+
+function _restore_path_assignments!(
+    sol::Solution, bundle_idx::Int, old_path::Vector{Int}, snapshots::Dict
+)
+    sol.bundle_paths[bundle_idx] = old_path
+    for (edge, snap) in snapshots
+        _restore_assignment!(sol.assignments[edge], snap)
+    end
+    return nothing
+end
+
 """
 $TYPEDSIGNATURES
 
-Attempt a single-bundle reinsertion. Save the bundle's current path, remove
-it, recompute the cost matrix against the now-bundle-less solution, run
-Dijkstra, and accept the new path only if its net cost delta is strictly
-negative (improvement greater than `1e-6`). Otherwise restore the old path.
-Returns the cost improvement (non-negative `Float64`).
+Attempt a single-bundle reinsertion. Snapshot the bundle's assignment state,
+remove its path, recompute the cost matrix against the now-bundle-less
+solution, run Dijkstra, and accept the new path only if its net cost delta
+is strictly negative (improvement greater than `1e-6`). When no improvement
+is found (including same-path iterations), restore from the snapshot instead
+of re-running FFD repack. Returns the cost improvement (non-negative
+`Float64`).
 
 Used by `bundle_reinsertion_improvement!` as its per-bundle inner step and by
 `two_node_common_incremental!` (Phase 3.7) as the refine step. Bundles whose
 path is already empty return `0.0` without side effects.
 
-The `packing` keyword defaults to `:ffd_union` for the commit operations
-(`remove_bundle_path!`, `add_bundle_path!`) so the net-delta accept test
-is exact. The cost matrix (Dijkstra edge weights) uses `:frozen` packing
-by default: it packs new items onto the existing bins' remaining capacities
-without re-sorting the union, which is much cheaper (O(n_new) vs
-O(n_existing + n_new)) and produces a good-enough estimate for path selection.
-The `cost_packing` keyword controls this independently of the commit packing.
+The `packing` keyword defaults to `:ffd_union` for the commit operation
+(`add_bundle_path!`) so the accept test is exact. The cost matrix (Dijkstra
+edge weights) uses `:frozen` packing by default: it packs new items onto the
+existing bins' remaining capacities without re-sorting the union, which is
+much cheaper (O(n_new) vs O(n_existing + n_new)) and produces a good-enough
+estimate for path selection. The `cost_packing` keyword controls this
+independently of the commit packing.
 """
 function _try_reinsert_bundle!(
     sol::Solution,
@@ -147,6 +220,8 @@ function _try_reinsert_bundle!(
     ttg = instance.travel_time_graph
 
     old_path = copy(sol.bundle_paths[bundle_idx])
+    snapshots = _snapshot_path_assignments(sol, instance, bundle_idx)
+
     cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     update_bundle_cost_matrix!(
         sol, instance, bundle_idx, mode_selector; packing=cost_packing
@@ -157,10 +232,19 @@ function _try_reinsert_bundle!(
     new_path = trace_path(parents, origin, dest)
 
     if isempty(new_path)
-        add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
+        _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
         return 0.0
     end
 
+    # Canonicalize for comparison (same transform add_bundle_path! would apply)
+    _remove_shortcuts_from_path!(new_path, ttg)
+
+    if new_path == old_path
+        _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
+        return 0.0
+    end
+
+    # Different path: commit with full FFD repack
     cost_added = add_bundle_path!(
         sol, instance, bundle_idx, new_path; mode_selector, packing
     )
@@ -169,20 +253,9 @@ function _try_reinsert_bundle!(
         return -net_delta
     end
 
-    # No improvement: normally we rollback (remove new_path then add old_path).
-    # When Dijkstra returned the same path as old_path, that rollback is a
-    # state-wise no-op (under :ffd_union packing the slot's commodities are
-    # already at FFD-equilibrium with B on its old path, which is exactly
-    # what the rollback would reconstruct). Skip the wasted remove+add cycle.
-    # `add_bundle_path!` canonicalized `new_path` in place via
-    # `_remove_shortcuts_from_path!`, so the equality is apples-to-apples
-    # with the canonical `old_path` snapshot.
-    if new_path == old_path
-        return 0.0
-    end
-
+    # Different path, no improvement: rollback via snapshot
     remove_bundle_path!(sol, instance, bundle_idx)
-    add_bundle_path!(sol, instance, bundle_idx, old_path; mode_selector, packing)
+    _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
     return 0.0
 end
 
