@@ -21,6 +21,8 @@ struct Order{is_date_arrival,I}
     time_step::Int
     "maximum number of time steps for delivery (among all commodities in the order)"
     max_transit_steps::Int
+    "precomputed sum of all commodity sizes"
+    total_size::Float64
 
     function Order{is_date_arrival,I}(
         commodities::Vector{LightCommodity{I}}, time_step::Int, max_transit_steps::Int
@@ -37,7 +39,8 @@ struct Order{is_date_arrival,I}
         end
         # Sort commodities by size descending to facilitate packing heuristics.
         sort!(commodities; by=c -> c.size, rev=true)
-        return new{is_date_arrival,I}(commodities, time_step, max_transit_steps)
+        ts = sum(c.size for c in commodities; init=0.0)
+        return new{is_date_arrival,I}(commodities, time_step, max_transit_steps, ts)
     end
 end
 
@@ -70,8 +73,6 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the total size of all commodities in the order.
+Total size of all commodities in the order (precomputed at construction).
 """
-function total_size(order::Order)
-    return sum(c.size for c in order.commodities; init=0.0)
-end
+total_size(order::Order) = order.total_size

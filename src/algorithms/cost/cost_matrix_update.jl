@@ -186,7 +186,7 @@ function _direct_arc_lb_cost(
             @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf
         end
-        order_size = sum(c.size for c in order.commodities; init=0.0)
+        order_size = order.total_size
         total += _direct_arc_order_lb_cost(
             arc, order_size, order.commodities, mode_selector
         )

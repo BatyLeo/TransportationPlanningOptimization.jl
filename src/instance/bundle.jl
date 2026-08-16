@@ -19,6 +19,31 @@ struct Bundle{O<:Order}
     forbidden_nodes::Set{String}
     "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle"
     forbidden_arcs::Set{Tuple{String,String}}
+    "precomputed sum of all commodity sizes across all orders"
+    total_size::Float64
+
+    function Bundle{O}(
+        orders::Vector{O},
+        origin_id::String,
+        destination_id::String,
+        forbidden_nodes::Set{String},
+        forbidden_arcs::Set{Tuple{String,String}},
+    ) where {O<:Order}
+        ts = sum(total_size(o) for o in orders; init=0.0)
+        return new{O}(
+            orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, ts
+        )
+    end
+end
+
+function Bundle(
+    orders::Vector{O},
+    origin_id::String,
+    destination_id::String,
+    forbidden_nodes::Set{String},
+    forbidden_arcs::Set{Tuple{String,String}},
+) where {O<:Order}
+    return Bundle{O}(orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs)
 end
 
 """
@@ -58,11 +83,9 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the total size of all commodities in the bundle.
+Total size of all commodities in the bundle (precomputed at construction).
 """
-function total_size(bundle::Bundle)
-    return sum(total_size(order) for order in bundle.orders; init=0.0)
-end
+total_size(bundle::Bundle) = bundle.total_size
 
 """
 $TYPEDSIGNATURES
