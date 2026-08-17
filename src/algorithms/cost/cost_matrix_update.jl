@@ -14,14 +14,12 @@ function compute_ttg_edge_incremental_cost(
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 ) where {C}
-    # IF it's a shortcut arc, return zero cost
-    u_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)
-    v_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code)
-    if u_ttg_label[1] == v_ttg_label[1]
+    cache = instance.index_cache
+
+    # Shortcut arc: same spatial node on both endpoints.
+    if cache.ttg_spatial[u_ttg_code] == cache.ttg_spatial[v_ttg_code]
         return 0.0
     end
-
-    cache = instance.index_cache
     total_incremental_cost = 0.0
 
     # Each order in a bundle has a distinct delivery time step in
@@ -57,7 +55,7 @@ function compute_ttg_edge_incremental_cost(
         # Destination-node cost via fast path when available.
         node_cost = cache.node_cost_of[sv]
         total_incremental_cost += incremental_cost_with_size(
-            node_cost, C[], order.commodities, new_total_size
+            node_cost, order.commodities, order.commodities, new_total_size
         )
     end
 
@@ -95,19 +93,22 @@ function compute_ttg_edge_lower_bound_cost(
     # The fractional bin counting needs none of `buffer`'s scratch, so `buffer` is
     # accepted only to keep the `cost_fn` call signature uniform.
 
-    # IF it's a shortcut arc, return zero cost
-    u_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)
-    v_ttg_label = MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code)
-    if u_ttg_label[1] == v_ttg_label[1]
+    cache = instance.index_cache
+    ng = instance.network_graph.graph
+    su = cache.ttg_spatial[u_ttg_code]
+    sv = cache.ttg_spatial[v_ttg_code]
+
+    # Shortcut arc: same spatial node on both endpoints.
+    if su == sv
         return 0.0
     end
 
     # Direct arc dispatch: bundle's origin -> destination.
-    if u_ttg_label[1] == bundle.origin_id && v_ttg_label[1] == bundle.destination_id
+    u_id = MetaGraphsNext.label_for(ng, su)
+    v_id = MetaGraphsNext.label_for(ng, sv)
+    if u_id == bundle.origin_id && v_id == bundle.destination_id
         return _direct_arc_lb_cost(bundle, instance, u_ttg_code, v_ttg_code, mode_selector)
     end
-
-    cache = instance.index_cache
     total = 0.0
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders cannot alias modulo the horizon and
@@ -293,8 +294,10 @@ function compute_ttg_edge_filtering_cost(
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
 ) where {C}
-    u_id = MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)[1]
-    v_id = MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code)[1]
+    cache = instance.index_cache
+    ng = instance.network_graph.graph
+    u_id = MetaGraphsNext.label_for(ng, cache.ttg_spatial[u_ttg_code])
+    v_id = MetaGraphsNext.label_for(ng, cache.ttg_spatial[v_ttg_code])
     if u_id == bundle.origin_id && v_id == bundle.destination_id
         return compute_ttg_edge_incremental_cost(
             current_solution,
