@@ -185,6 +185,60 @@ function _restore_path_assignments!(
     return nothing
 end
 
+function _snapshot_multi_bundle_assignments(
+    sol::Solution{C}, instance::Instance, bundle_idxs::Vector{Int}
+) where {C}
+    snapshots = Dict{Tuple{Int,Int},Any}()
+    for bi in bundle_idxs
+        path = sol.bundle_paths[bi]
+        bundle = instance.bundles[bi]
+        for order in bundle.orders
+            for k in 1:(length(path) - 1)
+                u_tsg = project_to_time_space_graph(path[k], order, instance)
+                v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
+                edge = (u_tsg, v_tsg)
+                haskey(snapshots, edge) && continue
+                haskey(sol.assignments, edge) || continue
+                snapshots[edge] = _snapshot_assignment(sol.assignments[edge])
+            end
+        end
+    end
+    return snapshots
+end
+
+function _refresh_dirty_assignments!(sol::Solution, instance::Instance, edges)
+    cache = instance.index_cache
+    for edge in edges
+        assignment = get(sol.assignments, edge, nothing)
+        assignment === nothing && continue
+        su = cache.tsg_spatial[edge[1]]
+        sv = cache.tsg_spatial[edge[2]]
+        arc = cache.arc_of[(su, sv)]
+        if assignment isa SingleAssignment
+            assignment.bins_dirty || continue
+            _update_single_assignment_cost!(assignment, arc.cost)
+        else
+            for (i, slot) in enumerate(assignment.per_mode)
+                slot.bins_dirty || continue
+                _update_single_assignment_cost!(slot, arc.modes[i].cost)
+            end
+        end
+    end
+    return nothing
+end
+
+function _restore_multi_bundle_assignments!(
+    sol::Solution, bundle_idxs::Vector{Int}, old_paths::Vector{Vector{Int}}, snapshots::Dict
+)
+    for (k, bi) in enumerate(bundle_idxs)
+        sol.bundle_paths[bi] = old_paths[k]
+    end
+    for (edge, snap) in snapshots
+        _restore_assignment!(sol.assignments[edge], snap)
+    end
+    return nothing
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -434,7 +488,7 @@ function local_search!(
                     mode_selector,
                     rng,
                     cost_threshold,
-                    allow_reintro,
+                    false,
                     packing,
                     cost_packing,
                 )

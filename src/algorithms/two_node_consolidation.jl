@@ -193,9 +193,12 @@ function two_node_common_incremental!(
     old_paths = [copy(sol.bundle_paths[i]) for i in lifted_idxs]
     cost_before = cost(sol)
 
+    snapshots = _snapshot_multi_bundle_assignments(sol, instance, lifted_idxs)
+
     for i in lifted_idxs
         remove_bundle_path!(sol, instance, i)
     end
+    _refresh_dirty_assignments!(sol, instance, keys(snapshots))
 
     virtual_bundle, virtual_arcs = merge_bundles(instance, lifted_idxs)
 
@@ -207,9 +210,7 @@ function two_node_common_incremental!(
     new_sub_path = trace_path(parents, src, dst)
 
     if isempty(new_sub_path)
-        for (k, i) in enumerate(lifted_idxs)
-            add_bundle_path!(sol, instance, i, old_paths[k]; mode_selector, packing)
-        end
+        _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0
     end
 
@@ -228,10 +229,10 @@ function two_node_common_incremental!(
     if cost_after < cost_before - 1e-6
         return cost_before - cost_after
     else
-        for (k, i) in enumerate(lifted_idxs)
+        for i in lifted_idxs
             remove_bundle_path!(sol, instance, i)
-            add_bundle_path!(sol, instance, i, old_paths[k]; mode_selector, packing)
         end
+        _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0
     end
 end
