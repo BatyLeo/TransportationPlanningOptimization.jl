@@ -188,13 +188,22 @@ end
 """
 $TYPEDSIGNATURES
 
-Attempt a single-bundle reinsertion. Snapshot the bundle's assignment state,
-remove its path, recompute the cost matrix against the now-bundle-less
-solution, run Dijkstra, and accept the new path only if its net cost delta
-is strictly negative (improvement greater than `1e-6`). When no improvement
-is found (including same-path iterations), restore from the snapshot instead
-of re-running FFD repack. Returns the cost improvement (non-negative
-`Float64`).
+Attempt a single-bundle reinsertion. Compute the cost matrix against the
+current solution (with the bundle still in place), run Dijkstra, and compare
+the new path to the old one. When Dijkstra returns the same path (87-89% of
+iterations) or no path, return immediately with no side effects. When a
+different path is found, snapshot the bundle's assignment state, remove the
+old path, add the new path with full FFD repack, and accept only if the net
+cost delta is strictly negative (improvement greater than `1e-6`). Returns
+the cost improvement (non-negative `Float64`).
+
+The cost matrix sees the unmodified solution (the bundle's commodities are
+still in the assignments). On old-path edges this overestimates the
+incremental cost via `frozen_incremental_cost!`, since the bins already
+contain the bundle. This is a deliberate trade-off: same-path iterations
+(the vast majority) skip snapshot, removal, and restore entirely, while
+solution quality is preserved by the exact accept test that uses
+`add_bundle_path!` with `:ffd_union` packing.
 
 Used by `bundle_reinsertion_improvement!` as its per-bundle inner step and by
 `two_node_common_incremental!` (Phase 3.7) as the refine step. Bundles whose
@@ -220,9 +229,13 @@ function _try_reinsert_bundle!(
     ttg = instance.travel_time_graph
 
     old_path = copy(sol.bundle_paths[bundle_idx])
-    snapshots = _snapshot_path_assignments(sol, instance, bundle_idx)
 
-    cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
+    # Cost matrix update with assignments unmodified. On old-path edges the
+    # frozen bins still contain this bundle's commodities, which overestimates
+    # the incremental cost there. This is acceptable: the accept test below
+    # uses exact costs from add_bundle_path! with :ffd_union packing, so
+    # solution quality is preserved. The overestimate only biases Dijkstra's
+    # path selection, not the commit decision.
     update_bundle_cost_matrix!(
         sol, instance, bundle_idx, mode_selector; packing=cost_packing
     )
@@ -232,19 +245,18 @@ function _try_reinsert_bundle!(
     new_path = trace_path(parents, origin, dest)
 
     if isempty(new_path)
-        _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
         return 0.0
     end
 
-    # Canonicalize for comparison (same transform add_bundle_path! would apply)
     _remove_shortcuts_from_path!(new_path, ttg)
 
     if new_path == old_path
-        _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
         return 0.0
     end
 
-    # Different path: commit with full FFD repack
+    # Different path found: now snapshot, remove old, and try the new path.
+    snapshots = _snapshot_path_assignments(sol, instance, bundle_idx)
+    cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     cost_added = add_bundle_path!(
         sol, instance, bundle_idx, new_path; mode_selector, packing
     )

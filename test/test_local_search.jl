@@ -249,3 +249,67 @@ end
     # can only improve the cost beyond a one-pass reinsertion).
     @test cost_ls <= cost_solo + 1e-6
 end
+
+@testset "_try_reinsert_bundle! same-path does not mutate assignments" begin
+    datadir = joinpath(@__DIR__, "public")
+    (; nodes, arcs, commodities) = parse_inbound_instance(
+        joinpath(datadir, "small_nodes.csv"),
+        joinpath(datadir, "small_legs.csv"),
+        joinpath(datadir, "small_commodities.csv"),
+    )
+    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    sol = greedy_heuristic(instance)
+    # Run a full reinsertion pass to reach a local optimum where most bundles
+    # return same-path on reinsertion.
+    TPO.bundle_reinsertion_improvement!(sol, instance)
+    c_before = cost(sol)
+
+    # Snapshot all assignment states before the reinsertion attempt.
+    assignment_costs_before = Dict(edge => TPO.cost_of(a) for (edge, a) in sol.assignments)
+    assignment_sizes_before = Dict(
+        edge => a.total_size for (edge, a) in sol.assignments if a isa TPO.SingleAssignment
+    )
+
+    # Try reinserting every bundle. Most should return 0.0 (same path).
+    for i in eachindex(instance.bundles)
+        isempty(sol.bundle_paths[i]) && continue
+        improved = TPO._try_reinsert_bundle!(sol, instance, i, TPO.CheapestMode())
+        if improved == 0.0
+            # Verify no assignment was mutated.
+            for (edge, a) in sol.assignments
+                @test TPO.cost_of(a) == assignment_costs_before[edge]
+                if a isa TPO.SingleAssignment
+                    @test a.total_size == assignment_sizes_before[edge]
+                end
+            end
+        end
+    end
+
+    # Overall cost must not increase.
+    @test cost(sol) <= c_before + 1e-6
+    @test is_feasible(sol, instance)
+end
+
+@testset "_try_reinsert_bundle! cost delta matches cost(sol) change" begin
+    datadir = joinpath(@__DIR__, "public")
+    (; nodes, arcs, commodities) = parse_inbound_instance(
+        joinpath(datadir, "small_nodes.csv"),
+        joinpath(datadir, "small_legs.csv"),
+        joinpath(datadir, "small_commodities.csv"),
+    )
+    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    sol = greedy_heuristic(instance)
+
+    rng = MersenneTwister(12345)
+    n_bundles = length(instance.bundles)
+    for _ in 1:50
+        bundle_idx = rand(rng, 1:n_bundles)
+        isempty(sol.bundle_paths[bundle_idx]) && continue
+        c_before = cost(sol)
+        improved = TPO._try_reinsert_bundle!(sol, instance, bundle_idx, TPO.CheapestMode())
+        c_after = cost(sol)
+        @test improved >= -1e-9
+        @test isapprox(c_before - c_after, improved; atol=1e-3)
+        @test is_feasible(sol, instance)
+    end
+end
