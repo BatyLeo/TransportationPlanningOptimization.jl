@@ -68,8 +68,12 @@ println("Total cost: ", cost(solution))
 Pages = [
     "getting_started.md",
     "tutorials/basic_example.md",
+    "guides/algorithm_pipeline.md",
     "guides/cost_functions.md",
     "guides/forbidden_constraints.md",
+    "guides/multi_modal_arcs.md",
+    "guides/solution_io.md",
+    "guides/type_transformations.md",
     "api.md",
 ]
 Depth = 1

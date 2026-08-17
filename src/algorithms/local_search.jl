@@ -1,6 +1,38 @@
 using Random
 
 """
+$TYPEDEF
+
+Result returned by [`local_search!`](@ref).
+
+# Fields
+$TYPEDFIELDS
+"""
+struct LocalSearchResult
+    "Total cost improvement (accepted moves plus final repack)"
+    saved::Float64
+    "Cost after local search (`start_cost - saved`)"
+    final_cost::Float64
+    "Number of iterations performed"
+    n_iter::Int
+    "Final no-improvement streak length"
+    n_no_improv::Int
+    "Wall-time samples from start, taken every `sample_every` iterations"
+    timestamps::Vector{Float64}
+    "Cost snapshots at the same iteration counts as `timestamps`"
+    costs::Vector{Float64}
+    "Iteration counts at each sample"
+    iters_at_sample::Vector{Int}
+end
+
+function Base.show(io::IO, r::LocalSearchResult)
+    return print(
+        io,
+        "LocalSearchResult: saved $(round(r.saved; digits=2)) in $(r.n_iter) iterations (final cost: $(round(r.final_cost; digits=2)))",
+    )
+end
+
+"""
 $TYPEDSIGNATURES
 
 Repack every `BinPackingArcCost` assignment in `sol` using whichever of
@@ -250,7 +282,7 @@ the new path to the old one. When Dijkstra returns the same path (87-89% of
 iterations) or no path, return immediately with no side effects. When a
 different path is found, snapshot the bundle's assignment state, remove the
 old path, add the new path with full FFD repack, and accept only if the net
-cost delta is strictly negative (improvement greater than `1e-6`). Returns
+cost delta is strictly negative (improvement greater than `COST_IMPROVEMENT_EPS`). Returns
 the cost improvement (non-negative `Float64`).
 
 The cost matrix sees the unmodified solution (the bundle's commodities are
@@ -336,7 +368,7 @@ function _try_reinsert_bundle!(
         sol, instance, bundle_idx, new_path; mode_selector, packing
     )
     net_delta = cost_added + cost_removed
-    if net_delta < -1e-6
+    if net_delta < -COST_IMPROVEMENT_EPS
         return -net_delta
     end
 
@@ -352,7 +384,7 @@ $TYPEDSIGNATURES
 For each bundle in turn, remove its current path, recompute the cost matrix
 against the now-bundle-less solution, run Dijkstra, and accept the new path
 only if its net cost delta is strictly negative (improvement greater than
-`1e-6`). Otherwise restore the old path. Returns the total cost improvement
+`COST_IMPROVEMENT_EPS`). Otherwise restore the old path. Returns the total cost improvement
 (a non-negative `Float64`).
 
 Bundles whose path is already empty are skipped. The `time_limit` keyword
@@ -433,17 +465,8 @@ operations (remove/add path). The `cost_packing` keyword defaults to
 `:frozen` and controls the cost matrix estimation for Dijkstra. Frozen
 packing is cheaper (O(n_new) vs O(n_existing + n_new)) and a good estimate.
 
-Returns a `NamedTuple` with diagnostic info:
-
-- `saved::Float64`: total cost improvement (accepted moves plus final repack).
-- `final_cost::Float64`: `start_cost - saved`.
-- `n_iter::Int`: number of iterations performed.
-- `n_no_improv::Int`: final no-improvement streak length.
-- `timestamps::Vector{Float64}`: wall-time samples from `t_start`, taken every
-  `sample_every` iterations plus one at the start and one at the end.
-- `costs::Vector{Float64}`: `start_cost - tot_improv` snapshots at the same
-  iteration counts.
-- `iters_at_sample::Vector{Int}`: iteration counts at each sample.
+Returns a [`LocalSearchResult`](@ref) with diagnostic info (cost improvement,
+iteration counts, and time-series samples for plotting convergence curves).
 """
 function local_search!(
     sol::Solution,
@@ -616,11 +639,11 @@ function local_search!(
     push!(costs, start_cost - tot_improv)
     push!(iters_at_sample, iter)
 
-    return (;
-        saved=tot_improv,
-        final_cost=start_cost - tot_improv,
-        n_iter=iter,
-        n_no_improv=no_improv,
+    return LocalSearchResult(
+        tot_improv,
+        start_cost - tot_improv,
+        iter,
+        no_improv,
         timestamps,
         costs,
         iters_at_sample,

@@ -164,7 +164,7 @@ Two-node common consolidation local-search move on the arc `(src, dst)`.
 7. For each lifted bundle, splice the new `(src, dst)` sub-segment into its
    old path and re-add the bundle.
 8. (Refine step added in Phase 3.7 Task 8.)
-9. Accept iff `cost(sol) < cost_before - 1e-6`. Otherwise revert all lifted
+9. Accept iff `cost(sol) < cost_before - COST_IMPROVEMENT_EPS`. Otherwise revert all lifted
    bundles to their saved paths.
 
 Returns the cost improvement achieved (`0.0` if reverted or no lifted bundles).
@@ -230,7 +230,7 @@ function two_node_common_incremental!(
         end
     end
 
-    if cost_delta < -1e-6
+    if cost_delta < -COST_IMPROVEMENT_EPS
         return -cost_delta
     else
         for i in lifted_idxs

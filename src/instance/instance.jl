@@ -116,7 +116,8 @@ function validate_bundle_feasibility(ttg::TravelTimeGraph, bundle_idx::Int, bund
 
     # BFS to check reachability
     visited = Set{Int}()
-    queue = Int[origin_code]
+    queue = DataStructures.Deque{Int}()
+    push!(queue, origin_code)
     push!(visited, origin_code)
 
     while !isempty(queue)

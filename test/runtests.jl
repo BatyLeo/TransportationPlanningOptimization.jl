@@ -83,4 +83,7 @@ using .Inbound
             include("test_merge_sorted_slot.jl")
         end
     end
+    @testset "Quick Start" begin
+        include("test_quickstart.jl")
+    end
 end

@@ -45,83 +45,6 @@ end
 """
 $TYPEDSIGNATURES
 
-Return node metadata for `label`.
-"""
-function Base.getindex(travel_time_graph::TravelTimeGraph, label)
-    return travel_time_graph.graph[label]
-end
-
-"""
-$TYPEDSIGNATURES
-
-Return edge metadata for the edge between `label_1` and `label_2`.
-"""
-function Base.getindex(travel_time_graph::TravelTimeGraph, label_1, label_2)
-    return travel_time_graph.graph[label_1, label_2]
-end
-
-"""
-$TYPEDSIGNATURES
-
-Check if the travel-time graph has a vertex with the given `label`.
-"""
-function MetaGraphsNext.haskey(travel_time_graph::TravelTimeGraph, label)
-    return haskey(travel_time_graph.graph, label)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Check if the travel-time graph has an arc between `label_1` and `label_2`.
-"""
-function MetaGraphsNext.haskey(travel_time_graph::TravelTimeGraph, label_1, label_2)
-    return haskey(travel_time_graph.graph, label_1, label_2)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Add an arc between `u` and `v` with metadata `arc` to the travel-time graph.
-"""
-function Graphs.add_edge!(
-    travel_time_graph::TravelTimeGraph,
-    u::Tuple{String,Int},
-    v::Tuple{String,Int},
-    arc::NetworkArc,
-)
-    return Graphs.add_edge!(travel_time_graph.graph, u, v, arc)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Add a vertex with label `u` and metadata `node` to the travel-time graph.
-"""
-function Graphs.add_vertex!(
-    travel_time_graph::TravelTimeGraph, u::Tuple{String,Int}, node::NetworkNode
-)
-    return Graphs.add_vertex!(travel_time_graph.graph, u, node)
-end
-
-"""
-$TYPEDSIGNATURES
-"""
-function Graphs.has_edge(
-    travel_time_graph::TravelTimeGraph, code_1::Integer, code_2::Integer
-)
-    return Graphs.has_edge(travel_time_graph.graph, code_1, code_2)
-end
-
-"""
-$TYPEDSIGNATURES
-"""
-function Graphs.has_vertex(travel_time_graph::TravelTimeGraph, code::Integer)
-    return Graphs.has_vertex(travel_time_graph.graph, code)
-end
-
-"""
-$TYPEDSIGNATURES
-
 Get the number of vertices in the travel-time graph.
 """
 function Graphs.nv(travel_time_graph::TravelTimeGraph)
@@ -315,7 +238,8 @@ function _compute_bundle_arcs(
 
         # Find all nodes reachable from origin
         reachable_from_origin = Set{Int}()
-        queue = [origin_code]
+        queue = DataStructures.Deque{Int}()
+        push!(queue, origin_code)
         push!(reachable_from_origin, origin_code)
         while !isempty(queue)
             node = popfirst!(queue)
@@ -329,7 +253,8 @@ function _compute_bundle_arcs(
 
         # Find all nodes that can reach destination (reverse BFS)
         can_reach_destination = Set{Int}()
-        queue = [destination_code]
+        empty!(queue)
+        push!(queue, destination_code)
         push!(can_reach_destination, destination_code)
         while !isempty(queue)
             node = popfirst!(queue)

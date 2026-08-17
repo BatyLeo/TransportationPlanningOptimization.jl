@@ -249,7 +249,7 @@ function _fill_then_spill_partition(
         placed_size = 0.0
 
         for c in remaining
-            if placed_size + c.size <= cap_left + 1e-8
+            if placed_size + c.size <= cap_left + EPS
                 push!(placed, c)
                 placed_size += c.size
             else
@@ -415,7 +415,7 @@ function _mode_has_capacity(
     mode.capacity == typemax(Int) && return true
     existing_size = sum(c.size for c in existing; init=0.0)
     new_size = sum(c.size for c in new_comms; init=0.0)
-    return existing_size + new_size <= mode.capacity + 1e-8
+    return existing_size + new_size <= mode.capacity + EPS
 end
 
 function _mode_has_capacity(
@@ -423,7 +423,7 @@ function _mode_has_capacity(
 )
     mode.capacity == typemax(Int) && return true
     new_size = sum(c.size for c in new_comms; init=0.0)
-    return existing_total_size + new_size <= mode.capacity + 1e-8
+    return existing_total_size + new_size <= mode.capacity + EPS
 end
 
 function _remove_commodities_from_assignment!(

@@ -8,7 +8,7 @@ Feasibility requires:
 3. Every path must start at the bundle's designated entry node (`origin_codes`).
 4. Every path must end at the bundle's designated exit node (`destination_codes`).
 """
-function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol=1e-8)
+function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol=EPS)
     (; travel_time_graph, time_space_graph) = instance
     for (bundle_idx, path) in enumerate(sol.bundle_paths)
         if isempty(path)
@@ -154,7 +154,7 @@ function _capacity_feasible(
 )
     arc.capacity == typemax(Int) && return true
     total_size = total_size_of(assignment)
-    if total_size > arc.capacity + 1e-8
+    if total_size > arc.capacity + EPS
         verbose &&
             @warn "Arc $(arc_labels) exceeds capacity: $(total_size) > $(arc.capacity)"
         return false
@@ -168,7 +168,7 @@ function _capacity_feasible(
     for (i, (mode, slot)) in enumerate(zip(arc.modes, assignment.per_mode))
         mode.capacity == typemax(Int) && continue
         total_size = slot.total_size
-        if total_size > mode.capacity + 1e-8
+        if total_size > mode.capacity + EPS
             verbose &&
                 @warn "Arc $(arc_labels) mode $(i) exceeds capacity: $(total_size) > $(mode.capacity)"
             return false
