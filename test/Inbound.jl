@@ -103,6 +103,11 @@ function TPO.lower_bound_incremental_cost(
 ) where {C<:TPO.LightCommodity}
     return TPO.incremental_cost(c, e, n)
 end
+function TPO.incremental_cost_with_size(
+    c::CarbonArcCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
+) where {C<:TPO.LightCommodity}
+    return c.carbon_per_unit_volume * new_total_size
+end
 
 """
     StockArcCost(distance)
@@ -166,6 +171,11 @@ function TPO.lower_bound_incremental_cost(
     c::NodeVolumeCost, e::Vector{C}, n::Vector{C}
 ) where {C<:TPO.LightCommodity}
     return TPO.incremental_cost(c, e, n)
+end
+function TPO.incremental_cost_with_size(
+    c::NodeVolumeCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
+) where {C<:TPO.LightCommodity}
+    return c.volume_cost * new_total_size
 end
 
 """

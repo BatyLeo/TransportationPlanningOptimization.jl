@@ -43,6 +43,7 @@ function compute_ttg_edge_incremental_cost(
 
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
+        new_total_size = order.total_size
         total_incremental_cost += _edge_incremental_cost(
             buffer,
             arc,
@@ -50,23 +51,13 @@ function compute_ttg_edge_incremental_cost(
             order.commodities,
             mode_selector;
             packing=packing,
+            new_total_size=new_total_size,
         )
 
-        # Destination-node cost. Charged on the spatial destination of each
-        # traversed arc, matching STP's `volume_stock_cost`
-        # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
+        # Destination-node cost via fast path when available.
         node_cost = cache.node_cost_of[sv]
-        existing_at_dst_node = if existing_assignment === nothing
-            C[]
-        elseif existing_assignment isa SingleAssignment
-            # Stored vector, read-only (incremental_cost! does not mutate existing).
-            existing_assignment.commodities
-        else
-            # MultiAssignment commodities_of is a lazy flatten, so materialize it.
-            collect(commodities_of(existing_assignment))
-        end
-        total_incremental_cost += incremental_cost!(
-            buffer, node_cost, existing_at_dst_node, order.commodities
+        total_incremental_cost += incremental_cost_with_size(
+            node_cost, C[], order.commodities, new_total_size
         )
     end
 

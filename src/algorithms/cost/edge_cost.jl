@@ -42,6 +42,7 @@ function _edge_incremental_cost(
     new_comms::Vector{C},
     ::AbstractModeSelector;
     packing::Symbol=:frozen,
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     # No existing commodities: both modes pack `new` from scratch and agree.
     return incremental_cost!(buffer, arc.cost, C[], new_comms)
@@ -62,9 +63,12 @@ function _edge_incremental_cost(
     new_comms::Vector{C},
     ::AbstractModeSelector;
     packing::Symbol=:frozen,
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     if packing === :frozen
-        return _frozen_edge_incremental_cost(buffer, arc.cost, existing, new_comms)
+        return _frozen_edge_incremental_cost(
+            buffer, arc.cost, existing, new_comms, new_total_size
+        )
     end
     n_ex = existing.bins_dirty ? -1 : length(existing.bins)
     return incremental_cost!(
@@ -85,6 +89,7 @@ function _frozen_edge_incremental_cost(
     arc_f::BinPackingArcCost,
     existing::SingleAssignment{C},
     new_comms::Vector{C},
+    ::Float64=NaN,
 ) where {C<:LightCommodity}
     if existing.bins_dirty
         return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
@@ -97,12 +102,13 @@ function _frozen_edge_incremental_cost(
     arc_f::SumArcCost,
     existing::SingleAssignment{C},
     new_comms::Vector{C},
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     if existing.bins_dirty
         return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
     end
     return frozen_incremental_cost!(
-        buffer, arc_f, existing.bins, existing.commodities, new_comms
+        buffer, arc_f, existing.bins, existing.commodities, new_comms, new_total_size
     )
 end
 
@@ -111,8 +117,13 @@ function _frozen_edge_incremental_cost(
     arc_f::AbstractArcCostFunction,
     existing::SingleAssignment{C},
     new_comms::Vector{C},
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
-    # Linear and node-style costs are identical under both packing modes.
+    if !isnan(new_total_size)
+        return incremental_cost_with_size(
+            arc_f, existing.commodities, new_comms, new_total_size
+        )
+    end
     n_ex = existing.bins_dirty ? -1 : length(existing.bins)
     return incremental_cost!(
         buffer, arc_f, existing.commodities, new_comms; n_existing=n_ex
@@ -133,6 +144,7 @@ function _edge_incremental_cost(
     new_comms::Vector{C},
     ::CheapestMode;
     packing::Symbol=:frozen,
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     # No existing load: both modes pack `new` from scratch and agree.
     return minimum(
@@ -158,12 +170,17 @@ function _edge_incremental_cost(
     new_comms::Vector{C},
     ::CheapestMode;
     packing::Symbol=:frozen,
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     return minimum(
         if _mode_has_capacity(arc.modes[i], existing.per_mode[i].total_size, new_comms)
             if packing === :frozen
                 _frozen_edge_incremental_cost(
-                    buffer, arc.modes[i].cost, existing.per_mode[i], new_comms
+                    buffer,
+                    arc.modes[i].cost,
+                    existing.per_mode[i],
+                    new_comms,
+                    new_total_size,
                 )
             else
                 n_ex = if existing.per_mode[i].bins_dirty
@@ -199,6 +216,7 @@ function _edge_incremental_cost(
     new_comms::Vector{C},
     ::FillThenSpillMode;
     packing::Symbol=:frozen,
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     # FillThenSpillMode always uses ffd_union semantics (its commit re-packs too).
     empty_existing = [C[] for _ in eachindex(arc.modes)]
@@ -224,6 +242,7 @@ function _edge_incremental_cost(
     new_comms::Vector{C},
     ::FillThenSpillMode;
     packing::Symbol=:frozen,
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     # FillThenSpillMode always uses ffd_union semantics (its commit re-packs too).
     existing_per_mode = [slot.commodities for slot in existing.per_mode]

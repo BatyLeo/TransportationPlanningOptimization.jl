@@ -178,11 +178,14 @@ function frozen_incremental_cost!(
     existing_bins::AbstractVector{<:Bin},
     existing_comms::Vector{C},
     new::Vector{C},
+    new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     total = 0.0
     for t in c.terms
         if t isa BinPackingArcCost
             total += frozen_incremental_cost!(buffer, t, existing_bins, new)
+        elseif !isnan(new_total_size)
+            total += incremental_cost_with_size(t, existing_comms, new, new_total_size)
         else
             total += incremental_cost!(buffer, t, existing_comms, new)
         end
@@ -221,6 +224,38 @@ end
 ) where {C<:LightCommodity}
     return incremental_cost!(buffer, first(terms), existing, new; n_existing) +
            _sum_incremental_cost_buf(buffer, Base.tail(terms), existing, new, n_existing)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Fast path for cost functions whose incremental cost depends only on the total
+size of the new commodities (not on individual commodity attributes or on the
+existing commodities). When `new_total_size` is available (passed from
+`order.total_size`), subtypes can return the cost in O(1) without iterating
+the commodity vector.
+
+The default falls back to `incremental_cost`, ignoring `new_total_size`.
+Specialize this for any `AbstractArcCostFunction` or `AbstractNodeCostFunction`
+whose incremental cost is a function of the new total size alone (e.g. linear
+cost functions like `CarbonArcCost`, `NodeVolumeCost`).
+"""
+function incremental_cost_with_size(
+    arc_f::AbstractArcCostFunction, existing::Vector{C}, new::Vector{C}, ::Float64
+) where {C<:LightCommodity}
+    return incremental_cost(arc_f, existing, new)
+end
+
+function incremental_cost_with_size(
+    arc_f::LinearArcCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
+) where {C<:LightCommodity}
+    return arc_f.cost_per_unit_size * new_total_size
+end
+
+function incremental_cost_with_size(
+    node_f::AbstractNodeCostFunction, existing::Vector{C}, new::Vector{C}, ::Float64
+) where {C<:LightCommodity}
+    return incremental_cost(node_f, existing, new)
 end
 
 """
