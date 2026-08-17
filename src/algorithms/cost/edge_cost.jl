@@ -45,7 +45,7 @@ function _edge_incremental_cost(
     new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     # No existing commodities: both modes pack `new` from scratch and agree.
-    return incremental_cost!(buffer, arc.cost, C[], new_comms)
+    return incremental_cost!(buffer, arc.cost, _get_empty(buffer, C), new_comms)
 end
 
 """
@@ -147,9 +147,10 @@ function _edge_incremental_cost(
     new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     # No existing load: both modes pack `new` from scratch and agree.
+    empty_comms = _get_empty(buffer, C)
     return minimum(
         if _mode_has_capacity(mode, 0.0, new_comms)
-            incremental_cost!(buffer, mode.cost, C[], new_comms)
+            incremental_cost!(buffer, mode.cost, empty_comms, new_comms)
         else
             Inf
         end for mode in arc.modes

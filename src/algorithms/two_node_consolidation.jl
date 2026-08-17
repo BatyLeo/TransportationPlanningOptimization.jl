@@ -191,12 +191,15 @@ function two_node_common_incremental!(
     end
 
     old_paths = [copy(sol.bundle_paths[i]) for i in lifted_idxs]
-    cost_before = cost(sol)
 
     snapshots = _snapshot_multi_bundle_assignments(sol, instance, lifted_idxs)
 
+    # Track cost deltas from remove/add/refine to avoid calling cost(sol)
+    # twice. _refresh_dirty_assignments! materializes bins but does not
+    # change slot.cost, so its delta is zero.
+    cost_delta = 0.0
     for i in lifted_idxs
-        remove_bundle_path!(sol, instance, i)
+        cost_delta += remove_bundle_path!(sol, instance, i)
     end
     _refresh_dirty_assignments!(sol, instance, keys(snapshots))
 
@@ -206,7 +209,7 @@ function two_node_common_incremental!(
         sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing=cost_packing
     )
     ttg = instance.travel_time_graph
-    parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix)
+    parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst)
     new_sub_path = trace_path(parents, src, dst)
 
     if isempty(new_sub_path)
@@ -216,18 +219,19 @@ function two_node_common_incremental!(
 
     for (k, i) in enumerate(lifted_idxs)
         new_path = splice_path(old_paths[k], src, dst, new_sub_path)
-        add_bundle_path!(sol, instance, i, new_path; mode_selector, packing)
+        cost_delta += add_bundle_path!(sol, instance, i, new_path; mode_selector, packing)
     end
 
     if refine
         for i in Random.shuffle(lifted_idxs)
-            _try_reinsert_bundle!(sol, instance, i, mode_selector; packing, cost_packing)
+            cost_delta -= _try_reinsert_bundle!(
+                sol, instance, i, mode_selector; packing, cost_packing
+            )
         end
     end
 
-    cost_after = cost(sol)
-    if cost_after < cost_before - 1e-6
-        return cost_before - cost_after
+    if cost_delta < -1e-6
+        return -cost_delta
     else
         for i in lifted_idxs
             remove_bundle_path!(sol, instance, i)

@@ -38,6 +38,8 @@ struct BinPackingBuffer{T<:Real}
     remaining_capacities::Vector{T}
     "scratch for the existing run's sizes, sorted descending"
     existing_sizes::Vector{T}
+    "lazily cached empty commodity vector (avoids per-arc allocation in the LS hot path)"
+    _cached_empty::Ref{Any}
 end
 
 """
@@ -46,7 +48,23 @@ $TYPEDSIGNATURES
 Construct an empty `BinPackingBuffer`.
 """
 function BinPackingBuffer(::Type{T}=Float64) where {T<:Real}
-    return BinPackingBuffer{T}(T[], T[])
+    return BinPackingBuffer{T}(T[], T[], Ref{Any}(nothing))
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return a cached empty `Vector{C}` from `buffer`, allocating it only on the
+first call for each commodity type `C`. Avoids the per-arc `C[]` allocation
+that otherwise dominates the LS hot path (~6,000 tiny vectors per cost matrix
+update).
+"""
+@inline function _get_empty(buffer::BinPackingBuffer, ::Type{C}) where {C}
+    v = buffer._cached_empty[]
+    v isa Vector{C} && return v::Vector{C}
+    new_v = C[]
+    buffer._cached_empty[] = new_v
+    return new_v
 end
 
 # Init and get remaining capacity vector: a buffer-owned one (cleared) or a fresh one.
@@ -381,11 +399,11 @@ function frozen_incremental_count!(
     @boundscheck _commodities_is_desc(new) ||
         throw(ArgumentError("`new` must be sorted descending by `.size`"))
 
-    empty!(buffer.remaining_capacities)
-    for b in existing_bins
-        push!(buffer.remaining_capacities, b.remaining_capacity)
+    n_frozen = length(existing_bins)
+    resize!(buffer.remaining_capacities, n_frozen)
+    @inbounds for i in 1:n_frozen
+        buffer.remaining_capacities[i] = existing_bins[i].remaining_capacity
     end
-    n_frozen = length(buffer.remaining_capacities)
 
     _ffd_place_commodities!(buffer.remaining_capacities, new, bin_capacity)
     return length(buffer.remaining_capacities) - n_frozen
@@ -407,10 +425,11 @@ function frozen_first_fit_add!(
     bins::Vector{Bin{C}}, bin_capacity::Float64, new::Vector{C}
 ) where {C<:LightCommodity}
     isempty(new) && return bins
-    sorted_new = sort(new; by=c -> c.size, rev=true)
-    _check_oversize(sorted_new[1].size, bin_capacity)
+    @boundscheck _commodities_is_desc(new) ||
+        throw(ArgumentError("`new` must be sorted descending by `.size`"))
+    _check_oversize(new[1].size, bin_capacity)
     caps = [b.remaining_capacity for b in bins]
-    for c in sorted_new
+    for c in new
         idx = _first_fit_index(caps, c.size)
         if idx > 0
             push!(bins[idx].commodities, c)

@@ -104,26 +104,27 @@ function incremental_cost!(
         throw(ArgumentError("`new` must be sorted descending by `.size`"))
     cap = Float64(arc_f.bin_capacity)
 
+    # Fast path: no existing commodities, skip the merge and FFD-place directly.
+    if isempty(existing)
+        empty!(buffer.remaining_capacities)
+        _ffd_place_commodities!(buffer.remaining_capacities, new, cap)
+        return arc_f.cost_per_bin * length(buffer.remaining_capacities)
+    end
+
     # Existing run sizes, descending — materialized into `existing_sizes` so the
     # merge's hot loop reads from a tightly packed `Vector{Float64}`. Validated
     # against the descending invariant in debug builds.
-    if isempty(existing)
-        empty!(buffer.existing_sizes)
-    else
-        @boundscheck _commodities_is_desc(existing) ||
-            throw(ArgumentError("`existing` must be sorted descending by `.size`"))
-        resize!(buffer.existing_sizes, length(existing))
-        @inbounds for (i, c) in enumerate(existing)
-            buffer.existing_sizes[i] = c.size
-        end
+    @boundscheck _commodities_is_desc(existing) ||
+        throw(ArgumentError("`existing` must be sorted descending by `.size`"))
+    resize!(buffer.existing_sizes, length(existing))
+    @inbounds for (i, c) in enumerate(existing)
+        buffer.existing_sizes[i] = c.size
     end
 
     # When the caller passes `n_existing` (= `length(assignment.bins)`),
     # skip the standalone FFD-on-existing pass and trust the cached value.
     n_ex = if n_existing >= 0
         n_existing
-    elseif isempty(existing)
-        0
     else
         ffd_count!(buffer, cap, buffer.existing_sizes)
     end

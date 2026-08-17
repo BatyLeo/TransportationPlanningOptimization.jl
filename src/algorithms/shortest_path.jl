@@ -10,9 +10,18 @@ priority queue even when the edge cost is `Inf`, which is wasteful when only
 a small fraction of edges (the current bundle's arcs) carry finite costs.
 This version skips `Inf` edges entirely, reducing the number of priority
 queue operations from O(V) to O(bundle_arcs).
+
+When `dst > 0`, the search terminates as soon as `dst` is settled (popped
+from the heap with its final distance). The returned `parents` and `dists`
+are only populated for nodes settled before (and including) `dst`. This is
+sufficient for `trace_path(parents, src, dst)` and avoids exploring arcs
+beyond the destination.
 """
 function bundle_dijkstra(
-    graph::Graphs.AbstractGraph, src::Int, cost_matrix::SparseMatrixCSC{Float64,Int}
+    graph::Graphs.AbstractGraph,
+    src::Int,
+    cost_matrix::SparseMatrixCSC{Float64,Int};
+    dst::Int=0,
 )
     n = Graphs.nv(graph)
     dists = fill(Inf, n)
@@ -27,6 +36,7 @@ function bundle_dijkstra(
     while !isempty(heap)
         d_u, u = pop!(heap)
         d_u > dists[u] && continue
+        dst > 0 && u == dst && break
 
         for v in Graphs.outneighbors(graph, u)
             w = cost_matrix[u, v]

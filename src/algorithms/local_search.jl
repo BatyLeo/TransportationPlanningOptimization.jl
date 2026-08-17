@@ -156,12 +156,14 @@ function _restore_assignment!(a::MultiAssignment, snap::_MultiAssignmentSnapshot
     return nothing
 end
 
+const _SnapshotUnion{C} = Union{_SingleAssignmentSnapshot{C},_MultiAssignmentSnapshot{C}}
+
 function _snapshot_path_assignments(
     sol::Solution{C}, instance::Instance, bundle_idx::Int
 ) where {C}
     path = sol.bundle_paths[bundle_idx]
     bundle = instance.bundles[bundle_idx]
-    snapshots = Dict{Tuple{Int,Int},Any}()
+    snapshots = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
     for order in bundle.orders
         for k in 1:(length(path) - 1)
             u_tsg = project_to_time_space_graph(path[k], order, instance)
@@ -188,7 +190,7 @@ end
 function _snapshot_multi_bundle_assignments(
     sol::Solution{C}, instance::Instance, bundle_idxs::Vector{Int}
 ) where {C}
-    snapshots = Dict{Tuple{Int,Int},Any}()
+    snapshots = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
     for bi in bundle_idxs
         path = sol.bundle_paths[bi]
         bundle = instance.bundles[bi]
@@ -278,24 +280,41 @@ function _try_reinsert_bundle!(
     mode_selector::AbstractModeSelector;
     packing::Symbol=:ffd_union,
     cost_packing::Symbol=:frozen,
+    buffer::BinPackingBuffer=BinPackingBuffer(),
+    bundle_adj::Union{Dict{Int,Vector{Int}},Nothing}=nothing,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
+    origin = ttg.origin_codes[bundle_idx]
+    dest = ttg.destination_codes[bundle_idx]
 
-    old_path = copy(sol.bundle_paths[bundle_idx])
-
-    # Cost matrix update with assignments unmodified. On old-path edges the
-    # frozen bins still contain this bundle's commodities, which overestimates
-    # the incremental cost there. This is acceptable: the accept test below
+    # When a pre-computed adjacency list is available, use lazy cost
+    # evaluation: compute edge costs on-demand as Dijkstra settles each
+    # node, stopping at the destination. On old-path edges the frozen bins
+    # still contain this bundle's commodities, which overestimates the
+    # incremental cost there. This is acceptable: the accept test below
     # uses exact costs from add_bundle_path! with :ffd_union packing, so
     # solution quality is preserved. The overestimate only biases Dijkstra's
     # path selection, not the commit decision.
-    update_bundle_cost_matrix!(
-        sol, instance, bundle_idx, mode_selector; packing=cost_packing
-    )
-    origin = ttg.origin_codes[bundle_idx]
-    dest = ttg.destination_codes[bundle_idx]
-    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+    parents = if bundle_adj !== nothing
+        _lazy_bundle_dijkstra!(
+            sol,
+            instance,
+            bundle_idx,
+            origin,
+            dest,
+            mode_selector,
+            buffer,
+            bundle_adj;
+            packing=cost_packing,
+        )
+    else
+        update_bundle_cost_matrix!(
+            sol, instance, bundle_idx, mode_selector; packing=cost_packing
+        )
+        p, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=dest)
+        p
+    end
     new_path = trace_path(parents, origin, dest)
 
     if isempty(new_path)
@@ -304,11 +323,13 @@ function _try_reinsert_bundle!(
 
     _remove_shortcuts_from_path!(new_path, ttg)
 
-    if new_path == old_path
+    # Compare against current path without copying (copy only when needed).
+    if new_path == sol.bundle_paths[bundle_idx]
         return 0.0
     end
 
     # Different path found: now snapshot, remove old, and try the new path.
+    old_path = copy(sol.bundle_paths[bundle_idx])
     snapshots = _snapshot_path_assignments(sol, instance, bundle_idx)
     cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     cost_added = add_bundle_path!(
@@ -460,6 +481,39 @@ function local_search!(
     costs = Float64[start_cost]
     iters_at_sample = Int[0]
 
+    # Active candidate set with arc-level dirty tracking. Pre-compute a
+    # reverse mapping from spatial arcs to bundles so that after a successful
+    # move, only bundles sharing the moved bundle's affected arcs are
+    # re-added as candidates (instead of rebuilding all candidates).
+    n_bundles = length(instance.bundles)
+    reintro_candidates = Int[]
+    in_candidates = falses(n_bundles)
+    clean = falses(n_bundles)
+    spatial_to_bundles = Dict{Tuple{Int,Int},Vector{Int}}()
+    shared_buffer = BinPackingBuffer()
+    # Pre-compute per-bundle adjacency lists from bundle_arcs. These are
+    # static (independent of the solution) and reused across all lazy
+    # Dijkstra calls to avoid per-reinsertion Dict construction.
+    bundle_adjs = Vector{Dict{Int,Vector{Int}}}(undef, n_bundles)
+
+    if can_reintro
+        spatial_to_bundles = _build_spatial_to_bundles(instance)
+        ttg = instance.travel_time_graph
+        for i in 1:n_bundles
+            adj = Dict{Int,Vector{Int}}()
+            for (u, v) in ttg.bundle_arcs[i]
+                push!(get!(adj, u, Int[]), v)
+            end
+            bundle_adjs[i] = adj
+            if !isempty(sol.bundle_paths[i])
+                push!(reintro_candidates, i)
+                in_candidates[i] = true
+            end
+        end
+    end
+
+    dirty_pass_had_improvement = false
+
     if can_reintro || can_consolidate
         while (time() - t_start < time_limit) &&
                   (iter < max_iter) &&
@@ -470,8 +524,29 @@ function local_search!(
                 can_reintro
             end
 
-            improved = if take_reintro
-                _run_reintro_step!(
+            # When no reinsertion candidates remain: if any improvement
+            # was found during the dirty pass, rebuild all candidates to
+            # catch multi-pass chained improvements. Otherwise fall
+            # through to consolidation.
+            if take_reintro && isempty(reintro_candidates)
+                if dirty_pass_had_improvement
+                    fill!(clean, false)
+                    fill!(in_candidates, false)
+                    for i in 1:n_bundles
+                        if !isempty(sol.bundle_paths[i])
+                            push!(reintro_candidates, i)
+                            in_candidates[i] = true
+                        end
+                    end
+                    dirty_pass_had_improvement = false
+                end
+                if isempty(reintro_candidates) && can_consolidate
+                    take_reintro = false
+                end
+            end
+
+            improved = if take_reintro && !isempty(reintro_candidates)
+                _run_reintro_step_from_candidates!(
                     sol,
                     instance,
                     mode_selector,
@@ -479,8 +554,14 @@ function local_search!(
                     cost_threshold,
                     packing,
                     cost_packing,
+                    reintro_candidates,
+                    in_candidates,
+                    clean,
+                    spatial_to_bundles,
+                    shared_buffer,
+                    bundle_adjs,
                 )
-            else
+            elseif can_consolidate
                 _run_two_node_step!(
                     sol,
                     instance,
@@ -492,6 +573,25 @@ function local_search!(
                     packing,
                     cost_packing,
                 )
+            else
+                0.0
+            end
+
+            if improved >= 1.0 && take_reintro
+                dirty_pass_had_improvement = true
+            elseif improved >= 1.0 && !take_reintro
+                # Consolidation success: conservatively mark all clean
+                # bundles as dirty (consolidation can affect many arcs).
+                fill!(clean, false)
+                empty!(reintro_candidates)
+                fill!(in_candidates, false)
+                for i in 1:n_bundles
+                    if !isempty(sol.bundle_paths[i])
+                        push!(reintro_candidates, i)
+                        in_candidates[i] = true
+                    end
+                end
+                dirty_pass_had_improvement = false
             end
 
             tot_improv += improved
@@ -530,6 +630,173 @@ end
 """
 $TYPEDSIGNATURES
 
+Combined cost computation and Dijkstra for a single bundle reinsertion.
+Instead of pre-computing costs for all bundle arcs and then running Dijkstra,
+this evaluates edge costs on-demand as Dijkstra settles each node and stops
+as soon as the destination is reached. Only arcs on the shortest path tree
+up to the destination are evaluated, roughly halving the number of cost
+computations compared to the pre-compute-all approach.
+
+Returns the `parents` vector (for use with `trace_path`).
+"""
+function _lazy_bundle_dijkstra!(
+    sol::Solution{C},
+    instance::Instance,
+    bundle_idx::Int,
+    origin::Int,
+    dest::Int,
+    mode_selector::AbstractModeSelector,
+    buffer::BinPackingBuffer,
+    bundle_adj::Dict{Int,Vector{Int}};
+    packing::Symbol=:frozen,
+) where {C}
+    ttg = instance.travel_time_graph
+    cache = instance.index_cache
+    bundle = instance.bundles[bundle_idx]
+
+    # Convert forbidden sets to integer codes once (skip when empty,
+    # which is the common case for inbound instances).
+    ng = instance.network_graph.graph
+    has_forbidden = !isempty(bundle.forbidden_nodes) || !isempty(bundle.forbidden_arcs)
+    fn_codes = if has_forbidden
+        Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
+    else
+        Set{Int}()
+    end
+    fa_codes = if has_forbidden
+        Set{Tuple{Int,Int}}(
+            (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
+            (u, v) in bundle.forbidden_arcs
+        )
+    else
+        Set{Tuple{Int,Int}}()
+    end
+
+    n = Graphs.nv(ttg.graph)
+    dists = fill(Inf, n)
+    parents = zeros(Int, n)
+    dists[origin] = 0.0
+
+    heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
+    push!(heap, (0.0, origin))
+
+    while !isempty(heap)
+        d_u, u = pop!(heap)
+        d_u > dists[u] && continue
+        u == dest && break
+
+        su = cache.ttg_spatial[u]
+        for v in get(bundle_adj, u, Int[])
+            sv = cache.ttg_spatial[v]
+
+            if su == sv
+                alt = d_u
+            else
+                if has_forbidden &&
+                    ((su, sv) in fa_codes || su in fn_codes || sv in fn_codes)
+                    continue
+                end
+                w = compute_ttg_edge_incremental_cost(
+                    sol, instance, bundle, u, v, mode_selector; buffer, packing
+                )
+                alt = d_u + w
+            end
+            if alt < dists[v]
+                dists[v] = alt
+                parents[v] = u
+                push!(heap, (alt, v))
+            end
+        end
+    end
+
+    return parents
+end
+
+function _rebuild_reintro_candidates!(candidates::Vector{Int}, sol::Solution)
+    empty!(candidates)
+    for i in eachindex(sol.bundle_paths)
+        isempty(sol.bundle_paths[i]) || push!(candidates, i)
+    end
+    return candidates
+end
+
+"""
+$TYPEDSIGNATURES
+
+Pre-compute a mapping from each spatial arc `(su, sv)` to the bundle indices
+whose reachable TTG arcs project to that spatial arc. This is a static
+property of the instance (independent of the current solution) and enables
+targeted dirty-marking after a successful LS move: instead of re-evaluating
+all bundles, only those sharing an affected spatial arc are re-added to the
+candidate set.
+"""
+function _build_spatial_to_bundles(instance::Instance)
+    cache = instance.index_cache
+    ttg = instance.travel_time_graph
+    spatial_to_bundles = Dict{Tuple{Int,Int},Vector{Int}}()
+    for (bi, arcs) in enumerate(ttg.bundle_arcs)
+        seen = Set{Tuple{Int,Int}}()
+        for (u, v) in arcs
+            su = cache.ttg_spatial[u]
+            sv = cache.ttg_spatial[v]
+            su == sv && continue
+            key = (su, sv)
+            key in seen && continue
+            push!(seen, key)
+            if !haskey(spatial_to_bundles, key)
+                spatial_to_bundles[key] = Int[]
+            end
+            push!(spatial_to_bundles[key], bi)
+        end
+    end
+    return spatial_to_bundles
+end
+
+"""
+$TYPEDSIGNATURES
+
+After a successful reinsertion of `moved_bundle`, mark the bundles that share
+spatial arcs with the old or new path as dirty (needing re-evaluation). Only
+clean bundles are affected: dirty bundles are already in the candidate set.
+"""
+function _mark_dirty_after_move!(
+    candidates::Vector{Int},
+    in_candidates::BitVector,
+    clean::BitVector,
+    old_path::Vector{Int},
+    new_path::Vector{Int},
+    cache,
+    sol::Solution,
+    spatial_to_bundles::Dict{Tuple{Int,Int},Vector{Int}},
+    moved_bundle::Int,
+)
+    for path in (old_path, new_path)
+        for i in 1:(length(path) - 1)
+            su = cache.ttg_spatial[path[i]]
+            sv = cache.ttg_spatial[path[i + 1]]
+            su == sv && continue
+            for bi in get(spatial_to_bundles, (su, sv), Int[])
+                if clean[bi]
+                    clean[bi] = false
+                    if !in_candidates[bi] && !isempty(sol.bundle_paths[bi])
+                        push!(candidates, bi)
+                        in_candidates[bi] = true
+                    end
+                end
+            end
+        end
+    end
+    clean[moved_bundle] = false
+    if !in_candidates[moved_bundle] && !isempty(sol.bundle_paths[moved_bundle])
+        push!(candidates, moved_bundle)
+        in_candidates[moved_bundle] = true
+    end
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
 One bundle-reintroduction step: pick a random bundle, skip it if its path is
 empty or its `bundle_estimated_removal_cost` is below `cost_threshold`,
 otherwise delegate to `_try_reinsert_bundle!`. Returns the per-step cost
@@ -555,6 +822,91 @@ function _run_reintro_step!(
     return _try_reinsert_bundle!(
         sol, instance, bundle_idx, mode_selector; packing, cost_packing
     )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Candidate-set variant of `_run_reintro_step!` with arc-level dirty tracking.
+Picks a random bundle from `candidates`, runs `_try_reinsert_bundle!`, and
+removes the bundle from `candidates` when Dijkstra returns the same path (no
+better route exists under the current assignment state). Bundles with empty
+paths or below the cost threshold are also removed.
+
+When a move succeeds, only bundles sharing spatial arcs with the moved
+bundle's old/new paths are re-added to `candidates` (targeted dirty marking).
+This avoids the full candidate rebuild that would otherwise re-evaluate every
+bundle after each improvement.
+"""
+function _run_reintro_step_from_candidates!(
+    sol::Solution,
+    instance::Instance,
+    mode_selector::AbstractModeSelector,
+    rng::Random.AbstractRNG,
+    cost_threshold::Float64,
+    packing::Symbol,
+    cost_packing::Symbol,
+    candidates::Vector{Int},
+    in_candidates::BitVector,
+    clean::BitVector,
+    spatial_to_bundles::Dict{Tuple{Int,Int},Vector{Int}},
+    buffer::BinPackingBuffer,
+    bundle_adjs::Vector{Dict{Int,Vector{Int}}},
+)
+    isempty(candidates) && return 0.0
+    idx = rand(rng, 1:length(candidates))
+    bundle_idx = candidates[idx]
+
+    if isempty(sol.bundle_paths[bundle_idx])
+        _swap_remove!(candidates, in_candidates, idx)
+        return 0.0
+    end
+    if cost_threshold > 0 &&
+        bundle_estimated_removal_cost(sol, instance, bundle_idx) <= cost_threshold
+        return 0.0
+    end
+
+    # Keep a reference to the current path vector. _try_reinsert_bundle!
+    # replaces it only when Dijkstra finds a different path (accepted or
+    # rejected-then-rolled-back via copy). Same-path returns leave the
+    # reference unchanged, so identity comparison detects that case.
+    # On success, path_ref still holds the original (old) path contents.
+    path_ref = sol.bundle_paths[bundle_idx]
+    improved = _try_reinsert_bundle!(
+        sol,
+        instance,
+        bundle_idx,
+        mode_selector;
+        packing,
+        cost_packing,
+        buffer,
+        bundle_adj=bundle_adjs[bundle_idx],
+    )
+    if improved < 1.0 && sol.bundle_paths[bundle_idx] === path_ref
+        _swap_remove!(candidates, in_candidates, idx)
+        clean[bundle_idx] = true
+    elseif improved >= 1.0
+        _mark_dirty_after_move!(
+            candidates,
+            in_candidates,
+            clean,
+            path_ref,
+            sol.bundle_paths[bundle_idx],
+            instance.index_cache,
+            sol,
+            spatial_to_bundles,
+            bundle_idx,
+        )
+    end
+    return improved
+end
+
+function _swap_remove!(v::Vector{Int}, in_v::BitVector, idx::Int)
+    old = v[idx]
+    v[idx] = v[end]
+    pop!(v)
+    in_v[old] = false
+    return v
 end
 
 """

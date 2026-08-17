@@ -25,7 +25,7 @@ function insert_bundle!(
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]
 
-    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix)
+    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=destination)
     path = trace_path(parents, origin, destination)
 
     if isempty(path)
