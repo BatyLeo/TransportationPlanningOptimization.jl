@@ -146,6 +146,24 @@ function _assignment_commodity_count(a::MultiAssignment)
     return sum(length(slot.commodities) for slot in a.per_mode; init=0)
 end
 
+# --- Pre-allocated Dijkstra workspace (avoids per-call array allocation) ---
+
+struct DijkstraWorkspace
+    dists::Vector{Float64}
+    parents::Vector{Int}
+end
+
+function DijkstraWorkspace(n::Int)
+    return DijkstraWorkspace(Vector{Float64}(undef, n), Vector{Int}(undef, n))
+end
+
+function _reset_workspace!(ws::DijkstraWorkspace, origin::Int)
+    fill!(ws.dists, Inf)
+    fill!(ws.parents, 0)
+    ws.dists[origin] = 0.0
+    return ws
+end
+
 # --- Snapshot helpers for assignment state (used by _try_reinsert_bundle!) ---
 
 struct _SingleAssignmentSnapshot{C<:LightCommodity}
@@ -304,6 +322,7 @@ function _try_reinsert_bundle!(
     buffer::BinPackingBuffer=BinPackingBuffer(),
     bundle_adj::Union{Dict{Int,Vector{Int}},Nothing}=nothing,
     remove_before_routing::Bool=true,
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
@@ -319,15 +338,9 @@ function _try_reinsert_bundle!(
 
     parents = if bundle_adj !== nothing
         _lazy_bundle_dijkstra!(
-            sol,
-            instance,
-            bundle_idx,
-            origin,
-            dest,
-            mode_selector,
-            buffer,
-            bundle_adj;
-            packing=cost_packing,
+            sol, instance, bundle_idx, origin, dest,
+            mode_selector, buffer, bundle_adj;
+            packing=cost_packing, workspace,
         )
     else
         update_bundle_cost_matrix!(
@@ -506,6 +519,8 @@ function local_search!(
     # static (independent of the solution) and reused across all lazy
     # Dijkstra calls to avoid per-reinsertion Dict construction.
     bundle_adjs = Vector{Dict{Int,Vector{Int}}}(undef, n_bundles)
+    n_ttg_nodes = Graphs.nv(ttg.graph)
+    workspace = DijkstraWorkspace(n_ttg_nodes)
 
     if can_reintro
         ttg = instance.travel_time_graph
@@ -539,6 +554,7 @@ function local_search!(
                     cost_packing;
                     buffer=shared_buffer,
                     bundle_adjs,
+                    workspace,
                 )
             elseif can_consolidate
                 _run_two_node_step!(
@@ -550,7 +566,10 @@ function local_search!(
                     cost_threshold,
                     can_reintro,
                     packing,
-                    cost_packing,
+                    cost_packing;
+                    bundle_adjs,
+                    buffer=shared_buffer,
+                    workspace,
                 )
             else
                 0.0
@@ -611,6 +630,7 @@ function _lazy_bundle_dijkstra!(
     buffer::BinPackingBuffer,
     bundle_adj::Dict{Int,Vector{Int}};
     packing::Symbol=:frozen,
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
 ) where {C}
     ttg = instance.travel_time_graph
     cache = instance.index_cache
@@ -634,10 +654,16 @@ function _lazy_bundle_dijkstra!(
         Set{Tuple{Int,Int}}()
     end
 
-    n = Graphs.nv(ttg.graph)
-    dists = fill(Inf, n)
-    parents = zeros(Int, n)
-    dists[origin] = 0.0
+    if workspace !== nothing
+        _reset_workspace!(workspace, origin)
+        dists = workspace.dists
+        parents = workspace.parents
+    else
+        n = Graphs.nv(ttg.graph)
+        dists = fill(Inf, n)
+        parents = zeros(Int, n)
+        dists[origin] = 0.0
+    end
 
     heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
     push!(heap, (0.0, origin))
@@ -774,6 +800,7 @@ function _run_reintro_step!(
     cost_packing::Symbol;
     buffer::BinPackingBuffer=BinPackingBuffer(),
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
 )
     n = length(instance.bundles)
     n == 0 && return 0.0
@@ -786,7 +813,7 @@ function _run_reintro_step!(
     bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[bundle_idx]
     return _try_reinsert_bundle!(
         sol, instance, bundle_idx, mode_selector; packing, cost_packing, buffer,
-        bundle_adj,
+        bundle_adj, workspace,
     )
 end
 
@@ -893,7 +920,10 @@ function _run_two_node_step!(
     cost_threshold::Float64,
     refine::Bool,
     packing::Symbol,
-    cost_packing::Symbol,
+    cost_packing::Symbol;
+    bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
+    buffer::BinPackingBuffer=BinPackingBuffer(),
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
 )
     isempty(valid_pairs) && return 0.0
     (src, dst) = rand(rng, valid_pairs)
@@ -907,5 +937,8 @@ function _run_two_node_step!(
         refine,
         packing,
         cost_packing,
+        bundle_adjs,
+        buffer,
+        workspace,
     )
 end

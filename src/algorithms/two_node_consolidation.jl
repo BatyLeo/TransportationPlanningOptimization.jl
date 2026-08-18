@@ -179,6 +179,9 @@ function two_node_common_incremental!(
     refine::Bool=true,
     packing::Symbol=:ffd_union,
     cost_packing::Symbol=:frozen,
+    bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
+    buffer::BinPackingBuffer=BinPackingBuffer(),
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
 )
     lifted_idxs = bundles_through_arc(sol, src, dst)
     isempty(lifted_idxs) && return 0.0
@@ -224,6 +227,7 @@ function two_node_common_incremental!(
 
     if refine
         for i in Random.shuffle(lifted_idxs)
+            bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[i]
             cost_delta -= _try_reinsert_bundle!(
                 sol,
                 instance,
@@ -232,6 +236,9 @@ function two_node_common_incremental!(
                 packing,
                 cost_packing,
                 remove_before_routing=false,
+                bundle_adj,
+                buffer,
+                workspace,
             )
         end
     end
