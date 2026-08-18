@@ -82,6 +82,27 @@ using .Inbound
         @testset "Merge sorted slot" begin
             include("test_merge_sorted_slot.jl")
         end
+        @testset "Cost scaling" begin
+            include("test_cost_scaling.jl")
+        end
+        @testset "ILS types" begin
+            include("test_ils_types.jl")
+        end
+        @testset "Snapshot" begin
+            include("test_snapshot.jl")
+        end
+        @testset "Slope scaling" begin
+            include("test_slope_scaling.jl")
+        end
+        @testset "ILS loop" begin
+            include("test_ils_loop.jl")
+        end
+        @testset "Large local search" begin
+            include("test_large_local_search.jl")
+        end
+        @testset "ILS integration" begin
+            include("test_ils_integration.jl")
+        end
     end
     @testset "Quick Start" begin
         include("test_quickstart.jl")

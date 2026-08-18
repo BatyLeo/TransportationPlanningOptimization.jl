@@ -59,6 +59,13 @@ function compute_ttg_edge_incremental_cost(
         )
     end
 
+    if !isempty(instance.travel_time_graph.cost_scaling)
+        su = cache.ttg_spatial[u_ttg_code]
+        sv = cache.ttg_spatial[v_ttg_code]
+        factor = get(instance.travel_time_graph.cost_scaling, (su, sv), 1.0)
+        total_incremental_cost *= factor
+    end
+
     return total_incremental_cost
 end
 

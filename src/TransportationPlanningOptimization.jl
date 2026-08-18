@@ -58,6 +58,13 @@ include("algorithms/local_search.jl")
 include("algorithms/two_node_consolidation.jl")
 include("algorithms/solve.jl")
 
+include("algorithms/ils/perturbation.jl")
+include("algorithms/ils/config.jl")
+include("algorithms/ils/snapshot.jl")
+include("algorithms/ils/large_local_search.jl")
+include("algorithms/ils/slope_scaling.jl")
+include("algorithms/ils/iterated_local_search.jl")
+
 # Types
 export LightCommodity, Commodity, Order, Bundle, Instance
 export NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
@@ -83,6 +90,14 @@ export write_solution_csv, read_solution_csv
 export greedy_heuristic, lower_bound, lower_bound_filtering
 export mix_greedy_and_lower_bound, local_search!, solve_filtered
 export LocalSearchResult
+
+# ILS framework
+export AbstractPerturbation, perturbate!
+export ILSConfig, ILSResult
+export snapshot_solution, restore_solution!
+export large_local_search!
+export slope_scaling_update!
+export iterated_local_search!
 
 """
     gurobi_optimizer()

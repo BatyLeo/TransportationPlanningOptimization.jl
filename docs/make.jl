@@ -29,7 +29,7 @@ makedocs(;
         canonical="https://BatyLeo.github.io/TransportationPlanningOptimization.jl",
         edit_link="main",
         assets=String[],
-        size_threshold=400 * 1024,
+        size_threshold=600 * 1024,
     ),
     pages=[
         "Home" => "index.md",

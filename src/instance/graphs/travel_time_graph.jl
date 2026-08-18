@@ -29,6 +29,8 @@ struct TravelTimeGraph{is_date_arrival,G<:MetaGraph}
     destination_codes::Vector{Int}
     "arcs usable for each bundle to ease looping through them"
     bundle_arcs::Vector{Vector{Tuple{Int,Int}}}
+    "Per spatial-arc cost scaling factors for ILS slope scaling. Empty by default."
+    cost_scaling::Dict{Tuple{Int,Int},Float64}
 end
 
 function Base.show(io::IO, g::TravelTimeGraph{is_date_arrival}) where {is_date_arrival}
@@ -366,6 +368,12 @@ function TravelTimeGraph(
     bundle_arcs = _compute_bundle_arcs(graph, origin_codes, destination_codes)
 
     return TravelTimeGraph{is_date_arrival,typeof(graph)}(
-        graph, max_time_steps, cost_matrix, origin_codes, destination_codes, bundle_arcs
+        graph,
+        max_time_steps,
+        cost_matrix,
+        origin_codes,
+        destination_codes,
+        bundle_arcs,
+        Dict{Tuple{Int,Int},Float64}(),
     )
 end
