@@ -40,8 +40,8 @@ end
 $TYPEDSIGNATURES
 
 Construct a solution by inserting bundles one by one into an initially empty solution.
-Bundles are processed in decreasing order of total size, so the heaviest bundles claim
-their preferred paths first.
+Bundles are processed in decreasing order of their largest single-commodity size
+(matching STP's `maxPackSize`), so bundles with the hardest-to-pack items go first.
 
 # Keyword arguments
 - `mode_selector::AbstractModeSelector = CheapestMode()`: strategy that decides how

@@ -11,20 +11,25 @@ nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
 
-(; nodes, arcs, commodities) = parse_inbound_instance(
+(; nodes, arcs, commodities) = Inbound.parse_inbound_instance(
     nodes_file, legs_file, commodities_file
 );
 
 instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true);
 instance
 
-lb_solution = lower_bound_filtering(instance);
-filtered_instance = TPO.extract_filtered_instance(instance, lb_solution)
-partial_solution = greedy_heuristic(filtered_instance);
-local_search!(partial_solution, filtered_instance; time_limit=30);
-full_solution = TPO.merge_solutions(
-    lb_solution, partial_solution, instance, filtered_instance
-);
+filtering_sol = lower_bound_filtering(instance);
+sub_instance = TPO.extract_filtered_instance(instance, filtering_sol)
+
+candidates = mix_greedy_and_lower_bound(sub_instance)
+sub_sol = TPO.choose_best_feasible(
+    [candidates.mixed, candidates.greedy, candidates.lower_bound], sub_instance
+)
+
+local_search!(sub_sol, sub_instance; time_limit=30);
+
+full_solution = TPO.merge_solutions(filtering_sol, sub_sol, instance, sub_instance);
 is_feasible(full_solution, instance; verbose=true)
+cost_with_nodes(full_solution, instance)
 cost(full_solution)
 full_solution

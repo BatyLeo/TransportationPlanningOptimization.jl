@@ -90,8 +90,11 @@ total_size(bundle::Bundle) = bundle.total_size
 """
 $TYPEDSIGNATURES
 
-Compute the maximum order size among all orders in the bundle.
+Compute the maximum single-commodity size across all orders in the bundle.
+Matches STP's `maxPackSize`, used to sort bundles for the greedy heuristic.
 """
 function max_pack_size(bundle::Bundle)
-    return maximum(total_size(order) for order in bundle.orders; init=0.0)
+    return maximum(
+        c.size for order in bundle.orders for c in order.commodities; init=0.0
+    )
 end

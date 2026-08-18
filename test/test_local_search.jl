@@ -259,33 +259,31 @@ end
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
     sol = greedy_heuristic(instance)
-    # Run a full reinsertion pass to reach a local optimum where most bundles
-    # return same-path on reinsertion.
     TPO.bundle_reinsertion_improvement!(sol, instance)
     c_before = cost(sol)
 
-    # Snapshot all assignment states before the reinsertion attempt.
-    assignment_costs_before = Dict(edge => TPO.cost_of(a) for (edge, a) in sol.assignments)
-    assignment_sizes_before = Dict(
-        edge => a.total_size for (edge, a) in sol.assignments if a isa TPO.SingleAssignment
-    )
-
-    # Try reinserting every bundle. Most should return 0.0 (same path).
+    # Try reinserting every bundle. When the result is 0.0 (same path or no
+    # path), verify that assignments are unchanged compared to right before
+    # the call. Snapshot per-call because a prior successful reinsertion
+    # (improved > 0) legitimately changes the state.
     for i in eachindex(instance.bundles)
         isempty(sol.bundle_paths[i]) && continue
+        costs_snap = Dict(edge => TPO.cost_of(a) for (edge, a) in sol.assignments)
+        sizes_snap = Dict(
+            edge => a.total_size for (edge, a) in sol.assignments
+            if a isa TPO.SingleAssignment
+        )
         improved = TPO._try_reinsert_bundle!(sol, instance, i, TPO.CheapestMode())
         if improved == 0.0
-            # Verify no assignment was mutated.
             for (edge, a) in sol.assignments
-                @test TPO.cost_of(a) == assignment_costs_before[edge]
+                @test TPO.cost_of(a) == costs_snap[edge]
                 if a isa TPO.SingleAssignment
-                    @test a.total_size == assignment_sizes_before[edge]
+                    @test a.total_size == sizes_snap[edge]
                 end
             end
         end
     end
 
-    # Overall cost must not increase.
     @test cost(sol) <= c_before + 1e-6
     @test is_feasible(sol, instance)
 end

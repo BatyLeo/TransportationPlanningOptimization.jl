@@ -41,7 +41,10 @@ const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
 const COMMODITY_LEAD_TIME_COST = :lead_time_cost
 
-""" 
+# STP integer scaling factor for commodity sizes and arc capacities
+const VOLUME_FACTOR = 100
+
+"""
     InboundNodeInfo
 
 Test data structure for node metadata in inbound instances.
@@ -212,7 +215,7 @@ function parse_inbound_instance(
             node_type=node_type_symbol,
             cost=Float64(row[NODE_COST]),
             capacity=Int(row[NODE_CAPACITY]),
-            node_cost=NodeVolumeCost(Float64(row[NODE_COST])),
+            node_cost=NodeVolumeCost(Float64(row[NODE_COST]) / VOLUME_FACTOR),
         )
     end
 
@@ -232,7 +235,7 @@ function parse_inbound_instance(
 
     raw_arcs = map(eachrow(df_legs)) do row
         shipment_cost = Float64(row[ARC_SHIPMENT_COST])
-        capacity = Int(row[ARC_CAPACITY])
+        capacity = round(Int, row[ARC_CAPACITY] * VOLUME_FACTOR)
         carbon_cost = Float64(row[ARC_CARBON_COST])
         distance = Float64(row[ARC_DISTANCE])
         base_cost = if row.is_linear
@@ -274,7 +277,7 @@ function parse_inbound_instance(
         Commodity(;
             origin_id=string(row[COMMODITY_ORIGIN_ID]),
             destination_id=string(row[COMMODITY_DESTINATION_ID]),
-            size=row[COMMODITY_SIZE],
+            size=Float64(max(1, round(Int, row[COMMODITY_SIZE] * VOLUME_FACTOR))),
             quantity=Int(row[COMMODITY_QUANTITY]),
             arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),
             max_delivery_time=Week(row[COMMODITY_MAX_DELIVERY_TIME]),

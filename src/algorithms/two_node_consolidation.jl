@@ -225,7 +225,13 @@ function two_node_common_incremental!(
     if refine
         for i in Random.shuffle(lifted_idxs)
             cost_delta -= _try_reinsert_bundle!(
-                sol, instance, i, mode_selector; packing, cost_packing
+                sol,
+                instance,
+                i,
+                mode_selector;
+                packing,
+                cost_packing,
+                remove_before_routing=false,
             )
         end
     end

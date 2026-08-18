@@ -39,8 +39,8 @@ Known limitations:
 const COMPARISON_INSTANCES = ["tiny", "small"]
 const DATA_DIR = joinpath(@__DIR__, "..", "test", "public")
 
-"Ratio between STP commodity sizes and TPO raw sizes (STP's `VOLUME_FACTOR`)."
-const STP_VOLUME_FACTOR = 100
+"Ratio between STP commodity sizes and TPO sizes. Both now scale by VOLUME_FACTOR=100."
+const STP_VOLUME_FACTOR = 1
 
 """
     load_instance_pair(name::String)

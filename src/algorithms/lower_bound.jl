@@ -1,6 +1,7 @@
 # Shared loop for lower_bound and lower_bound_filtering: sort bundles by
-# decreasing max-pack-size (matching greedy_heuristic), compute each bundle's
-# shortest path against the empty solution using `cost_fn`, and insert it.
+# decreasing max single-commodity size (matching greedy_heuristic), compute
+# each bundle's shortest path against the empty solution using `cost_fn`,
+# and insert it.
 function _shortest_path_assign!(
     current_solution::Solution,
     instance::Instance,

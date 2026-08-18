@@ -8,7 +8,7 @@ const TPO = TransportationPlanningOptimization
 isdefined(Main, :Inbound) || include("Inbound.jl")
 using .Inbound: parse_inbound_instance
 
-@testset "max_pack_size returns the largest single-order volume" begin
+@testset "max_pack_size returns the largest single-commodity size" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -19,7 +19,7 @@ using .Inbound: parse_inbound_instance
 
     for bundle in instance.bundles
         expected = maximum(
-            sum(c.size for c in order.commodities; init=0.0) for order in bundle.orders
+            c.size for order in bundle.orders for c in order.commodities
         )
         @test TPO.max_pack_size(bundle) == expected
     end
