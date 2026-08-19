@@ -18,6 +18,8 @@ struct LightCommodity{I}
     size::Float64
     "extra information about the commodity, which can be used for problem-specific purposes"
     info::I
+    "precomputed hash (avoids repeated String hashing in Dict-heavy LS inner loops)"
+    _hash::UInt
 
     function LightCommodity(
         origin_id::String, destination_id::String, size::Float64, info::I
@@ -25,7 +27,8 @@ struct LightCommodity{I}
         if size <= 0.0
             throw(DomainError(size, "LightCommodity size must be positive."))
         end
-        return new{I}(origin_id, destination_id, size, info)
+        h = hash(origin_id, hash(destination_id, hash(size, hash(info))))
+        return new{I}(origin_id, destination_id, size, info, h)
     end
 end
 
@@ -34,6 +37,8 @@ function LightCommodity(;
 ) where {I}
     return LightCommodity(origin_id, destination_id, size, info)
 end
+
+Base.hash(c::LightCommodity, h::UInt) = hash(c._hash, h)
 
 function Base.show(io::IO, commodity::LightCommodity)
     return print(
