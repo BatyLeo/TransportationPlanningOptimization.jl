@@ -18,9 +18,7 @@ using .Inbound: parse_inbound_instance
     instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
     for bundle in instance.bundles
-        expected = maximum(
-            c.size for order in bundle.orders for c in order.commodities
-        )
+        expected = maximum(c.size for order in bundle.orders for c in order.commodities)
         @test TPO.max_pack_size(bundle) == expected
     end
 

@@ -209,11 +209,19 @@ end
 const _SnapshotUnion{C} = Union{_SingleAssignmentSnapshot{C},_MultiAssignmentSnapshot{C}}
 
 function _snapshot_path_assignments(
-    sol::Solution{C}, instance::Instance, bundle_idx::Int
+    sol::Solution{C},
+    instance::Instance,
+    bundle_idx::Int;
+    cache::Union{Dict{Tuple{Int,Int},_SnapshotUnion{C}},Nothing}=nothing,
 ) where {C}
     path = sol.bundle_paths[bundle_idx]
     bundle = instance.bundles[bundle_idx]
-    snapshots = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
+    snapshots = if cache !== nothing
+        empty!(cache)
+        cache
+    else
+        Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
+    end
     for order in bundle.orders
         for k in 1:(length(path) - 1)
             u_tsg = project_to_time_space_graph(path[k], order, instance)
@@ -324,6 +332,7 @@ function _try_reinsert_bundle!(
     remove_before_routing::Bool=true,
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
+    snapshot_cache::Union{Dict,Nothing}=nothing,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
@@ -332,9 +341,11 @@ function _try_reinsert_bundle!(
 
     old_path = copy(sol.bundle_paths[bundle_idx])
 
-    if remove_before_routing
-        snapshots = _snapshot_path_assignments(sol, instance, bundle_idx)
-        cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
+    snapshots = _snapshot_path_assignments(sol, instance, bundle_idx; cache=snapshot_cache)
+    cost_removed = if remove_before_routing
+        remove_bundle_path!(sol, instance, bundle_idx)
+    else
+        0.0
     end
 
     # When multiple threads are available, pre-compute all arc costs in
@@ -348,9 +359,16 @@ function _try_reinsert_bundle!(
         p
     elseif bundle_adj !== nothing
         _lazy_bundle_dijkstra!(
-            sol, instance, bundle_idx, origin, dest,
-            mode_selector, buffer, bundle_adj;
-            packing=cost_packing, workspace,
+            sol,
+            instance,
+            bundle_idx,
+            origin,
+            dest,
+            mode_selector,
+            buffer,
+            bundle_adj;
+            packing=cost_packing,
+            workspace,
         )
     else
         update_bundle_cost_matrix!(
@@ -378,9 +396,11 @@ function _try_reinsert_bundle!(
     end
 
     # When routing was done with the bundle in place, remove it now before
-    # adding the new path. Snapshot here so we can revert if needed.
+    # adding the new path. Re-snapshot to capture the current state.
     if !remove_before_routing
-        snapshots = _snapshot_path_assignments(sol, instance, bundle_idx)
+        snapshots = _snapshot_path_assignments(
+            sol, instance, bundle_idx; cache=snapshot_cache
+        )
         cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     end
 
@@ -479,6 +499,10 @@ Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type
 (useful for ablation studies). Setting both to false skips straight to the
 final repack.
 
+`refine_two_node` controls whether lifted bundles are individually re-inserted
+after a two-node splice (defaults to `false`, matching STP). Setting it to
+`true` can improve per-move quality at the cost of 4-9x slower two-node moves.
+
 The `packing` keyword defaults to `:ffd_union` and controls the commit
 operations (remove/add path). The `cost_packing` keyword defaults to
 `:frozen` and controls the cost matrix estimation for Dijkstra. Frozen
@@ -488,7 +512,7 @@ Returns a [`LocalSearchResult`](@ref) with diagnostic info (cost improvement,
 iteration counts, and time-series samples for plotting convergence curves).
 """
 function local_search!(
-    sol::Solution,
+    sol::Solution{C},
     instance::Instance,
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=60.0,
@@ -498,11 +522,12 @@ function local_search!(
     allow_reintro::Bool=true,
     allow_consolidate::Bool=true,
     allow_repack::Bool=true,
+    refine_two_node::Bool=false,
     packing::Symbol=:ffd_union,
     cost_packing::Symbol=:frozen,
     rng::Random.AbstractRNG=Random.default_rng(),
     sample_every::Int=1000,
-)
+) where {C}
     t_start = time()
     start_cost = cost(sol)
     cost_threshold = cost_threshold_relative * start_cost
@@ -540,6 +565,9 @@ function local_search!(
         nothing
     end
 
+    # Pre-allocated snapshot Dict, reused across iterations via empty!.
+    snapshot_cache = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
+
     if can_reintro
         ttg = instance.travel_time_graph
         for i in 1:n_bundles
@@ -574,6 +602,7 @@ function local_search!(
                     bundle_adjs,
                     workspace,
                     buffer_pool,
+                    snapshot_cache,
                 )
             elseif can_consolidate
                 _run_two_node_step!(
@@ -583,13 +612,14 @@ function local_search!(
                     mode_selector,
                     rng,
                     cost_threshold,
-                    can_reintro,
+                    refine_two_node,
                     packing,
                     cost_packing;
                     bundle_adjs,
                     buffer=shared_buffer,
                     workspace,
                     buffer_pool,
+                    snapshot_cache,
                 )
             else
                 0.0
@@ -822,6 +852,7 @@ function _run_reintro_step!(
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
+    snapshot_cache::Union{Dict,Nothing}=nothing,
 )
     n = length(instance.bundles)
     n == 0 && return 0.0
@@ -833,8 +864,17 @@ function _run_reintro_step!(
     end
     bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[bundle_idx]
     return _try_reinsert_bundle!(
-        sol, instance, bundle_idx, mode_selector; packing, cost_packing, buffer,
-        bundle_adj, workspace, buffer_pool,
+        sol,
+        instance,
+        bundle_idx,
+        mode_selector;
+        packing,
+        cost_packing,
+        buffer,
+        bundle_adj,
+        workspace,
+        buffer_pool,
+        snapshot_cache,
     )
 end
 
@@ -946,6 +986,7 @@ function _run_two_node_step!(
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
+    snapshot_cache::Union{Dict,Nothing}=nothing,
 )
     isempty(valid_pairs) && return 0.0
     (src, dst) = rand(rng, valid_pairs)
@@ -963,5 +1004,6 @@ function _run_two_node_step!(
         buffer,
         workspace,
         buffer_pool,
+        snapshot_cache,
     )
 end

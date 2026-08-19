@@ -91,9 +91,11 @@ function compare_full_pipeline(name::String)
     (; tpo_instance, stp_instance) = load_instance_pair(name)
     stp_instance = STP.add_properties(stp_instance, STP.tentative_first_fit, Int[])
 
-    println("\nInstance: $(TPO.bundle_count(tpo_instance)) bundles, " *
-            "$(TPO.order_count(tpo_instance)) orders, " *
-            "$(TPO.commodity_count(tpo_instance)) commodities")
+    println(
+        "\nInstance: $(TPO.bundle_count(tpo_instance)) bundles, " *
+        "$(TPO.order_count(tpo_instance)) orders, " *
+        "$(TPO.commodity_count(tpo_instance)) commodities",
+    )
 
     # ── Step 1: Filtering ──
     println("\n--- Step 1: Lower-bound filtering ---")
@@ -109,10 +111,14 @@ function compare_full_pipeline(name::String)
     stp_filter_cost = STP.compute_cost(stp_instance, stp_filtering_sol)
     stp_filter_feasible = STP.is_feasible(stp_instance, stp_filtering_sol)
 
-    println("  TPO: cost=$(round(tpo_filter_cost; digits=1)), " *
-            "feasible=$tpo_filter_feasible, time=$(round(tpo_filter_time; digits=2))s")
-    println("  STP: cost=$(round(stp_filter_cost; digits=1)), " *
-            "feasible=$stp_filter_feasible, time=$(round(stp_filter_time; digits=2))s")
+    println(
+        "  TPO: cost=$(round(tpo_filter_cost; digits=1)), " *
+        "feasible=$tpo_filter_feasible, time=$(round(tpo_filter_time; digits=2))s",
+    )
+    println(
+        "  STP: cost=$(round(stp_filter_cost; digits=1)), " *
+        "feasible=$stp_filter_feasible, time=$(round(stp_filter_time; digits=2))s",
+    )
     println("  Ratio (TPO/STP): $(round(tpo_filter_cost / stp_filter_cost; digits=4))")
 
     # ── Step 2: Extract sub-instance ──
@@ -123,25 +129,26 @@ function compare_full_pipeline(name::String)
     stp_sub = STP.add_properties(stp_sub, STP.tentative_first_fit, Int[])
 
     tpo_filtered_count = count(
-        i -> !isempty(tpo_filtering_sol.bundle_paths[i]),
-        1:TPO.bundle_count(tpo_instance),
+        i -> !isempty(tpo_filtering_sol.bundle_paths[i]), 1:TPO.bundle_count(tpo_instance)
     )
     stp_filtered_count = count(
-        i -> !isempty(stp_filtering_sol.bundlePaths[i]),
-        1:length(stp_instance.bundles),
+        i -> !isempty(stp_filtering_sol.bundlePaths[i]), 1:length(stp_instance.bundles)
     )
-    println("  TPO: $(TPO.bundle_count(tpo_sub)) bundles in sub-instance " *
-            "($tpo_filtered_count filtered to direct)")
-    println("  STP: $(length(stp_sub.bundles)) bundles in sub-instance " *
-            "($stp_filtered_count filtered to direct)")
+    println(
+        "  TPO: $(TPO.bundle_count(tpo_sub)) bundles in sub-instance " *
+        "($tpo_filtered_count filtered to direct)",
+    )
+    println(
+        "  STP: $(length(stp_sub.bundles)) bundles in sub-instance " *
+        "($stp_filtered_count filtered to direct)",
+    )
 
     # ── Step 3: Mix construction on sub-instance ──
     println("\n--- Step 3: Mix construction (greedy + LB + mixed) ---")
 
     tpo_mix_time = @elapsed tpo_candidates = TPO.mix_greedy_and_lower_bound(tpo_sub)
     tpo_chosen = TPO.choose_best_feasible(
-        [tpo_candidates.mixed, tpo_candidates.greedy, tpo_candidates.lower_bound],
-        tpo_sub,
+        [tpo_candidates.mixed, tpo_candidates.greedy, tpo_candidates.lower_bound], tpo_sub
     )
 
     tpo_greedy_full = TPO.merge_solutions(
@@ -171,10 +178,16 @@ function compare_full_pipeline(name::String)
     stp_costs = [STP.compute_cost(stp_sub, s) for s in stp_feasible_candidates]
     stp_chosen = STP.solution_deepcopy(stp_feasible_candidates[argmin(stp_costs)], stp_sub)
 
-    stp_greedy_full = STP.merge_solutions(stp_greedy_sol, stp_filtering_sol, stp_instance, stp_sub)
+    stp_greedy_full = STP.merge_solutions(
+        stp_greedy_sol, stp_filtering_sol, stp_instance, stp_sub
+    )
     stp_lb_full = STP.merge_solutions(stp_lb_sol, stp_filtering_sol, stp_instance, stp_sub)
-    stp_mixed_full = STP.merge_solutions(stp_mix_sol, stp_filtering_sol, stp_instance, stp_sub)
-    stp_chosen_full = STP.merge_solutions(stp_chosen, stp_filtering_sol, stp_instance, stp_sub)
+    stp_mixed_full = STP.merge_solutions(
+        stp_mix_sol, stp_filtering_sol, stp_instance, stp_sub
+    )
+    stp_chosen_full = STP.merge_solutions(
+        stp_chosen, stp_filtering_sol, stp_instance, stp_sub
+    )
 
     stp_greedy_cost = STP.compute_cost(stp_instance, stp_greedy_full)
     stp_lb_cost = STP.compute_cost(stp_instance, stp_lb_full)
@@ -184,14 +197,20 @@ function compare_full_pipeline(name::String)
     println("  TPO greedy:  $(round(tpo_greedy_cost; digits=1))")
     println("  TPO LB:      $(round(tpo_lb_cost; digits=1))")
     println("  TPO mixed:   $(round(tpo_mixed_cost; digits=1))")
-    println("  TPO chosen:  $(round(tpo_chosen_cost; digits=1))  (time=$(round(tpo_mix_time; digits=2))s)")
+    println(
+        "  TPO chosen:  $(round(tpo_chosen_cost; digits=1))  (time=$(round(tpo_mix_time; digits=2))s)",
+    )
     println()
     println("  STP greedy:  $(round(stp_greedy_cost; digits=1))")
     println("  STP LB:      $(round(stp_lb_cost; digits=1))")
     println("  STP mixed:   $(round(stp_mixed_cost; digits=1))")
-    println("  STP chosen:  $(round(stp_chosen_cost; digits=1))  (time=$(round(stp_mix_time; digits=2))s)")
+    println(
+        "  STP chosen:  $(round(stp_chosen_cost; digits=1))  (time=$(round(stp_mix_time; digits=2))s)",
+    )
     println()
-    println("  Construction ratio (TPO/STP): $(round(tpo_chosen_cost / stp_chosen_cost; digits=4))")
+    println(
+        "  Construction ratio (TPO/STP): $(round(tpo_chosen_cost / stp_chosen_cost; digits=4))",
+    )
 
     # ── Step 4: Local search on sub-instance ──
     println("\n--- Step 4: Local search ($(LS_TIME)s) on sub-instance ---")
@@ -201,15 +220,21 @@ function compare_full_pipeline(name::String)
     tpo_ls_cost = TPO.cost_with_nodes(tpo_ls_full, tpo_instance)
     tpo_ls_feasible = TPO.is_feasible(tpo_ls_full, tpo_instance)
 
-    stp_ls_time = @elapsed STP.local_search!(stp_chosen, stp_sub; timeLimit=LS_TIME, verbose=false)
+    stp_ls_time = @elapsed STP.local_search!(
+        stp_chosen, stp_sub; timeLimit=LS_TIME, verbose=false
+    )
     stp_ls_full = STP.merge_solutions(stp_chosen, stp_filtering_sol, stp_instance, stp_sub)
     stp_ls_cost = STP.compute_cost(stp_instance, stp_ls_full)
     stp_ls_feasible = STP.is_feasible(stp_instance, stp_ls_full)
 
-    println("  TPO: cost=$(round(tpo_ls_cost; digits=1)), " *
-            "feasible=$tpo_ls_feasible, time=$(round(tpo_ls_time; digits=2))s")
-    println("  STP: cost=$(round(stp_ls_cost; digits=1)), " *
-            "feasible=$stp_ls_feasible, time=$(round(stp_ls_time; digits=2))s")
+    println(
+        "  TPO: cost=$(round(tpo_ls_cost; digits=1)), " *
+        "feasible=$tpo_ls_feasible, time=$(round(tpo_ls_time; digits=2))s",
+    )
+    println(
+        "  STP: cost=$(round(stp_ls_cost; digits=1)), " *
+        "feasible=$stp_ls_feasible, time=$(round(stp_ls_time; digits=2))s",
+    )
     println("  Post-LS ratio (TPO/STP): $(round(tpo_ls_cost / stp_ls_cost; digits=4))")
 
     # ── Cross-package feasibility check ──
@@ -227,14 +252,22 @@ function compare_full_pipeline(name::String)
     println("  TPO solution feasible in STP: $stp_feasible")
     println("  TPO cost (native):     $(round(tpo_ls_cost; digits=1))")
     println("  TPO cost (via STP):    $(round(stp_recomputed_cost; digits=1))")
-    println("  Cost agreement ratio:  $(round(stp_recomputed_cost / tpo_ls_cost; digits=6))")
+    println(
+        "  Cost agreement ratio:  $(round(stp_recomputed_cost / tpo_ls_cost; digits=6))"
+    )
 
     # ── Summary ──
     println("\n--- SUMMARY ---")
     println("  Step             TPO cost       STP cost       Ratio(TPO/STP)")
-    println("  Filtering        $(lpad(round(tpo_filter_cost; digits=0), 12))  $(lpad(round(stp_filter_cost; digits=0), 12))  $(round(tpo_filter_cost/stp_filter_cost; digits=4))")
-    println("  Construction     $(lpad(round(tpo_chosen_cost; digits=0), 12))  $(lpad(round(stp_chosen_cost; digits=0), 12))  $(round(tpo_chosen_cost/stp_chosen_cost; digits=4))")
-    println("  Post-LS          $(lpad(round(tpo_ls_cost; digits=0), 12))  $(lpad(round(stp_ls_cost; digits=0), 12))  $(round(tpo_ls_cost/stp_ls_cost; digits=4))")
+    println(
+        "  Filtering        $(lpad(round(tpo_filter_cost; digits=0), 12))  $(lpad(round(stp_filter_cost; digits=0), 12))  $(round(tpo_filter_cost/stp_filter_cost; digits=4))",
+    )
+    println(
+        "  Construction     $(lpad(round(tpo_chosen_cost; digits=0), 12))  $(lpad(round(stp_chosen_cost; digits=0), 12))  $(round(tpo_chosen_cost/stp_chosen_cost; digits=4))",
+    )
+    println(
+        "  Post-LS          $(lpad(round(tpo_ls_cost; digits=0), 12))  $(lpad(round(stp_ls_cost; digits=0), 12))  $(round(tpo_ls_cost/stp_ls_cost; digits=4))",
+    )
     println("  TPO feasible in STP: $stp_feasible")
 
     return nothing

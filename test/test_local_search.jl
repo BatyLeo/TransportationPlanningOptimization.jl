@@ -270,8 +270,8 @@ end
         isempty(sol.bundle_paths[i]) && continue
         costs_snap = Dict(edge => TPO.cost_of(a) for (edge, a) in sol.assignments)
         sizes_snap = Dict(
-            edge => a.total_size for (edge, a) in sol.assignments
-            if a isa TPO.SingleAssignment
+            edge => a.total_size for
+            (edge, a) in sol.assignments if a isa TPO.SingleAssignment
         )
         improved = TPO._try_reinsert_bundle!(sol, instance, i, TPO.CheapestMode())
         if improved == 0.0

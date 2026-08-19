@@ -292,7 +292,7 @@ using Random
 using SparseArrays
 using JuMP
 using HiGHS
-import MetaGraphsNext
+using MetaGraphsNext: MetaGraphsNext
 
 # ─── Perturbation types mirroring STP's neighborhoods ───
 
@@ -581,8 +581,15 @@ end
 # ── Build and solve the arc-flow MILP ──
 
 function _solve_arc_flow_milp(
-    instance, sol, bundle_idxs, common_arcs, arc_bp, loads;
-    verbose::Bool=false, time_limit::Float64=60.0, optimizer_factory=nothing
+    instance,
+    sol,
+    bundle_idxs,
+    common_arcs,
+    arc_bp,
+    loads;
+    verbose::Bool=false,
+    time_limit::Float64=60.0,
+    optimizer_factory=nothing,
 )
     ttg = instance.travel_time_graph
     cache = instance.index_cache
@@ -612,7 +619,10 @@ function _solve_arc_flow_milp(
         tau[edge] = JuMP.@variable(model, integer = true, lower_bound = 0)
     end
 
-    verbose && @info "MILP" solver = (use_gurobi ? "Gurobi" : "HiGHS") n_x_vars = length(x) n_tau_vars = length(tau)
+    verbose &&
+        @info "MILP" solver = (use_gurobi ? "Gurobi" : "HiGHS") n_x_vars = length(x) n_tau_vars = length(
+            tau
+        )
 
     # ── Path constraints (flow conservation) ──
     for b in bundle_idxs
@@ -787,7 +797,9 @@ function _solve_arc_flow_milp(
         obj_val = JuMP.objective_value(model)
         bound = JuMP.objective_bound(model)
         gap = abs(obj_val - bound) / max(abs(obj_val), 1e-10) * 100
-        @info "MILP solved" elapsed = round(time() - start; digits=2) objective = round(obj_val; digits=2) gap = round(gap; digits=3)
+        @info "MILP solved" elapsed = round(time() - start; digits=2) objective = round(
+            obj_val; digits=2
+        ) gap = round(gap; digits=3)
     end
 
     # ── Extract paths (shortcuts stripped, matching sol.bundle_paths format) ──
@@ -879,11 +891,21 @@ function TPO.perturbate!(
     loads = _compute_tsg_loads(sol, instance, bundle_idxs, common_arcs)
     old_paths = [copy(sol.bundle_paths[b]) for b in bundle_idxs]
 
-    verbose && @info "MILPPlantPerturbation" n_bundles = length(bundle_idxs) n_common_arcs = length(common_arcs) n_total_common = length(all_common_arcs)
+    verbose &&
+        @info "MILPPlantPerturbation" n_bundles = length(bundle_idxs) n_common_arcs = length(
+            common_arcs
+        ) n_total_common = length(all_common_arcs)
 
     new_paths = _solve_arc_flow_milp(
-        instance, sol, bundle_idxs, common_arcs, arc_bp, loads;
-        verbose, time_limit=15.0, optimizer_factory=p.optimizer_factory,
+        instance,
+        sol,
+        bundle_idxs,
+        common_arcs,
+        arc_bp,
+        loads;
+        verbose,
+        time_limit=15.0,
+        optimizer_factory=p.optimizer_factory,
     )
     new_paths === nothing && return (0.0, 0)
 

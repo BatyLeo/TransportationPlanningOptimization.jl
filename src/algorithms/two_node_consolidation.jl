@@ -6,9 +6,6 @@ $TYPEDSIGNATURES
 Indices of bundles whose stored path contains the arc `(src, dst)` as a
 consecutive pair. Returns indices in bundle insertion order. Bundles with
 empty paths are skipped.
-
-This is the lifting step of `two_node_common_incremental!`: it selects which
-bundles will be re-routed together through the (src, dst) hub pair.
 """
 function bundles_through_arc(sol::Solution, src::Int, dst::Int)
     out = Int[]
@@ -183,6 +180,7 @@ function two_node_common_incremental!(
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
+    snapshot_cache::Union{Dict,Nothing}=nothing,
 )
     lifted_idxs = bundles_through_arc(sol, src, dst)
     isempty(lifted_idxs) && return 0.0
@@ -211,7 +209,12 @@ function two_node_common_incremental!(
 
     if Threads.nthreads() > 1 && buffer_pool !== nothing
         parallel_update_bundle_cost_matrix!(
-            sol, instance, virtual_bundle, virtual_arcs, mode_selector, buffer_pool;
+            sol,
+            instance,
+            virtual_bundle,
+            virtual_arcs,
+            mode_selector,
+            buffer_pool;
             packing=cost_packing,
         )
     else
@@ -248,6 +251,7 @@ function two_node_common_incremental!(
                 buffer,
                 workspace,
                 buffer_pool,
+                snapshot_cache,
             )
         end
     end
