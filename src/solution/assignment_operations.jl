@@ -430,12 +430,12 @@ function _remove_commodities_from_assignment!(
     assignment::SingleAssignment{C}, arc::NetworkArc, removed_comms::Vector{C}
 ) where {C<:LightCommodity}
     before = assignment.cost
-    remaining = copy(removed_comms)
-    _drain_first_matches!(assignment.commodities, remaining)
-    if !isempty(remaining)
+    n_removed = _remove_all_from_pool!(assignment.commodities, removed_comms)
+    if n_removed != length(removed_comms)
+        n_missing = length(removed_comms) - n_removed
         throw(
             ArgumentError(
-                "remove_bundle_path!: $(length(remaining)) commodities not found in single-mode assignment",
+                "remove_bundle_path!: $(n_missing) commodities not found in single-mode assignment",
             ),
         )
     end
@@ -466,6 +466,85 @@ function _remove_commodities_from_assignment!(
     end
     after = sum(slot.cost for slot in assignment.per_mode; init=0.0)
     return after - before
+end
+
+"""
+$TYPEDSIGNATURES
+
+Remove from `pool` every element that `==`-matches an element in `to_remove`,
+without allocating intermediate collections. Unlike `_drain_first_matches!`,
+does not mutate `to_remove` and does not return dropped items. Returns the
+number of matches found.
+
+Used by the SingleAssignment removal path where all commodities are expected
+to be present (the caller checks `n_removed == length(to_remove)`).
+"""
+function _remove_all_from_pool!(
+    pool::Vector{C}, to_remove::AbstractVector{C}
+) where {C<:LightCommodity}
+    n_to_remove = length(to_remove)
+    n_to_remove == 0 && return 0
+    n_pool = length(pool)
+    if n_to_remove <= 8
+        return _remove_all_from_pool_linear!(pool, to_remove)
+    end
+    return _remove_all_from_pool_dict!(pool, to_remove)
+end
+
+function _remove_all_from_pool_linear!(
+    pool::Vector{C}, to_remove::AbstractVector{C}
+) where {C<:LightCommodity}
+    n_to_remove = length(to_remove)
+    matched = falses(n_to_remove)
+    n_matched = 0
+    n_pool = length(pool)
+    write_idx = 0
+    @inbounds for read_idx in 1:n_pool
+        c = pool[read_idx]
+        found = false
+        if n_matched < n_to_remove
+            for i in 1:n_to_remove
+                if !matched[i] && to_remove[i] == c
+                    matched[i] = true
+                    n_matched += 1
+                    found = true
+                    break
+                end
+            end
+        end
+        if !found
+            write_idx += 1
+            pool[write_idx] = c
+        end
+    end
+    resize!(pool, write_idx)
+    return n_matched
+end
+
+function _remove_all_from_pool_dict!(
+    pool::Vector{C}, to_remove::AbstractVector{C}
+) where {C<:LightCommodity}
+    counts = Dict{C,Int}()
+    sizehint!(counts, length(to_remove))
+    for c in to_remove
+        counts[c] = get(counts, c, 0) + 1
+    end
+    n_pool = length(pool)
+    write_idx = 0
+    n_matched = 0
+    @inbounds for read_idx in 1:n_pool
+        c = pool[read_idx]
+        ct = get(counts, c, 0)
+        if ct > 0
+            counts[c] = ct - 1
+            n_matched += 1
+        else
+            write_idx += 1
+            pool[write_idx] = c
+        end
+    end
+    resize!(pool, write_idx)
+    return n_matched
 end
 
 """

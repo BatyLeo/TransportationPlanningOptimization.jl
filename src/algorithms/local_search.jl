@@ -323,6 +323,7 @@ function _try_reinsert_bundle!(
     bundle_adj::Union{Dict{Int,Vector{Int}},Nothing}=nothing,
     remove_before_routing::Bool=true,
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
@@ -336,7 +337,16 @@ function _try_reinsert_bundle!(
         cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     end
 
-    parents = if bundle_adj !== nothing
+    # When multiple threads are available, pre-compute all arc costs in
+    # parallel and run standard Dijkstra. Otherwise, use lazy Dijkstra
+    # (fewer arc evaluations, better for single-threaded).
+    parents = if Threads.nthreads() > 1 && buffer_pool !== nothing
+        parallel_update_bundle_cost_matrix!(
+            sol, instance, bundle_idx, mode_selector, buffer_pool; packing=cost_packing
+        )
+        p, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=dest, workspace)
+        p
+    elseif bundle_adj !== nothing
         _lazy_bundle_dijkstra!(
             sol, instance, bundle_idx, origin, dest,
             mode_selector, buffer, bundle_adj;
@@ -522,6 +532,14 @@ function local_search!(
     n_ttg_nodes = Graphs.nv(ttg.graph)
     workspace = DijkstraWorkspace(n_ttg_nodes)
 
+    # Thread-local buffer pool for parallel cost matrix computation.
+    # One BinPackingBuffer per thread, indexed by threadid().
+    buffer_pool = if Threads.nthreads() > 1
+        create_buffer_pool()
+    else
+        nothing
+    end
+
     if can_reintro
         ttg = instance.travel_time_graph
         for i in 1:n_bundles
@@ -555,6 +573,7 @@ function local_search!(
                     buffer=shared_buffer,
                     bundle_adjs,
                     workspace,
+                    buffer_pool,
                 )
             elseif can_consolidate
                 _run_two_node_step!(
@@ -570,6 +589,7 @@ function local_search!(
                     bundle_adjs,
                     buffer=shared_buffer,
                     workspace,
+                    buffer_pool,
                 )
             else
                 0.0
@@ -801,6 +821,7 @@ function _run_reintro_step!(
     buffer::BinPackingBuffer=BinPackingBuffer(),
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
 )
     n = length(instance.bundles)
     n == 0 && return 0.0
@@ -813,7 +834,7 @@ function _run_reintro_step!(
     bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[bundle_idx]
     return _try_reinsert_bundle!(
         sol, instance, bundle_idx, mode_selector; packing, cost_packing, buffer,
-        bundle_adj, workspace,
+        bundle_adj, workspace, buffer_pool,
     )
 end
 
@@ -924,6 +945,7 @@ function _run_two_node_step!(
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
 )
     isempty(valid_pairs) && return 0.0
     (src, dst) = rand(rng, valid_pairs)
@@ -940,5 +962,6 @@ function _run_two_node_step!(
         bundle_adjs,
         buffer,
         workspace,
+        buffer_pool,
     )
 end

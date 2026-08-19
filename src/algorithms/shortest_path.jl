@@ -22,11 +22,18 @@ function bundle_dijkstra(
     src::Int,
     cost_matrix::SparseMatrixCSC{Float64,Int};
     dst::Int=0,
+    workspace=nothing,
 )
-    n = Graphs.nv(graph)
-    dists = fill(Inf, n)
-    parents = zeros(Int, n)
-    dists[src] = 0.0
+    if workspace !== nothing
+        _reset_workspace!(workspace, src)
+        dists = workspace.dists
+        parents = workspace.parents
+    else
+        n = Graphs.nv(graph)
+        dists = fill(Inf, n)
+        parents = zeros(Int, n)
+        dists[src] = 0.0
+    end
 
     # Lazy min-heap: may contain stale entries (a vertex pushed before a
     # shorter path was found). Stale pops are detected by the dists check.

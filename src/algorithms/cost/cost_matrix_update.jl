@@ -419,3 +419,110 @@ function update_bundle_cost_matrix!(
         packing=packing,
     )
 end
+
+"""
+$TYPEDSIGNATURES
+
+Create a `Vector{<:BinPackingBuffer}` with one buffer per thread. Each thread
+indexes its own buffer via `Threads.threadid()` inside `@threads :static`
+loops, avoiding Channel contention and Julia 1.12's concurrent-resize checks.
+"""
+function create_buffer_pool(n::Int=Threads.maxthreadid())
+    return [BinPackingBuffer() for _ in 1:n]
+end
+
+"""
+$TYPEDSIGNATURES
+
+Parallel version of `update_bundle_cost_matrix!`. Distributes arc cost
+computations across threads using `Threads.@threads :static`, with one
+`BinPackingBuffer` per thread indexed by `threadid()`.
+
+Reads from `current_solution.assignments` are thread-safe (read-only Dict
+lookups). Writes to `ttg.cost_matrix` are thread-safe because each arc maps
+to a distinct structural nonzero in the sparse matrix.
+
+Falls back to sequential `update_bundle_cost_matrix!` when only one thread
+is available.
+"""
+function parallel_update_bundle_cost_matrix!(
+    current_solution::Solution,
+    instance::Instance,
+    bundle::Bundle,
+    bundle_arcs::Vector{Tuple{Int,Int}},
+    mode_selector::AbstractModeSelector,
+    buffer_pool::Vector{<:BinPackingBuffer};
+    cost_fn::Function=compute_ttg_edge_incremental_cost,
+    packing::Symbol=:frozen,
+)
+    if Threads.nthreads() <= 1
+        update_bundle_cost_matrix!(
+            current_solution,
+            instance,
+            bundle,
+            bundle_arcs,
+            mode_selector;
+            cost_fn,
+            buffer=buffer_pool[1],
+            packing,
+        )
+        return nothing
+    end
+
+    ttg = instance.travel_time_graph
+    cache = instance.index_cache
+    ng = instance.network_graph.graph
+
+    fn = Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
+    fa = Set{Tuple{Int,Int}}(
+        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
+        (u, v) in bundle.forbidden_arcs
+    )
+
+    fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
+
+    Threads.@threads :static for i in eachindex(bundle_arcs)
+        (u_code, v_code) = bundle_arcs[i]
+        su = cache.ttg_spatial[u_code]
+        sv = cache.ttg_spatial[v_code]
+
+        c = if (su, sv) in fa || su in fn || sv in fn
+            Inf
+        else
+            buf = buffer_pool[Threads.threadid()]
+            cost_fn(
+                current_solution,
+                instance,
+                bundle,
+                u_code,
+                v_code,
+                mode_selector;
+                buffer=buf,
+                packing,
+            )
+        end
+        ttg.cost_matrix[u_code, v_code] = c
+    end
+    return nothing
+end
+
+function parallel_update_bundle_cost_matrix!(
+    current_solution::Solution,
+    instance::Instance,
+    bundle_idx::Int,
+    mode_selector::AbstractModeSelector,
+    buffer_pool::Vector{<:BinPackingBuffer};
+    cost_fn::Function=compute_ttg_edge_incremental_cost,
+    packing::Symbol=:frozen,
+)
+    return parallel_update_bundle_cost_matrix!(
+        current_solution,
+        instance,
+        instance.bundles[bundle_idx],
+        instance.travel_time_graph.bundle_arcs[bundle_idx],
+        mode_selector,
+        buffer_pool;
+        cost_fn,
+        packing,
+    )
+end

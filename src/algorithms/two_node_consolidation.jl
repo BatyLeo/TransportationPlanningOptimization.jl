@@ -182,6 +182,7 @@ function two_node_common_incremental!(
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
 )
     lifted_idxs = bundles_through_arc(sol, src, dst)
     isempty(lifted_idxs) && return 0.0
@@ -208,11 +209,18 @@ function two_node_common_incremental!(
 
     virtual_bundle, virtual_arcs = merge_bundles(instance, lifted_idxs)
 
-    update_bundle_cost_matrix!(
-        sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing=cost_packing
-    )
+    if Threads.nthreads() > 1 && buffer_pool !== nothing
+        parallel_update_bundle_cost_matrix!(
+            sol, instance, virtual_bundle, virtual_arcs, mode_selector, buffer_pool;
+            packing=cost_packing,
+        )
+    else
+        update_bundle_cost_matrix!(
+            sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing=cost_packing
+        )
+    end
     ttg = instance.travel_time_graph
-    parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst)
+    parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst, workspace)
     new_sub_path = trace_path(parents, src, dst)
 
     if isempty(new_sub_path)
@@ -239,6 +247,7 @@ function two_node_common_incremental!(
                 bundle_adj,
                 buffer,
                 workspace,
+                buffer_pool,
             )
         end
     end
