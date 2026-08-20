@@ -1,3 +1,7 @@
+include(joinpath(@__DIR__, "bin_packing", "bin.jl"))
+include(joinpath(@__DIR__, "bin_packing", "ffd.jl"))
+include(joinpath(@__DIR__, "bin_packing", "bfd.jl"))
+
 """
 $TYPEDEF
 
@@ -16,10 +20,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Evaluate the cost of transporting a list of commodities on an arc with a bin-packing cost
-function. The cost is based on the number of bins (trucks) needed to transport all
-commodities. Uses the First-Fit Decreasing (FFD) heuristic to determine bin assignments and
-count.
+Uses the First-Fit Decreasing (FFD) heuristic to determine bin assignments and count.
 """
 function evaluate(
     arc_f::BinPackingArcCost, commodities::Vector{<:LightCommodity}; presorted::Bool=false
@@ -30,8 +31,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the bin assignments for a list of commodities using the
-First-Fit Decreasing (FFD) heuristic. Returns a vector of `Bin` objects.
+Compute the bin assignments for a list of commodities using the First-Fit Decreasing heuristic.
+Returns a vector of `Bin` objects.
 """
 function compute_bin_assignments(
     arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
