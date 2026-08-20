@@ -51,7 +51,6 @@ end
         NetworkNode(;
             id=n.id,
             node_type=n.node_type,
-            cost=n.cost,
             capacity=n.capacity,
             info=n.info,
             node_cost=(n.node_type == :destination ? _TestNodeCost(1.0) : NoNodeCost()),

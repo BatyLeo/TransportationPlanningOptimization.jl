@@ -8,9 +8,9 @@ using MetaGraphsNext
     @testset "Basic solution with LinearArcCost" begin
         # 1. Create a dummy instance
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=0),
-            NetworkNode(; id="B", node_type=:other, cost=1.0, capacity=0),
-            NetworkNode(; id="C", node_type=:destination, cost=2.0, capacity=0),
+            NetworkNode(; id="A", node_type=:origin, capacity=0),
+            NetworkNode(; id="B", node_type=:other, capacity=0),
+            NetworkNode(; id="C", node_type=:destination, capacity=0),
         ]
 
         # Arc A->B

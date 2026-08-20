@@ -116,7 +116,7 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_cost::SumAr
     # When SumArcCost wraps a BinPackingArcCost term, refresh slot.bins so the
     # cached bin count stays consistent with slot.commodities (read by
     # incremental_cost! to skip the FFD-on-existing pass).
-    bp = _find_bin_packing(arc_cost)
+    bp = _try_find_bin_packing(arc_cost)
     if bp !== nothing
         slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
     end

@@ -18,7 +18,7 @@ struct LightCommodity{I}
     size::Float64
     "extra information about the commodity, which can be used for problem-specific purposes"
     info::I
-    "precomputed hash (avoids repeated String hashing in Dict-heavy LS inner loops)"
+    "precomputed hash (avoids repeated hashing in algorithms)"
     _hash::UInt
 
     function LightCommodity(

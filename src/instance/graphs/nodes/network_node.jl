@@ -12,8 +12,6 @@ struct NetworkNode{J,N<:AbstractNodeCostFunction}
     id::String
     "type of node: :origin, :destination, or :other"
     node_type::Symbol
-    ""
-    cost::Float64
     "capacity of the node (in size units)"
     capacity::Int
     "additional information associated with the node"
@@ -22,7 +20,7 @@ struct NetworkNode{J,N<:AbstractNodeCostFunction}
     node_cost::N
 
     function NetworkNode{J,N}(
-        id, node_type, cost, capacity, info, node_cost
+        id, node_type, capacity, info, node_cost
     ) where {J,N<:AbstractNodeCostFunction}
         if node_type ∉ (:origin, :destination, :other)
             throw(
@@ -31,14 +29,14 @@ struct NetworkNode{J,N<:AbstractNodeCostFunction}
                 ),
             )
         end
-        return new{J,N}(id, node_type, cost, capacity, info, node_cost)
+        return new{J,N}(id, node_type, capacity, info, node_cost)
     end
 end
 
 """
 $TYPEDSIGNATURES
 
-Constructor for `NetworkNode`.
+Constructor for [`NetworkNode`](@ref).
 # Node Types (Symbol)
 - `:origin`: A entry point for commodities.
 - `:destination`: An exit point for commodities.
@@ -47,14 +45,13 @@ Constructor for `NetworkNode`.
 function NetworkNode(;
     id::String,
     node_type::Symbol,
-    cost::Float64=0.0,
     capacity::Int=typemax(Int),
     info=nothing,
     node_cost::AbstractNodeCostFunction=NoNodeCost(),
 )
     @assert (node_type == :origin || node_type == :destination || node_type == :other) "Invalid node type: $node_type. Must be :origin, :destination, or :other."
     return NetworkNode{typeof(info),typeof(node_cost)}(
-        id, node_type, cost, capacity, info, node_cost
+        id, node_type, capacity, info, node_cost
     )
 end
 
@@ -64,7 +61,6 @@ function Base.show(io::IO, node::NetworkNode)
         "NetworkNode(",
         "id=$(node.id), ",
         "node_type=$(node.node_type), ",
-        "cost=$(node.cost), ",
         "capacity=$(node.capacity == typemax(Int) ? "∞" : string(node.capacity)), ",
         "info=$(node.info), ",
         "node_cost=$(node.node_cost)",

@@ -7,7 +7,7 @@ A linear cost function where the cost is directly proportional to the total size
 $TYPEDFIELDS
 """
 struct LinearArcCost <: AbstractArcCostFunction
-    "Unit cost per unit of size"
+    "unit cost per unit of size"
     cost_per_unit_size::Float64
 end
 

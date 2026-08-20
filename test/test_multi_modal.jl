@@ -17,8 +17,8 @@ const _TRUCK = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
 const _TRAIN = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
 
 const _NODES_AB = [
-    NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=0, info=nothing),
-    NetworkNode(; id="B", node_type=:destination, cost=0.0, capacity=0, info=nothing),
+    NetworkNode(; id="A", node_type=:origin, capacity=0, info=nothing),
+    NetworkNode(; id="B", node_type=:destination, capacity=0, info=nothing),
 ]
 
 function _ng_case1()

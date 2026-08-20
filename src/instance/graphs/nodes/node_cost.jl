@@ -6,7 +6,8 @@ node costs participate in path scoring exactly like arc costs, so they expose th
 `evaluate` / `incremental_cost` / `lower_bound_incremental_cost` interface.
 
 Concrete subtypes **must** implement:
-- `evaluate(c::T, commodities) -> Float64`: total node cost for `commodities`.
+- `evaluate(c::T, commodities) -> Float64`: total node cost for `commodities` passing
+through the node.
 
 Concrete subtypes **may** overload (defaults are provided):
 - `incremental_cost(c::T, existing, new) -> Float64`: marginal cost of adding `new` to a

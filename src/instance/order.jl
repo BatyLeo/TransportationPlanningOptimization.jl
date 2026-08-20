@@ -2,6 +2,8 @@
 $TYPEDEF
 
 An internal structure representing a group of commodities to be delivered together.
+The commodities are sorted in descending order of size to facilitate packing
+heuristics.
 Commodities in an `Order` share the same:
 - Origin node
 - Destination node
@@ -9,7 +11,7 @@ Commodities in an `Order` share the same:
 
 # Type Parameters
 - `is_date_arrival::Bool`: `true` for deadline-driven, `false` for release-driven orders.
-- `I`: Additional problem-specific information.
+- `I`: Additional problem-specific information type.
 
 # Fields
 $TYPEDFIELDS
@@ -47,9 +49,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Construct an `Order` from a list of `LightCommodity`.
-The commodities are sorted (inline) in descending order of size to facilitate packing
-heuristics.
+Construct an [`Order`](@ref) from a list of[ `LightCommodity`](@ref).
 """
 function Order(;
     commodities::Vector{LightCommodity{I}},

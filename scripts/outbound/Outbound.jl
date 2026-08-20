@@ -124,7 +124,6 @@ function parse_outbound_instance(
         NetworkNode(;
             id="$(row[NODE_ID])",
             node_type=node_type_symbol,
-            cost=0.0,
             info=OutboundNodeInfo(Symbol(row[NODE_TYPE]), bts_candidates),
         )
     end
@@ -256,7 +255,6 @@ function parse_dataMVP_instance(
         NetworkNode(;
             id=String(row[MVP_NODE_CODE]),
             node_type=node_type_symbol,
-            cost=0.0,
             info=OutboundNodeInfo(Symbol(row[MVP_NODE_TYPE]), Int[]),
         )
     end

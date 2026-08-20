@@ -10,9 +10,6 @@ Bin-packing methods (`compute_bin_assignments`, `tentative_bin_count`,
 term to be a `BinPackingArcCost` and dispatch to it. Use a single term (not a
 `SumArcCost`) when there is only one cost component.
 
-Tuple-typed `terms` so each `SumArcCost{Tuple{BinPackingArcCost,...}}`
-specializes for type stability.
-
 # Fields
 $TYPEDFIELDS
 """
@@ -25,23 +22,6 @@ struct SumArcCost{T<:Tuple} <: AbstractArcCostFunction
     end
 end
 
-"""
-$TYPEDSIGNATURES
-
-Return the unique `BinPackingArcCost` term inside `c.terms`, or `nothing` if
-no such term exists. Throws `ArgumentError` if more than one is present
-(ambiguous bin-packing semantics).
-"""
-function _find_bin_packing(c::SumArcCost)
-    bps = filter(t -> t isa BinPackingArcCost, c.terms)
-    length(bps) > 1 && throw(
-        ArgumentError(
-            "SumArcCost has $(length(bps)) BinPackingArcCost terms, expected at most 1"
-        ),
-    )
-    return isempty(bps) ? nothing : only(bps)
-end
-
 # Type-stable tuple recursion for summing `evaluate`, `incremental_cost`,
 # and `lower_bound_incremental_cost`.
 @inline _sum_evaluate(::Tuple{}, ::Vector{C}, ::Bool) where {C<:LightCommodity} = 0.0
@@ -50,26 +30,6 @@ end
 ) where {C<:LightCommodity}
     return evaluate(first(terms), comms; presorted) +
            _sum_evaluate(Base.tail(terms), comms, presorted)
-end
-
-@inline _sum_incremental_cost(
-    ::Tuple{}, ::Vector{C}, ::Vector{C}
-) where {C<:LightCommodity} = 0.0
-@inline function _sum_incremental_cost(
-    terms::Tuple, existing::Vector{C}, new::Vector{C}
-) where {C<:LightCommodity}
-    return incremental_cost(first(terms), existing, new) +
-           _sum_incremental_cost(Base.tail(terms), existing, new)
-end
-
-@inline _sum_lb_incremental_cost(
-    ::Tuple{}, ::Vector{C}, ::Vector{C}
-) where {C<:LightCommodity} = 0.0
-@inline function _sum_lb_incremental_cost(
-    terms::Tuple, existing::Vector{C}, new::Vector{C}
-) where {C<:LightCommodity}
-    return lower_bound_incremental_cost(first(terms), existing, new) +
-           _sum_lb_incremental_cost(Base.tail(terms), existing, new)
 end
 
 """
@@ -85,6 +45,16 @@ function evaluate(
     return _sum_evaluate(c.terms, comms, presorted)
 end
 
+@inline _sum_incremental_cost(
+    ::Tuple{}, ::Vector{C}, ::Vector{C}
+) where {C<:LightCommodity} = 0.0
+@inline function _sum_incremental_cost(
+    terms::Tuple, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return incremental_cost(first(terms), existing, new) +
+           _sum_incremental_cost(Base.tail(terms), existing, new)
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -95,6 +65,16 @@ function incremental_cost(
     c::SumArcCost, existing::Vector{C}, new::Vector{C}
 ) where {C<:LightCommodity}
     return _sum_incremental_cost(c.terms, existing, new)
+end
+
+@inline _sum_lb_incremental_cost(
+    ::Tuple{}, ::Vector{C}, ::Vector{C}
+) where {C<:LightCommodity} = 0.0
+@inline function _sum_lb_incremental_cost(
+    terms::Tuple, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return lower_bound_incremental_cost(first(terms), existing, new) +
+           _sum_lb_incremental_cost(Base.tail(terms), existing, new)
 end
 
 """
@@ -109,6 +89,34 @@ function lower_bound_incremental_cost(
     return _sum_lb_incremental_cost(c.terms, existing, new)
 end
 
+"""
+$TYPEDSIGNATURES
+
+Return the unique [`BinPackingArcCost`](@ref) term inside `c.terms`, or
+`nothing` if none is present. Throws `ArgumentError` if more than one is present.
+"""
+function _try_find_bin_packing(c::SumArcCost)
+    bps = filter(t -> t isa BinPackingArcCost, c.terms)
+    length(bps) > 1 && throw(
+        ArgumentError(
+            "SumArcCost has $(length(bps)) BinPackingArcCost terms, expected at most 1"
+        ),
+    )
+    return isempty(bps) ? nothing : only(bps)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Return the unique [`BinPackingArcCost`](@ref) term inside `c.terms`.
+Throws `ArgumentError` if zero or more than one `BinPackingArcCost` is present.
+"""
+function _find_bin_packing(c::SumArcCost)
+    bp = _try_find_bin_packing(c)
+    bp === nothing && throw(ArgumentError("SumArcCost has no BinPackingArcCost term"))
+    return bp
+end
+
 # The buffer-threaded `incremental_cost!(::BinPackingBuffer, ::SumArcCost, ...)`
 # forwarding overload lives in `algorithms/cost_matrix_update.jl`, which is
 # included after `instance/bin.jl` defines `BinPackingBuffer`.
@@ -116,41 +124,23 @@ end
 function compute_bin_assignments(
     c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
 )
-    bp = _find_bin_packing(c)
-    bp === nothing && throw(
-        ArgumentError("compute_bin_assignments: SumArcCost has no BinPackingArcCost term"),
-    )
-    return compute_bin_assignments(bp, comms; presorted)
+    return compute_bin_assignments(_find_bin_packing(c), comms; presorted)
 end
 
 function compute_bin_assignments_bfd(
     c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
 )
-    bp = _find_bin_packing(c)
-    bp === nothing && throw(
-        ArgumentError(
-            "compute_bin_assignments_bfd: SumArcCost has no BinPackingArcCost term"
-        ),
-    )
-    return compute_bin_assignments_bfd(bp, comms; presorted)
+    return compute_bin_assignments_bfd(_find_bin_packing(c), comms; presorted)
 end
 
 function tentative_bin_count(
     c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
 )
-    bp = _find_bin_packing(c)
-    bp === nothing && throw(
-        ArgumentError("tentative_bin_count: SumArcCost has no BinPackingArcCost term")
-    )
-    return tentative_bin_count(bp, comms; presorted)
+    return tentative_bin_count(_find_bin_packing(c), comms; presorted)
 end
 
 function tentative_best_fit_count(
     c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
 )
-    bp = _find_bin_packing(c)
-    bp === nothing && throw(
-        ArgumentError("tentative_best_fit_count: SumArcCost has no BinPackingArcCost term"),
-    )
-    return tentative_best_fit_count(bp, comms; presorted)
+    return tentative_best_fit_count(_find_bin_packing(c), comms; presorted)
 end

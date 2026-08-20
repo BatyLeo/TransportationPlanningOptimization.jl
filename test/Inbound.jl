@@ -213,7 +213,6 @@ function parse_inbound_instance(
         NetworkNode(;
             id=string(row[NODE_ID]),
             node_type=node_type_symbol,
-            cost=Float64(row[NODE_COST]),
             capacity=Int(row[NODE_CAPACITY]),
             node_cost=NodeVolumeCost(Float64(row[NODE_COST]) / VOLUME_FACTOR),
         )

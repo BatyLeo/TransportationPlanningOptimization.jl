@@ -14,6 +14,12 @@ function incremental_cost(
     return evaluate(arc_f, all_commodities) - evaluate(arc_f, existing_commodities)
 end
 
+function incremental_cost(
+    arc_f::AbstractArcCostFunction, ::Nothing, new_commodities::Vector{<:LightCommodity}
+)
+    return evaluate(arc_f, new_commodities)
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -22,6 +28,13 @@ Specialized for LinearArcCost for efficiency.
 function incremental_cost(
     arc_f::LinearArcCost, ::Vector{C}, new_commodities::Vector{C}
 ) where {C<:LightCommodity}
+    total_new_size = sum(c.size for c in new_commodities; init=0.0)
+    return arc_f.cost_per_unit_size * total_new_size
+end
+
+function incremental_cost(
+    arc_f::LinearArcCost, ::Nothing, new_commodities::Vector{<:LightCommodity}
+)
     total_new_size = sum(c.size for c in new_commodities; init=0.0)
     return arc_f.cost_per_unit_size * total_new_size
 end
@@ -43,6 +56,16 @@ function incremental_cost!(
     n_existing::Int=-1,
 ) where {C<:LightCommodity}
     return incremental_cost(arc_f, existing, new)
+end
+
+function incremental_cost!(
+    ::BinPackingBuffer,
+    arc_f::AbstractArcCostFunction,
+    ::Nothing,
+    new::Vector{<:LightCommodity};
+    n_existing::Int=-1,
+)
+    return incremental_cost(arc_f, nothing, new)
 end
 
 """
@@ -95,6 +118,22 @@ sort over a fresh `Vector{Float64}` is taken (rare).
 function incremental_cost!(
     buffer::BinPackingBuffer,
     arc_f::BinPackingArcCost,
+    ::Nothing,
+    new::Vector{C};
+    n_existing::Int=-1,
+) where {C<:LightCommodity}
+    isempty(new) && return 0.0
+    @boundscheck _commodities_is_desc(new) ||
+        throw(ArgumentError("`new` must be sorted descending by `.size`"))
+    cap = Float64(arc_f.bin_capacity)
+    empty!(buffer.remaining_capacities)
+    _ffd_place_commodities!(buffer.remaining_capacities, new, cap)
+    return arc_f.cost_per_bin * length(buffer.remaining_capacities)
+end
+
+function incremental_cost!(
+    buffer::BinPackingBuffer,
+    arc_f::BinPackingArcCost,
     existing::Vector{C},
     new::Vector{C};
     n_existing::Int=-1,
@@ -104,16 +143,8 @@ function incremental_cost!(
         throw(ArgumentError("`new` must be sorted descending by `.size`"))
     cap = Float64(arc_f.bin_capacity)
 
-    # Fast path: no existing commodities, skip the merge and FFD-place directly.
-    if isempty(existing)
-        empty!(buffer.remaining_capacities)
-        _ffd_place_commodities!(buffer.remaining_capacities, new, cap)
-        return arc_f.cost_per_bin * length(buffer.remaining_capacities)
-    end
-
-    # Existing run sizes, descending — materialized into `existing_sizes` so the
-    # merge's hot loop reads from a tightly packed `Vector{Float64}`. Validated
-    # against the descending invariant in debug builds.
+    # Existing run sizes, descending, materialized into `existing_sizes` so the
+    # merge's hot loop reads from a tightly packed `Vector{Float64}`.
     @boundscheck _commodities_is_desc(existing) ||
         throw(ArgumentError("`existing` must be sorted descending by `.size`"))
     resize!(buffer.existing_sizes, length(existing))
@@ -130,7 +161,7 @@ function incremental_cost!(
     end
 
     # FFD over the descending union of `existing_sizes` and `new`. The `new`
-    # commodity vector is iterated directly via `c.size` — no `new_sizes`
+    # commodity vector is iterated directly via `c.size`, no `new_sizes`
     # scratch needed.
     empty!(buffer.remaining_capacities)
     _ffd_place_merged_with_commodities!(
@@ -213,9 +244,23 @@ function incremental_cost!(
 ) where {C<:LightCommodity}
     return _sum_incremental_cost_buf(buffer, c.terms, existing, new, n_existing)
 end
+
+function incremental_cost!(
+    buffer::BinPackingBuffer,
+    c::SumArcCost,
+    ::Nothing,
+    new::Vector{<:LightCommodity};
+    n_existing::Int=-1,
+)
+    return _sum_incremental_cost_buf(buffer, c.terms, nothing, new, n_existing)
+end
+
 @inline _sum_incremental_cost_buf(
     ::BinPackingBuffer, ::Tuple{}, ::Vector{C}, ::Vector{C}, ::Int
 ) where {C<:LightCommodity} = 0.0
+@inline _sum_incremental_cost_buf(
+    ::BinPackingBuffer, ::Tuple{}, ::Nothing, ::Vector{<:LightCommodity}, ::Int
+) = 0.0
 @inline function _sum_incremental_cost_buf(
     buffer::BinPackingBuffer,
     terms::Tuple,
@@ -225,6 +270,16 @@ end
 ) where {C<:LightCommodity}
     return incremental_cost!(buffer, first(terms), existing, new; n_existing) +
            _sum_incremental_cost_buf(buffer, Base.tail(terms), existing, new, n_existing)
+end
+@inline function _sum_incremental_cost_buf(
+    buffer::BinPackingBuffer,
+    terms::Tuple,
+    ::Nothing,
+    new::Vector{<:LightCommodity},
+    n_existing::Int,
+)
+    return incremental_cost!(buffer, first(terms), nothing, new; n_existing) +
+           _sum_incremental_cost_buf(buffer, Base.tail(terms), nothing, new, n_existing)
 end
 
 """

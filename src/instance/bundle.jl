@@ -1,7 +1,7 @@
 """
 $TYPEDEF
 
-A collection of `Order`s that share the same origin and destination.
+A collection of [`Order`](@ref)s that share the same origin and destination.
 While orders in a bundle can have different delivery dates, they should follow the same path
 (in the travel time graph).
 
@@ -49,7 +49,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Construct a `Bundle` from a list of `Order`s and the shared origin and destination node IDs.
+Construct a [`Bundle`](@ref) from a list of [`Order`](@ref)s and the shared origin and destination
+node IDs.
 The `forbidden_nodes` and `forbidden_arcs` fields are optional and can be used to specify additional
 constraints on the paths that can be taken by this bundle.
 """
@@ -91,7 +92,7 @@ total_size(bundle::Bundle) = bundle.total_size
 $TYPEDSIGNATURES
 
 Compute the maximum single-commodity size across all orders in the bundle.
-Matches STP's `maxPackSize`, used to sort bundles for the greedy heuristic.
+Used to sort bundles for the greedy heuristic.
 """
 function max_pack_size(bundle::Bundle)
     return maximum(c.size for order in bundle.orders for c in order.commodities; init=0.0)

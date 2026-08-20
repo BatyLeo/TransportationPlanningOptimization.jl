@@ -8,10 +8,8 @@ using Test
 
 @testset "NetworkNode creation" begin
     @test begin
-        node = NetworkNode(;
-            id="1", node_type=:origin, cost=10.0, capacity=100, info=nothing
-        )
-        node.id == "1" && node.cost == 10.0 && node.capacity == 100
+        node = NetworkNode(; id="1", node_type=:origin, capacity=100, info=nothing)
+        node.id == "1" && node.capacity == 100
     end
 end
 
@@ -24,7 +22,6 @@ end
         node = NetworkNode(;
             id="platform_A",
             node_type=:other,
-            cost=25.0,
             capacity=500,
             info=NodeMetadata(:warehouse, "USA"),
         )
@@ -35,20 +32,16 @@ end
 @testset "NetworkNode capacity and cost" begin
     # Test various capacity and cost values
     @test begin
-        node_small = NetworkNode(;
-            id="1", node_type=:origin, cost=5.0, capacity=10, info=nothing
-        )
+        node_small = NetworkNode(; id="1", node_type=:origin, capacity=10, info=nothing)
         node_large = NetworkNode(;
-            id="2", node_type=:destination, cost=100.0, capacity=10000, info=nothing
+            id="2", node_type=:destination, capacity=10000, info=nothing
         )
-        node_small.capacity < node_large.capacity && node_small.cost < node_large.cost
+        node_small.capacity < node_large.capacity
     end
 
     # Test zero capacity edge case
     @test begin
-        node_zero = NetworkNode(;
-            id="0", node_type=:destination, cost=0.0, capacity=0, info=nothing
-        )
+        node_zero = NetworkNode(; id="0", node_type=:destination, capacity=0, info=nothing)
         node_zero.capacity == 0
     end
 end
@@ -145,11 +138,9 @@ end
 
 @testset "String IDs for nodes and arcs" begin
     @test begin
-        node1 = NetworkNode(;
-            id="node_001", node_type=:origin, cost=1.0, capacity=100, info=nothing
-        )
+        node1 = NetworkNode(; id="node_001", node_type=:origin, capacity=100, info=nothing)
         node2 = NetworkNode(;
-            id="node_002", node_type=:destination, cost=2.0, capacity=200, info=nothing
+            id="node_002", node_type=:destination, capacity=200, info=nothing
         )
         arc = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(0.5), info=nothing)
         arc.travel_time_steps == 0
@@ -158,8 +149,8 @@ end
 
 @testset "TimeSpaceGraph creation" begin
     nodes = [
-        NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
-        NetworkNode(; id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing),
+        NetworkNode(; id="A", node_type=:origin, capacity=10, info=nothing),
+        NetworkNode(; id="B", node_type=:destination, capacity=10, info=nothing),
     ]
     arcs = [(
         "A", "B", NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing)
@@ -216,10 +207,8 @@ end
 @testset "TravelTimeGraph creation and data" begin
     @test begin
         nodes = [
-            NetworkNode(; id="O", node_type=:origin, cost=0.0, capacity=10, info=nothing),
-            NetworkNode(;
-                id="D", node_type=:destination, cost=0.0, capacity=10, info=nothing
-            ),
+            NetworkNode(; id="O", node_type=:origin, capacity=10, info=nothing),
+            NetworkNode(; id="D", node_type=:destination, capacity=10, info=nothing),
         ]
         arcs = [
             (
