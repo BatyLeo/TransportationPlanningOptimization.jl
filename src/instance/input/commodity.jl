@@ -2,10 +2,7 @@
 $TYPEDEF
 
 User-facing commodity data structure for parsing input data.
-
-This structure is designed to be easy to instantiate from CSV, JSON, or other data sources.
-Once all commodities are loaded, they are consolidated into optimized internal structures
-(Commodity, Order, Bundle) based on problem-specific consolidation rules.
+Once all commodities are loaded, they are consolidated into optimized internal structures.
 
 # Type Parameters
 - `is_date_arrival::Bool`: 
@@ -25,7 +22,7 @@ Commodity(
     destination_id = "PLANT_PARIS",
     arrival_date = DateTime(2025, 11, 20),
     size = 150.0,
-    info = (part_id = "ENGINE_V6", priority = :high)
+    info = (; part_id = "ENGINE_V6", priority = :high)
 )
 
 # Outbound logistics (departure date)
@@ -34,7 +31,7 @@ Commodity(
     destination_id = "DEALER_LYON",
     departure_date = DateTime(2025, 11, 18),
     size = 1.0,
-    info = (model = "Clio", color = "Blue")
+    info = (; model = "Clio", color = "Blue")
 )
 ```
 """
@@ -120,12 +117,12 @@ function Commodity(;
     actual_date = is_date_arrival ? arrival_date : departure_date
 
     _forbidden_node_ids = if isnothing(forbidden_node_ids)
-        forbidden_node_ids = Vector{ID}()
+        Vector{ID}()
     else
         forbidden_node_ids
     end
     _forbidden_arcs = if isnothing(forbidden_arcs)
-        forbidden_arcs = Vector{Tuple{ID,ID}}()
+        Vector{Tuple{ID,ID}}()
     else
         forbidden_arcs
     end

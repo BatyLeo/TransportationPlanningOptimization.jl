@@ -74,10 +74,44 @@ end
 """
 $TYPEDSIGNATURES
 
-Get the time horizon of the travel-time graph.
+Get the time horizon of the travel-time graph (starts at 0).
 """
 function time_horizon(travel_time_graph::TravelTimeGraph)
     return 0:(travel_time_graph.max_time_steps)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Add timed copies of a node to the graph for each `τ` in `time_range`.
+"""
+function _add_timed_vertices!(g::MetaGraph, node::NetworkNode, time_range)
+    for τ in time_range
+        Graphs.add_vertex!(g, (node.id, τ), node)
+    end
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
+Add `SHORTCUT_ARC` edges between consecutive time copies of a node.
+Direction depends on `is_date_arrival` (countdown: `τ→τ-1`, countup: `τ-1→τ`).
+"""
+function _add_shortcut_arcs!(
+    g::MetaGraph, node_id::String, time_range, is_date_arrival::Bool
+)
+    for τ in time_range
+        if is_date_arrival
+            u, v = (node_id, τ), (node_id, τ - 1)
+        else
+            u, v = (node_id, τ - 1), (node_id, τ)
+        end
+        if haskey(g, u) && haskey(g, v)
+            Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
+        end
+    end
+    return nothing
 end
 
 """
@@ -100,17 +134,9 @@ function _add_network_node_to_travel_time_graph!(
                 for order in bundle.orders;
                 init=-1,
             )
-            for τ in 0:max_duration
-                Graphs.add_vertex!(g, (node.id, τ), node)
-            end
-
-            for τ in 1:max_duration
-                # If remaining time: spend budget, move from τ to τ-1
-                u, v = (node.id, τ), (node.id, τ - 1)
-                if haskey(g, u) && haskey(g, v)
-                    Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
-                end
-            end
+            _add_timed_vertices!(g, node, 0:max_duration)
+            # If remaining time: spend budget, move from τ to τ-1
+            _add_shortcut_arcs!(g, node.id, 1:max_duration, is_date_arrival)
         else
             # Elapsed time: origin only appears in first step (tau=0)
             Graphs.add_vertex!(g, (node.id, 0), node)
@@ -121,33 +147,15 @@ function _add_network_node_to_travel_time_graph!(
             Graphs.add_vertex!(g, (node.id, 0), node)
         else
             # Elapsed time: copies for all time steps up to max_time_steps
-            for τ in 0:max_time_steps
-                Graphs.add_vertex!(g, (node.id, τ), node)
-            end
+            _add_timed_vertices!(g, node, 0:max_time_steps)
             # Shortcuts to stay at destination (increasing τ)
-            for τ in 1:max_time_steps
-                u, v = (node.id, τ - 1), (node.id, τ)
-                if haskey(g, u) && haskey(g, v)
-                    Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
-                end
-            end
+            _add_shortcut_arcs!(g, node.id, 1:max_time_steps, is_date_arrival)
         end
     else
         # Intermediate nodes: timed copies for all steps
-        for τ in 0:max_time_steps
-            Graphs.add_vertex!(g, (node.id, τ), node)
-        end
-        # # Shortcuts (wait arcs), no wait arcs for now
-        # for τ in 1:max_time_steps
-        #     if is_date_arrival
-        #         u, v = (node.id, τ), (node.id, τ - 1)
-        #     else
-        #         u, v = (node.id, τ - 1), (node.id, τ)
-        #     end
-        #     if haskey(g, u) && haskey(g, v)
-        #         Graphs.add_edge!(g, u, v, SHORTCUT_ARC)
-        #     end
-        # end
+        _add_timed_vertices!(g, node, 0:max_time_steps)
+        # ! If we want to add wait arcs, we can do it here like this:
+        # _add_shortcut_arcs!(g, node.id, 1:max_time_steps, is_date_arrival)
     end
 
     return nothing
@@ -226,6 +234,29 @@ end
 """
 $TYPEDSIGNATURES
 
+BFS traversal from `start` using `neighbors_fn` (e.g. `Graphs.outneighbors` or
+`Graphs.inneighbors`). Returns the set of all reachable node codes.
+"""
+function _bfs_reachable(graph::MetaGraph, start::Int, neighbors_fn)
+    reachable = Set{Int}()
+    queue = DataStructures.Deque{Int}()
+    push!(queue, start)
+    push!(reachable, start)
+    while !isempty(queue)
+        node = popfirst!(queue)
+        for neighbor in neighbors_fn(graph, node)
+            if !(neighbor in reachable)
+                push!(reachable, neighbor)
+                push!(queue, neighbor)
+            end
+        end
+    end
+    return reachable
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute usable arcs for each bundle by finding all arcs that lie on paths
 from the bundle's origin to its destination in the travel-time graph.
 """
@@ -235,39 +266,12 @@ function _compute_bundle_arcs(
     bundle_arcs = Vector{Vector{Tuple{Int,Int}}}(undef, length(origin_codes))
 
     for i in eachindex(origin_codes)
-        origin_code = origin_codes[i]
-        destination_code = destination_codes[i]
-
         # Find all nodes reachable from origin
-        reachable_from_origin = Set{Int}()
-        queue = DataStructures.Deque{Int}()
-        push!(queue, origin_code)
-        push!(reachable_from_origin, origin_code)
-        while !isempty(queue)
-            node = popfirst!(queue)
-            for neighbor in Graphs.outneighbors(graph, node)
-                if neighbor ∉ reachable_from_origin
-                    push!(reachable_from_origin, neighbor)
-                    push!(queue, neighbor)
-                end
-            end
-        end
-
+        reachable_from_origin = _bfs_reachable(graph, origin_codes[i], Graphs.outneighbors)
         # Find all nodes that can reach destination (reverse BFS)
-        can_reach_destination = Set{Int}()
-        empty!(queue)
-        push!(queue, destination_code)
-        push!(can_reach_destination, destination_code)
-        while !isempty(queue)
-            node = popfirst!(queue)
-            for neighbor in Graphs.inneighbors(graph, node)
-                if neighbor ∉ can_reach_destination
-                    push!(can_reach_destination, neighbor)
-                    push!(queue, neighbor)
-                end
-            end
-        end
-
+        can_reach_destination = _bfs_reachable(
+            graph, destination_codes[i], Graphs.inneighbors
+        )
         # Intersection: nodes on paths from origin to destination
         nodes_on_paths = intersect(reachable_from_origin, can_reach_destination)
 
@@ -287,6 +291,51 @@ function _compute_bundle_arcs(
     end
 
     return bundle_arcs
+end
+
+"""
+$TYPEDSIGNATURES
+
+Build a sparse zero-initialized cost matrix from the graph's edges.
+"""
+function _build_cost_matrix(graph::MetaGraph)
+    n = Graphs.nv(graph)
+    I_indices = Int[]
+    J_indices = Int[]
+    V_values = Float64[]
+    for (u_id, v_id) in MetaGraphsNext.edge_labels(graph)
+        i = MetaGraphsNext.code_for(graph, u_id)
+        j = MetaGraphsNext.code_for(graph, v_id)
+        push!(I_indices, i)
+        push!(J_indices, j)
+        push!(V_values, 0.0)
+    end
+    return sparse(I_indices, J_indices, V_values, n, n)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Map each bundle to its origin and destination integer codes in the travel-time graph.
+"""
+function _compute_origin_destination_codes(
+    graph::MetaGraph, bundles::Vector{<:Bundle}, is_date_arrival::Bool
+)
+    origin_codes = Vector{Int}(undef, length(bundles))
+    destination_codes = Vector{Int}(undef, length(bundles))
+    for (i, bundle) in enumerate(bundles)
+        max_val = maximum(order.max_transit_steps for order in bundle.orders)
+        if is_date_arrival
+            start_label = (bundle.origin_id, max_val)
+            end_label = (bundle.destination_id, 0)
+        else
+            start_label = (bundle.origin_id, 0)
+            end_label = (bundle.destination_id, max_val)
+        end
+        origin_codes[i] = MetaGraphsNext.code_for(graph, start_label)
+        destination_codes[i] = MetaGraphsNext.code_for(graph, end_label)
+    end
+    return origin_codes, destination_codes
 end
 
 """
@@ -334,35 +383,11 @@ function TravelTimeGraph(
         )
     end
 
-    # Build cost matrix
-    n = Graphs.nv(graph)
-    I_indices = Int[]
-    J_indices = Int[]
-    V_values = Float64[]
-    for (u_id, v_id) in MetaGraphsNext.edge_labels(graph)
-        i = MetaGraphsNext.code_for(graph, u_id)
-        j = MetaGraphsNext.code_for(graph, v_id)
-        push!(I_indices, i)
-        push!(J_indices, j)
-        push!(V_values, 0.0)
-    end
-    cost_matrix = sparse(I_indices, J_indices, V_values, n, n)
-
-    origin_codes = Vector{Int}(undef, length(bundles))
-    destination_codes = Vector{Int}(undef, length(bundles))
-
-    for (i, bundle) in enumerate(bundles)
-        max_val = maximum(order.max_transit_steps for order in bundle.orders)
-        if is_date_arrival
-            start_label = (bundle.origin_id, max_val)
-            end_label = (bundle.destination_id, 0)
-        else
-            start_label = (bundle.origin_id, 0)
-            end_label = (bundle.destination_id, max_val)
-        end
-        origin_codes[i] = MetaGraphsNext.code_for(graph, start_label)
-        destination_codes[i] = MetaGraphsNext.code_for(graph, end_label)
-    end
+    # Build cost matrix and compute bundle entry/exit points
+    cost_matrix = _build_cost_matrix(graph)
+    origin_codes, destination_codes = _compute_origin_destination_codes(
+        graph, bundles, is_date_arrival
+    )
 
     # Compute usable arcs for each bundle
     bundle_arcs = _compute_bundle_arcs(graph, origin_codes, destination_codes)

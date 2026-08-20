@@ -87,10 +87,34 @@ end
 """
 $TYPEDSIGNATURES
 
+Compute the bin assignments for `commodities` using Best-Fit Decreasing.
+Returns a vector of `Bin` objects.
+
+Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
+"""
+function compute_bin_assignments_bfd(
+    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
+) where {C<:LightCommodity}
+    isempty(commodities) && return Bin{C}[]
+    sorted_commodities =
+        presorted ? commodities : sort(commodities; by=c -> c.size, rev=true)
+    cap = Float64(arc_f.bin_capacity)
+    _check_oversize(sorted_commodities[1].size, cap)
+
+    bin_contents = Vector{C}[]
+    bin_rem_caps = Float64[]
+    _bfd_assign!(bin_contents, bin_rem_caps, sorted_commodities, cap)
+
+    return [Bin(bin_contents[i], bin_rem_caps[i]) for i in eachindex(bin_contents)]
+end
+
+"""
+$TYPEDSIGNATURES
+
 Mirror of `tentative_bin_count` for the BFD heuristic.
 
 Pass `buffer` to reuse a `BinPackingBuffer`'s `caps` vector and avoid the
-per-call allocation; otherwise a fresh `Vector{Float64}` is used.
+per-call allocation, otherwise a fresh `Vector{Float64}` is used.
 
 Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
 """
@@ -112,28 +136,4 @@ function tentative_best_fit_count(
         _bfd_place!(caps, sorted_sizes, cap)
     end
     return length(caps)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Compute the bin assignments for `commodities` using Best-Fit Decreasing
-(BFD). Returns a vector of `Bin` objects.
-
-Throws `DomainError` if any commodity exceeds `arc_f.bin_capacity`.
-"""
-function compute_bin_assignments_bfd(
-    arc_f::BinPackingArcCost, commodities::Vector{C}; presorted::Bool=false
-) where {C<:LightCommodity}
-    isempty(commodities) && return Bin{C}[]
-    sorted_commodities =
-        presorted ? commodities : sort(commodities; by=c -> c.size, rev=true)
-    cap = Float64(arc_f.bin_capacity)
-    _check_oversize(sorted_commodities[1].size, cap)
-
-    bin_contents = Vector{C}[]
-    bin_rem_caps = Float64[]
-    _bfd_assign!(bin_contents, bin_rem_caps, sorted_commodities, cap)
-
-    return [Bin(bin_contents[i], bin_rem_caps[i]) for i in eachindex(bin_contents)]
 end

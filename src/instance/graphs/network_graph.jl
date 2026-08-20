@@ -1,7 +1,7 @@
 """
 $TYPEDEF
 
-A representation of the physical (spatial) network graph.
+A representation of the physical network graph.
 Nodes are identified by `String` labels and store `NetworkNode` metadata.
 Edges store `NetworkArc` metadata.
 
@@ -9,7 +9,7 @@ Edges store `NetworkArc` metadata.
 $TYPEDFIELDS
 """
 struct NetworkGraph{G<:MetaGraph}
-    "The underlying MetaGraph mapping node IDs (Strings) to metadata."
+    "The underlying MetaGraph mapping node IDs to metadata."
     graph::G
 end
 
@@ -45,38 +45,23 @@ function _ttg_edge_type(ng::NetworkGraph)
     return Union{_metagraph_edge_type(ng),typeof(SHORTCUT_ARC)}
 end
 
-"""
-$TYPEDSIGNATURES
+# Auto-promote arc edge data when a duplicate (origin, destination) is added to a
+# `NetworkGraph`. The resulting `MultiModalArc` collects every mode declared for the leg.
 
-Constructor for `NetworkGraph`.
+function _promote_to_multi_modal(existing::NetworkArc, new_arc::NetworkArc)
+    return MultiModalArc([existing, new_arc])
+end
 
-Ensures node IDs are unique. Multiple arcs between the same `(origin_id, destination_id)`
-pair are rejected by default with an `ArgumentError`. Pass `allow_multimodal=true` to
-opt into multi-modal legs: the graph then keeps a single edge whose data is auto-promoted
-to a `MultiModalArc` carrying every mode declared for that leg.
+function _promote_to_multi_modal(existing::MultiModalArc, new_arc::NetworkArc)
+    return MultiModalArc(vcat(existing.modes, [new_arc]))
+end
 
-`arcs` must be concretely typed as `Vector{Tuple{String,String,NA}}` for a single
-`NA<:NetworkArc`. Pre-built `MultiModalArc` values are not accepted in the input vector:
-multi-modal legs must be expressed as several `NetworkArc` entries sharing the same
-`(origin_id, destination_id)` and the constructor handles promotion.
+function _promote_to_multi_modal(existing::NetworkArc, new_arc::MultiModalArc)
+    return MultiModalArc(vcat([existing], new_arc.modes))
+end
 
-Callers holding a heterogeneously-typed arc vector (for example, mixed cost functions)
-should narrow it through [`collect_arcs`](@ref) (or an equivalent step) before calling
-this constructor, which is the standard entry path used by [`Instance`](@ref).
-"""
-function NetworkGraph(
-    nodes::Vector{<:NetworkNode},
-    arcs::Vector{Tuple{String,String,NA}};
-    allow_multimodal::Bool=false,
-) where {NA<:NetworkArc}
-    network_graph = MetaGraph(
-        Graphs.DiGraph();
-        label_type=String,
-        vertex_data_type=eltype(nodes),
-        edge_data_type=Union{NA,MultiModalArc{NA}},
-    )
-    _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal)
-    return NetworkGraph(network_graph)
+function _promote_to_multi_modal(existing::MultiModalArc, new_arc::MultiModalArc)
+    return MultiModalArc(vcat(existing.modes, new_arc.modes))
 end
 
 function _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal::Bool=false)
@@ -117,21 +102,36 @@ function _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal::Bool
     return nothing
 end
 
-# Auto-promote arc edge data when a duplicate (origin, destination) is added to a
-# `NetworkGraph`. The resulting `MultiModalArc` collects every mode declared for the leg.
+"""
+$TYPEDSIGNATURES
 
-function _promote_to_multi_modal(existing::NetworkArc, new_arc::NetworkArc)
-    return MultiModalArc([existing, new_arc])
-end
+Constructor for `NetworkGraph`.
 
-function _promote_to_multi_modal(existing::MultiModalArc, new_arc::NetworkArc)
-    return MultiModalArc(vcat(existing.modes, [new_arc]))
-end
+Ensures node IDs are unique. Multiple arcs between the same `(origin_id, destination_id)`
+pair are rejected by default with an `ArgumentError`. Pass `allow_multimodal=true` to
+opt into multi-modal legs: the graph then keeps a single edge whose data is auto-promoted
+to a `MultiModalArc` carrying every mode declared for that leg.
 
-function _promote_to_multi_modal(existing::NetworkArc, new_arc::MultiModalArc)
-    return MultiModalArc(vcat([existing], new_arc.modes))
-end
+`arcs` must be concretely typed as `Vector{Tuple{String,String,NA}}` for a single
+`NA<:NetworkArc`. Pre-built `MultiModalArc` values are not accepted in the input vector:
+multi-modal legs must be expressed as several `NetworkArc` entries sharing the same
+`(origin_id, destination_id)` and the constructor handles promotion.
 
-function _promote_to_multi_modal(existing::MultiModalArc, new_arc::MultiModalArc)
-    return MultiModalArc(vcat(existing.modes, new_arc.modes))
+Callers holding a heterogeneously-typed arc vector should narrow it through
+[`collect_arcs`](@ref) before calling this constructor, which is the standard entry path
+used by [`Instance`](@ref).
+"""
+function NetworkGraph(
+    nodes::Vector{<:NetworkNode},
+    arcs::Vector{Tuple{String,String,NA}};
+    allow_multimodal::Bool=false,
+) where {NA<:NetworkArc}
+    network_graph = MetaGraph(
+        Graphs.DiGraph();
+        label_type=String,
+        vertex_data_type=eltype(nodes),
+        edge_data_type=Union{NA,MultiModalArc{NA}},
+    )
+    _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal)
+    return NetworkGraph(network_graph)
 end
