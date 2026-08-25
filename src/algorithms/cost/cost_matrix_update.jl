@@ -17,7 +17,8 @@ function compute_ttg_edge_incremental_cost(
     cache = instance.index_cache
 
     # Shortcut arc: same spatial node on both endpoints.
-    if cache.ttg_spatial[u_ttg_code] == cache.ttg_spatial[v_ttg_code]
+    if cache.ttg_code_to_spatial_code[u_ttg_code] ==
+        cache.ttg_code_to_spatial_code[v_ttg_code]
         return 0.0
     end
     total_incremental_cost = 0.0
@@ -31,9 +32,9 @@ function compute_ttg_edge_incremental_cost(
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         if arc === nothing
             @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf # Infeasible for this bundle
@@ -53,15 +54,15 @@ function compute_ttg_edge_incremental_cost(
         )
 
         # Destination-node cost via fast path when available.
-        node_cost = cache.node_cost_of[sv]
+        node_cost = cache.spatial_code_to_node_cost[sv]
         total_incremental_cost += incremental_cost_with_size(
             node_cost, order.commodities, order.commodities, new_total_size
         )
     end
 
     if !isempty(instance.travel_time_graph.cost_scaling)
-        su = cache.ttg_spatial[u_ttg_code]
-        sv = cache.ttg_spatial[v_ttg_code]
+        su = cache.ttg_code_to_spatial_code[u_ttg_code]
+        sv = cache.ttg_code_to_spatial_code[v_ttg_code]
         factor = get(instance.travel_time_graph.cost_scaling, (su, sv), 1.0)
         total_incremental_cost *= factor
     end
@@ -102,8 +103,8 @@ function compute_ttg_edge_lower_bound_cost(
 
     cache = instance.index_cache
     ng = instance.network_graph.graph
-    su = cache.ttg_spatial[u_ttg_code]
-    sv = cache.ttg_spatial[v_ttg_code]
+    su = cache.ttg_code_to_spatial_code[u_ttg_code]
+    sv = cache.ttg_code_to_spatial_code[v_ttg_code]
 
     # Shortcut arc: same spatial node on both endpoints.
     if su == sv
@@ -124,9 +125,9 @@ function compute_ttg_edge_lower_bound_cost(
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         if arc === nothing
             @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf
@@ -138,7 +139,7 @@ function compute_ttg_edge_lower_bound_cost(
         # Destination-node cost. Charged on the spatial destination of each
         # traversed arc, matching STP's `volume_stock_cost`
         # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
-        node_cost = cache.node_cost_of[sv]
+        node_cost = cache.spatial_code_to_node_cost[sv]
         existing_at_dst_node = if existing === nothing
             C[]
         elseif existing isa SingleAssignment
@@ -178,9 +179,9 @@ function _direct_arc_lb_cost(
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         if arc === nothing
             @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
             return Inf
@@ -192,7 +193,7 @@ function _direct_arc_lb_cost(
 
         # Destination-node cost on the direct arc, charged once per order.
         # Per-order incremental: existing is empty (LB is against empty solution).
-        node_cost = cache.node_cost_of[sv]
+        node_cost = cache.spatial_code_to_node_cost[sv]
         total += lower_bound_incremental_cost(
             node_cost, eltype(order.commodities)[], order.commodities
         )
@@ -303,8 +304,8 @@ function compute_ttg_edge_filtering_cost(
 ) where {C}
     cache = instance.index_cache
     ng = instance.network_graph.graph
-    u_id = MetaGraphsNext.label_for(ng, cache.ttg_spatial[u_ttg_code])
-    v_id = MetaGraphsNext.label_for(ng, cache.ttg_spatial[v_ttg_code])
+    u_id = MetaGraphsNext.label_for(ng, cache.ttg_code_to_spatial_code[u_ttg_code])
+    v_id = MetaGraphsNext.label_for(ng, cache.ttg_code_to_spatial_code[v_ttg_code])
     if u_id == bundle.origin_id && v_id == bundle.destination_id
         return compute_ttg_edge_incremental_cost(
             current_solution,
@@ -371,8 +372,8 @@ function update_bundle_cost_matrix!(
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
     for (u_code, v_code) in bundle_arcs
-        su = cache.ttg_spatial[u_code]
-        sv = cache.ttg_spatial[v_code]
+        su = cache.ttg_code_to_spatial_code[u_code]
+        sv = cache.ttg_code_to_spatial_code[v_code]
 
         if (su, sv) in fa || su in fn || sv in fn
             ttg.cost_matrix[u_code, v_code] = Inf
@@ -483,8 +484,8 @@ function parallel_update_bundle_cost_matrix!(
 
     Threads.@threads :static for i in eachindex(bundle_arcs)
         (u_code, v_code) = bundle_arcs[i]
-        su = cache.ttg_spatial[u_code]
-        sv = cache.ttg_spatial[v_code]
+        su = cache.ttg_code_to_spatial_code[u_code]
+        sv = cache.ttg_code_to_spatial_code[v_code]
 
         c = if (su, sv) in fa || su in fn || sv in fn
             Inf

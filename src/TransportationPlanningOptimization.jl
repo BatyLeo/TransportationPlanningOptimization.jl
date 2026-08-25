@@ -32,6 +32,7 @@ include("instance/graphs/arcs/network_arc.jl")
 
 include("instance/input/commodity.jl")
 include("instance/input/arc.jl")
+include("instance/input/node.jl")
 
 include("instance/graphs/network_graph.jl")
 include("instance/graphs/time_space_graph.jl")

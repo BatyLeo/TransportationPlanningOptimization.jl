@@ -271,9 +271,9 @@ function _refresh_dirty_assignments!(sol::Solution, instance::Instance, edges)
     for edge in edges
         assignment = get(sol.assignments, edge, nothing)
         assignment === nothing && continue
-        su = cache.tsg_spatial[edge[1]]
-        sv = cache.tsg_spatial[edge[2]]
-        arc = cache.arc_of[(su, sv)]
+        su = cache.tsg_code_to_spatial_code[edge[1]]
+        sv = cache.tsg_code_to_spatial_code[edge[2]]
+        arc = cache.spatial_pair_to_arc[(su, sv)]
         if assignment isa SingleAssignment
             assignment.bins_dirty || continue
             _update_single_assignment_cost!(assignment, arc.cost)
@@ -723,9 +723,9 @@ function _lazy_bundle_dijkstra!(
         d_u > dists[u] && continue
         u == dest && break
 
-        su = cache.ttg_spatial[u]
+        su = cache.ttg_code_to_spatial_code[u]
         for v in get(bundle_adj, u, Int[])
-            sv = cache.ttg_spatial[v]
+            sv = cache.ttg_code_to_spatial_code[v]
 
             if su == sv
                 alt = d_u
@@ -775,8 +775,8 @@ function _build_spatial_to_bundles(instance::Instance)
     for (bi, arcs) in enumerate(ttg.bundle_arcs)
         seen = Set{Tuple{Int,Int}}()
         for (u, v) in arcs
-            su = cache.ttg_spatial[u]
-            sv = cache.ttg_spatial[v]
+            su = cache.ttg_code_to_spatial_code[u]
+            sv = cache.ttg_code_to_spatial_code[v]
             su == sv && continue
             key = (su, sv)
             key in seen && continue
@@ -810,8 +810,8 @@ function _mark_dirty_after_move!(
 )
     for path in (old_path, new_path)
         for i in 1:(length(path) - 1)
-            su = cache.ttg_spatial[path[i]]
-            sv = cache.ttg_spatial[path[i + 1]]
+            su = cache.ttg_code_to_spatial_code[path[i]]
+            sv = cache.ttg_code_to_spatial_code[path[i + 1]]
             su == sv && continue
             for bi in get(spatial_to_bundles, (su, sv), Int[])
                 if clean[bi]

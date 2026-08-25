@@ -437,7 +437,8 @@ function build_instance(
     check_bundle_feasibility=true,
     allow_multimodal::Bool=false,
 ) where {is_date_arrival,ID,I,NA<:NetworkArc}
-    network_graph = NetworkGraph(nodes, arcs; allow_multimodal)
+    narrowed_nodes = collect_nodes(infer_node_cost_types(nodes), nodes; validate=false)
+    network_graph = NetworkGraph(narrowed_nodes, arcs; allow_multimodal)
     order_dict, time_horizon_length, start_date = _expand_commodities(
         commodities, time_step, group_by, wrap_time
     )

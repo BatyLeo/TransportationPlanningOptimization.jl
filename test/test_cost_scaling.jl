@@ -36,7 +36,7 @@ end
 
     # Pick the first usable arc for bundle 1 (skip self-loops)
     (u, v) = ttg.bundle_arcs[1][1]
-    if cache.ttg_spatial[u] == cache.ttg_spatial[v]
+    if cache.ttg_code_to_spatial_code[u] == cache.ttg_code_to_spatial_code[v]
         (u, v) = ttg.bundle_arcs[1][2]
     end
 
@@ -44,8 +44,8 @@ end
     baseline = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)
 
     # Set scaling factor = 2.0 on the spatial arc
-    su = cache.ttg_spatial[u]
-    sv = cache.ttg_spatial[v]
+    su = cache.ttg_code_to_spatial_code[u]
+    sv = cache.ttg_code_to_spatial_code[v]
     ttg.cost_scaling[(su, sv)] = 2.0
 
     scaled = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)

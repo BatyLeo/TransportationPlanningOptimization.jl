@@ -1,26 +1,25 @@
 """
 $TYPEDEF
 
-Precomputed integer-indexed lookup tables for the construction hot path, derived
-once from the instance graphs and never mutated. They replace MetaGraphsNext
-label-to-code hashing with flat array indexing.
+Precomputed integer-indexed lookup tables, derived once from the instance graphs and never mutated.
+They replace MetaGraphsNext label-to-code hashing with flat array indexing.
 
 # Fields
 $TYPEDFIELDS
 """
 struct IndexCache{ARC,NC}
     "travel-time node code to network (spatial) node code"
-    ttg_spatial::Vector{Int}
+    ttg_code_to_spatial_code::Vector{Int}
     "travel-time node code to its time budget tau"
-    ttg_tau::Vector{Int}
+    ttg_code_to_tau::Vector{Int}
     "(spatial code, time step) to time-space node code (0 means absent)"
-    tsg_code_of::Matrix{Int}
+    spatial_code_and_time_to_tsg_code::Matrix{Int}
     "time-space node code to network (spatial) node code"
-    tsg_spatial::Vector{Int}
+    tsg_code_to_spatial_code::Vector{Int}
     "(spatial u, spatial v) to arc metadata"
-    arc_of::Dict{Tuple{Int,Int},ARC}
+    spatial_pair_to_arc::Dict{Tuple{Int,Int},ARC}
     "spatial code to destination node cost"
-    node_cost_of::Vector{NC}
+    spatial_code_to_node_cost::Vector{NC}
 end
 
 """
@@ -41,32 +40,39 @@ function build_index_cache(
     n_net = Graphs.nv(ng)
 
     n_ttg = Graphs.nv(ttg)
-    ttg_spatial = Vector{Int}(undef, n_ttg)
-    ttg_tau = Vector{Int}(undef, n_ttg)
+    ttg_code_to_spatial_code = Vector{Int}(undef, n_ttg)
+    ttg_code_to_tau = Vector{Int}(undef, n_ttg)
     for code in 1:n_ttg
         loc, τ = MetaGraphsNext.label_for(ttg, code)
-        ttg_spatial[code] = MetaGraphsNext.code_for(ng, loc)
-        ttg_tau[code] = τ
+        ttg_code_to_spatial_code[code] = MetaGraphsNext.code_for(ng, loc)
+        ttg_code_to_tau[code] = τ
     end
 
     n_tsg = Graphs.nv(tsg)
-    tsg_spatial = Vector{Int}(undef, n_tsg)
-    tsg_code_of = zeros(Int, n_net, time_horizon_length)  # 0 encodes "no TSG node at this (spatial, t) pair"
+    tsg_code_to_spatial_code = Vector{Int}(undef, n_tsg)
+    spatial_code_and_time_to_tsg_code = zeros(Int, n_net, time_horizon_length)  # 0 encodes "no TSG node at this (spatial, t) pair"
     for code in 1:n_tsg
         nid, t = MetaGraphsNext.label_for(tsg, code)
         s = MetaGraphsNext.code_for(ng, nid)
-        tsg_spatial[code] = s
-        tsg_code_of[s, t] = code
+        tsg_code_to_spatial_code[code] = s
+        spatial_code_and_time_to_tsg_code[s, t] = code
     end
 
-    arc_of = Dict(
+    spatial_pair_to_arc = Dict(
         (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) => ng[u, v] for
         (u, v) in MetaGraphsNext.edge_labels(ng)
     )
 
-    # NC is inferred from the node cost types: homogeneous instances stay concrete,
-    # mixed node-cost-type instances widen NC to AbstractNodeCostFunction.
-    node_cost_of = [ng[MetaGraphsNext.label_for(ng, c)].node_cost for c in 1:n_net]
+    spatial_code_to_node_cost = [
+        ng[MetaGraphsNext.label_for(ng, c)].node_cost for c in 1:n_net
+    ]
 
-    return IndexCache(ttg_spatial, ttg_tau, tsg_code_of, tsg_spatial, arc_of, node_cost_of)
+    return IndexCache(
+        ttg_code_to_spatial_code,
+        ttg_code_to_tau,
+        spatial_code_and_time_to_tsg_code,
+        tsg_code_to_spatial_code,
+        spatial_pair_to_arc,
+        spatial_code_to_node_cost,
+    )
 end

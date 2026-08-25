@@ -42,9 +42,9 @@ function _slope_scaling_update_edge!(
     v_tsg::Int,
     assignment::SingleAssignment,
 )
-    su = cache.tsg_spatial[u_tsg]
-    sv = cache.tsg_spatial[v_tsg]
-    arc = get(cache.arc_of, (su, sv), nothing)
+    su = cache.tsg_code_to_spatial_code[u_tsg]
+    sv = cache.tsg_code_to_spatial_code[v_tsg]
+    arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
     arc === nothing && return nothing
 
     bp_cost = _bin_packing_cost_of(arc.cost)

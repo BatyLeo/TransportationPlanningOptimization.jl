@@ -40,10 +40,11 @@ end
 
     # Forbid arcs where both endpoints have the same spatial node as the
     # destination of bundle 1 (this is a contrived predicate for testing)
-    dst_spatial = cache.ttg_spatial[ttg.destination_codes[1]]
+    dst_spatial = cache.ttg_code_to_spatial_code[ttg.destination_codes[1]]
     function my_forbidden(inst, u, v)
         c = inst.index_cache
-        return c.ttg_spatial[u] == dst_spatial || c.ttg_spatial[v] == dst_spatial
+        return c.ttg_code_to_spatial_code[u] == dst_spatial ||
+               c.ttg_code_to_spatial_code[v] == dst_spatial
     end
 
     # This may or may not find forbidden bundles, but it should not crash

@@ -457,7 +457,7 @@ function _collect_common_tsg_arcs(instance)
     common_arcs = Tuple{Int,Int}[]
     arc_bp = Dict{Tuple{Int,Int},TPO.BinPackingArcCost}()
 
-    for ((su, sv), arc) in cache.arc_of
+    for ((su, sv), arc) in cache.spatial_pair_to_arc
         bp = _bp_cost_of(arc.cost)
         bp === nothing && continue
         for t in 1:H
@@ -466,8 +466,8 @@ function _collect_common_tsg_arcs(instance)
                 wrap || continue
                 dest_t -= H
             end
-            u_tsg = cache.tsg_code_of[su, t]
-            v_tsg = cache.tsg_code_of[sv, dest_t]
+            u_tsg = cache.spatial_code_and_time_to_tsg_code[su, t]
+            v_tsg = cache.spatial_code_and_time_to_tsg_code[sv, dest_t]
             (iszero(u_tsg) || iszero(v_tsg)) && continue
             push!(common_arcs, (u_tsg, v_tsg))
             arc_bp[(u_tsg, v_tsg)] = bp
@@ -528,7 +528,7 @@ function _select_bundles_by_plant(
 
     # Approximate number of tau variables (common TSG arcs)
     n_common = 0
-    for ((su, sv), arc) in cache.arc_of
+    for ((su, sv), arc) in cache.spatial_pair_to_arc
         if _bp_cost_of(arc.cost) !== nothing
             n_common += instance.time_horizon_length
         end
@@ -557,17 +557,17 @@ end
 
 function _milp_arc_cost(instance, bundle_idx, u_ttg, v_ttg)
     cache = instance.index_cache
-    su = cache.ttg_spatial[u_ttg]
-    sv = cache.ttg_spatial[v_ttg]
+    su = cache.ttg_code_to_spatial_code[u_ttg]
+    sv = cache.ttg_code_to_spatial_code[v_ttg]
     su == sv && return 1e-5  # shortcut
 
-    arc = cache.arc_of[(su, sv)]
+    arc = cache.spatial_pair_to_arc[(su, sv)]
     bundle = instance.bundles[bundle_idx]
 
     cost = 0.0
     for order in bundle.orders
         cost += _non_bp_cost(arc.cost, order.commodities)
-        cost += TPO.evaluate(cache.node_cost_of[sv], order.commodities)
+        cost += TPO.evaluate(cache.spatial_code_to_node_cost[sv], order.commodities)
     end
 
     # For linear arcs (no bin packing), the transport cost is already in _non_bp_cost.
@@ -659,10 +659,10 @@ function _solve_arc_flow_milp(
         for order in bundle.orders
             for arc in ttg.bundle_arcs[b]
                 u_ttg, v_ttg = arc
-                su = cache.ttg_spatial[u_ttg]
-                sv = cache.ttg_spatial[v_ttg]
+                su = cache.ttg_code_to_spatial_code[u_ttg]
+                sv = cache.ttg_code_to_spatial_code[v_ttg]
                 su == sv && continue  # shortcut
-                tsg_arc = cache.arc_of[(su, sv)]
+                tsg_arc = cache.spatial_pair_to_arc[(su, sv)]
                 _bp_cost_of(tsg_arc.cost) === nothing && continue  # linear, no packing
 
                 u_tsg = TPO.project_to_time_space_graph(u_ttg, order, instance)
@@ -685,7 +685,7 @@ function _solve_arc_flow_milp(
         ng = instance.network_graph.graph
         for arc in ttg.bundle_arcs[b]
             u_ttg, v_ttg = arc
-            sv = cache.ttg_spatial[v_ttg]
+            sv = cache.ttg_code_to_spatial_code[v_ttg]
             dst_node = ng[MetaGraphsNext.label_for(ng, sv)]
             if dst_node.node_type == :other  # intermediate nodes (platforms, ports)
                 node_id = dst_node.id
@@ -705,8 +705,8 @@ function _solve_arc_flow_milp(
     for edge in common_arcs
         bp = arc_bp[edge]
         u_tsg, v_tsg = edge
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
         scaling = get(ttg.cost_scaling, (su, sv), 1.0)
         JuMP.add_to_expression!(obj, tau[edge], bp.cost_per_bin * scaling)
     end
@@ -733,8 +733,8 @@ function _solve_arc_flow_milp(
             # Build shortcut adjacency to chain from origin to path[1]
             shortcut_next = Dict{Int,Int}()
             for arc in ttg.bundle_arcs[b]
-                su = cache.ttg_spatial[arc[1]]
-                sv = cache.ttg_spatial[arc[2]]
+                su = cache.ttg_code_to_spatial_code[arc[1]]
+                sv = cache.ttg_code_to_spatial_code[arc[2]]
                 if su == sv
                     shortcut_next[arc[1]] = arc[2]
                 end
@@ -807,8 +807,8 @@ function _solve_arc_flow_milp(
         neighbors = Dict{Int,Int}()
         for arc in ttg.bundle_arcs[b]
             xval = JuMP.value(x[(b, arc)])
-            su = cache.ttg_spatial[arc[1]]
-            sv = cache.ttg_spatial[arc[2]]
+            su = cache.ttg_code_to_spatial_code[arc[1]]
+            sv = cache.ttg_code_to_spatial_code[arc[2]]
             is_shortcut = (su == sv)
             if !is_shortcut && xval > 0.5
                 neighbors[arc[1]] = arc[2]
@@ -817,13 +817,13 @@ function _solve_arc_flow_milp(
 
         origin = ttg.origin_codes[b]
         destination = ttg.destination_codes[b]
-        origin_spatial = cache.ttg_spatial[origin]
+        origin_spatial = cache.ttg_code_to_spatial_code[origin]
 
         # Find the real start node: first source of a non-shortcut arc
         # with the origin's spatial code (where shortcuts end)
         start_node = nothing
         for src in keys(neighbors)
-            if cache.ttg_spatial[src] == origin_spatial
+            if cache.ttg_code_to_spatial_code[src] == origin_spatial
                 start_node = src
                 break
             end
@@ -877,8 +877,8 @@ function TPO.perturbate!(
         bundle = instance.bundles[b]
         for order in bundle.orders
             for arc in ttg.bundle_arcs[b]
-                su = cache.ttg_spatial[arc[1]]
-                sv = cache.ttg_spatial[arc[2]]
+                su = cache.ttg_code_to_spatial_code[arc[1]]
+                sv = cache.ttg_code_to_spatial_code[arc[2]]
                 su == sv && continue
                 u_tsg = TPO.project_to_time_space_graph(arc[1], order, instance)
                 v_tsg = TPO.project_to_time_space_graph(arc[2], order, instance)

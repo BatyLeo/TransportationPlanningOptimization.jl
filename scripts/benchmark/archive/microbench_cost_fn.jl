@@ -84,9 +84,9 @@ function cost_fn_no_node(
     for order in bundle.orders
         u_tsg = TPO.project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = TPO.project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         arc === nothing && return Inf
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
@@ -128,9 +128,9 @@ function cost_fn_no_label_for(
     for order in bundle.orders
         u_tsg = TPO.project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = TPO.project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         arc === nothing && return Inf
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
@@ -142,7 +142,7 @@ function cost_fn_no_label_for(
             mode_selector;
             packing=packing,
         )
-        node_cost = cache.node_cost_of[sv]
+        node_cost = cache.spatial_code_to_node_cost[sv]
         existing_at_dst_node = if existing_assignment === nothing
             C[]
         elseif existing_assignment isa TPO.SingleAssignment
@@ -175,9 +175,9 @@ function cost_fn_no_node_no_label(
     for order in bundle.orders
         u_tsg = TPO.project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = TPO.project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         arc === nothing && return Inf
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
@@ -216,9 +216,9 @@ function cost_fn_only_bookkeeping(
     for order in bundle.orders
         u_tsg = TPO.project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = TPO.project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_spatial[u_tsg]
-        sv = cache.tsg_spatial[v_tsg]
-        arc = get(cache.arc_of, (su, sv), nothing)
+        su = cache.tsg_code_to_spatial_code[u_tsg]
+        sv = cache.tsg_code_to_spatial_code[v_tsg]
+        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
         arc === nothing && return Inf
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)

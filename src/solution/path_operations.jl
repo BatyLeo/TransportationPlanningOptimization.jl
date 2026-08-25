@@ -17,8 +17,8 @@ function project_to_time_space_graph(
     ttg_node_code::Int, order::Order{is_date_arrival}, instance::Instance
 ) where {is_date_arrival}
     cache = instance.index_cache
-    snode = cache.ttg_spatial[ttg_node_code]
-    τ = cache.ttg_tau[ttg_node_code]
+    snode = cache.ttg_code_to_spatial_code[ttg_node_code]
+    τ = cache.ttg_code_to_tau[ttg_node_code]
 
     if is_date_arrival
         t = order.time_step - τ
@@ -43,8 +43,8 @@ function project_to_time_space_graph(
         end
     end
 
-    tsg_code = cache.tsg_code_of[snode, t]
-    # tsg_code_of stores 0 where no TSG node exists at (snode, t). Valid
+    tsg_code = cache.spatial_code_and_time_to_tsg_code[snode, t]
+    # spatial_code_and_time_to_tsg_code stores 0 where no TSG node exists at (snode, t). Valid
     # projections always land on an existing node (the TSG has a timed copy of
     # every network node for every t in 1:time_horizon_length), so a 0 here means
     # a broken invariant, not normal flow. Throw a clear error instead of letting
@@ -149,9 +149,9 @@ function add_bundle_path!(
         for k in 1:(length(path) - 1)
             u_tsg = project_to_time_space_graph(path[k], order, instance)
             v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
-            su = cache.tsg_spatial[u_tsg]
-            sv = cache.tsg_spatial[v_tsg]
-            arc = cache.arc_of[(su, sv)]
+            su = cache.tsg_code_to_spatial_code[u_tsg]
+            sv = cache.tsg_code_to_spatial_code[v_tsg]
+            arc = cache.spatial_pair_to_arc[(su, sv)]
             edge = (u_tsg, v_tsg)
             cost_delta += _add_order_to_assignment!(
                 current_solution.assignments,
@@ -217,9 +217,9 @@ function remove_bundle_path!(
         for k in 1:(length(path) - 1)
             u_tsg = project_to_time_space_graph(path[k], order, instance)
             v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
-            su = cache.tsg_spatial[u_tsg]
-            sv = cache.tsg_spatial[v_tsg]
-            arc = cache.arc_of[(su, sv)]
+            su = cache.tsg_code_to_spatial_code[u_tsg]
+            sv = cache.tsg_code_to_spatial_code[v_tsg]
+            arc = cache.spatial_pair_to_arc[(su, sv)]
             edge = (u_tsg, v_tsg)
             assignment = current_solution.assignments[edge]
             cost_delta += _remove_commodities_from_assignment!(
