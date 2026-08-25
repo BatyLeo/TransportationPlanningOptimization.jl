@@ -17,6 +17,10 @@ include("instance/commodity.jl")
 include("instance/order.jl")
 include("instance/bundle.jl")
 
+include("instance/graphs/arcs/arc_costs/bin_packing/bin.jl")
+include("instance/graphs/arcs/arc_costs/bin_packing/ffd.jl")
+include("instance/graphs/arcs/arc_costs/bin_packing/bfd.jl")
+
 include("instance/graphs/nodes/node_cost.jl")
 include("instance/graphs/nodes/network_node.jl")
 include("instance/graphs/arcs/arc_costs/abstract_arc_cost.jl")
@@ -45,7 +49,6 @@ include("solution/feasibility.jl")
 include("solution/parsing.jl")
 
 include("algorithms/shortest_path.jl")
-include("algorithms/cost/incremental_cost.jl")
 include("algorithms/cost/edge_cost.jl")
 include("algorithms/cost/cost_matrix_update.jl")
 include("algorithms/greedy_heuristic.jl")
@@ -102,8 +105,7 @@ export iterated_local_search!
     gurobi_optimizer()
 
 Return a JuMP-compatible Gurobi optimizer instance using a cached `Gurobi.Env`.
-Requires `Gurobi.jl` to be loaded (activates
-`TransportationPlanningOptimizationGurobiExt`).
+Requires `Gurobi.jl` to be loaded (activates `TransportationPlanningOptimizationGurobiExt`).
 
 Pass as a factory to JuMP: `Model(gurobi_optimizer)`.
 """

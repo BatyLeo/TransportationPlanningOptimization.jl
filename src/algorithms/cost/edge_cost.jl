@@ -79,27 +79,14 @@ end
 """
 $TYPEDSIGNATURES
 
-Frozen-bin per-edge increment for a single-mode assignment. Dispatches on the
-arc cost type so only `BinPackingArcCost` and `SumArcCost` use the frozen bin
-count; every other cost is linear in volume and identical in both modes, so it
-falls back to the standard `incremental_cost!`.
+Frozen-bin per-edge increment for a single-mode assignment. When bins are clean,
+dispatches to `frozen_incremental_cost!` (bin-packing terms reuse committed bins,
+others fall back to `incremental_cost_with_size` or `incremental_cost!`).
+When bins are dirty, falls back to the standard `incremental_cost!`.
 """
 function _frozen_edge_incremental_cost(
     buffer::BinPackingBuffer,
-    arc_f::BinPackingArcCost,
-    existing::SingleAssignment{C},
-    new_comms::Vector{C},
-    ::Float64=NaN,
-) where {C<:LightCommodity}
-    if existing.bins_dirty
-        return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
-    end
-    return frozen_incremental_cost!(buffer, arc_f, existing.bins, new_comms)
-end
-
-function _frozen_edge_incremental_cost(
-    buffer::BinPackingBuffer,
-    arc_f::SumArcCost,
+    arc_f::AbstractArcCostFunction,
     existing::SingleAssignment{C},
     new_comms::Vector{C},
     new_total_size::Float64=NaN,
@@ -109,24 +96,6 @@ function _frozen_edge_incremental_cost(
     end
     return frozen_incremental_cost!(
         buffer, arc_f, existing.bins, existing.commodities, new_comms, new_total_size
-    )
-end
-
-function _frozen_edge_incremental_cost(
-    buffer::BinPackingBuffer,
-    arc_f::AbstractArcCostFunction,
-    existing::SingleAssignment{C},
-    new_comms::Vector{C},
-    new_total_size::Float64=NaN,
-) where {C<:LightCommodity}
-    if !isnan(new_total_size)
-        return incremental_cost_with_size(
-            arc_f, existing.commodities, new_comms, new_total_size
-        )
-    end
-    n_ex = existing.bins_dirty ? -1 : length(existing.bins)
-    return incremental_cost!(
-        buffer, arc_f, existing.commodities, new_comms; n_existing=n_ex
     )
 end
 

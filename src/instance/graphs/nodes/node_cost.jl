@@ -71,3 +71,29 @@ function lower_bound_incremental_cost(
 ) where {C<:LightCommodity}
     return 0.0
 end
+
+"""
+$TYPEDSIGNATURES
+
+Fast path when `new_total_size` is precomputed. Falls back to `incremental_cost`.
+"""
+function incremental_cost_with_size(
+    node_f::AbstractNodeCostFunction, existing::Vector{C}, new::Vector{C}, ::Float64
+) where {C<:LightCommodity}
+    return incremental_cost(node_f, existing, new)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Generic fallback for node costs: ignores the buffer and forwards to `incremental_cost`.
+"""
+function incremental_cost!(
+    ::BinPackingBuffer,
+    node_f::AbstractNodeCostFunction,
+    existing::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
+) where {C<:LightCommodity}
+    return incremental_cost(node_f, existing, new)
+end

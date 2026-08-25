@@ -1,7 +1,3 @@
-include(joinpath(@__DIR__, "bin_packing", "bin.jl"))
-include(joinpath(@__DIR__, "bin_packing", "ffd.jl"))
-include(joinpath(@__DIR__, "bin_packing", "bfd.jl"))
-
 """
 $TYPEDEF
 
@@ -15,17 +11,6 @@ struct BinPackingArcCost <: AbstractArcCostFunction
     cost_per_bin::Float64
     "capacity of a single bin/truck"
     bin_capacity::Int
-end
-
-"""
-$TYPEDSIGNATURES
-
-Uses the First-Fit Decreasing (FFD) heuristic to determine bin assignments and count.
-"""
-function evaluate(
-    arc_f::BinPackingArcCost, commodities::Vector{<:LightCommodity}; presorted::Bool=false
-)
-    return arc_f.cost_per_bin * tentative_bin_count(arc_f, commodities; presorted)
 end
 
 """
@@ -136,4 +121,119 @@ function tentative_best_fit_count(
         _bfd_place!(caps, sorted_sizes, cap)
     end
     return length(caps)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Uses the First-Fit Decreasing (FFD) heuristic to determine bin assignments and count.
+"""
+function evaluate(
+    arc_f::BinPackingArcCost, commodities::Vector{<:LightCommodity}; presorted::Bool=false
+)
+    return arc_f.cost_per_bin * tentative_bin_count(arc_f, commodities; presorted)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Buffer-threaded FFD bin cost on an empty arc. Places `new` from scratch.
+"""
+function incremental_cost!(
+    buffer::BinPackingBuffer,
+    arc_f::BinPackingArcCost,
+    ::Nothing,
+    new::Vector{C};
+    n_existing::Int=-1,
+) where {C<:LightCommodity}
+    isempty(new) && return 0.0
+    @boundscheck _commodities_is_desc(new) ||
+        throw(ArgumentError("`new` must be sorted descending by `.size`"))
+    cap = Float64(arc_f.bin_capacity)
+    empty!(buffer.remaining_capacities)
+    _ffd_place_commodities!(buffer.remaining_capacities, new, cap)
+    return arc_f.cost_per_bin * length(buffer.remaining_capacities)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Buffer-threaded FFD bin cost of adding `new` to `existing`.
+Streams a descending two-way merge of the two pre-sorted runs into FFD
+without materializing the union vector.
+When `n_existing >= 0`, the standalone FFD-on-existing pass is skipped and
+the cached bin count is used instead.
+"""
+function incremental_cost!(
+    buffer::BinPackingBuffer,
+    arc_f::BinPackingArcCost,
+    existing::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
+) where {C<:LightCommodity}
+    isempty(new) && return 0.0
+    @boundscheck _commodities_is_desc(new) ||
+        throw(ArgumentError("`new` must be sorted descending by `.size`"))
+    cap = Float64(arc_f.bin_capacity)
+
+    # Existing run sizes, descending, materialized into `existing_sizes` so the
+    # merge's hot loop reads from a tightly packed `Vector{Float64}`.
+    @boundscheck _commodities_is_desc(existing) ||
+        throw(ArgumentError("`existing` must be sorted descending by `.size`"))
+    resize!(buffer.existing_sizes, length(existing))
+    @inbounds for (i, c) in enumerate(existing)
+        buffer.existing_sizes[i] = c.size
+    end
+
+    # When the caller passes `n_existing` (= `length(assignment.bins)`),
+    # skip the standalone FFD-on-existing pass and trust the cached value.
+    n_ex = if n_existing >= 0
+        n_existing
+    else
+        ffd_count!(buffer, cap, buffer.existing_sizes)
+    end
+
+    # FFD over the descending union of `existing_sizes` and `new`.
+    empty!(buffer.remaining_capacities)
+    _ffd_place_merged_with_commodities!(
+        buffer.remaining_capacities, buffer.existing_sizes, new, cap
+    )
+    n_union = length(buffer.remaining_capacities)
+
+    return arc_f.cost_per_bin * (n_union - n_ex)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Frozen-bin incremental cost: first-fit `new` onto the committed bins without
+re-packing. Returns `cost_per_bin * (newly opened bins)`.
+`existing_comms` and `new_total_size` are accepted for signature uniformity
+with the generic fallback but ignored (bin packing works on bins directly).
+"""
+function frozen_incremental_cost!(
+    buffer::BinPackingBuffer,
+    arc_f::BinPackingArcCost,
+    existing_bins::AbstractVector{<:Bin},
+    ::Vector{C},
+    new::Vector{C},
+    ::Float64=NaN,
+) where {C<:LightCommodity}
+    isempty(new) && return 0.0
+    cap = Float64(arc_f.bin_capacity)
+    n_new = frozen_incremental_count!(buffer, cap, existing_bins, new)
+    return arc_f.cost_per_bin * n_new
+end
+
+"""
+$TYPEDSIGNATURES
+
+Lower bound using fractional bin counts (continuous relaxation of FFD).
+"""
+function lower_bound_incremental_cost(
+    arc_f::BinPackingArcCost, ::Vector{C}, new_commodities::Vector{C}
+) where {C<:LightCommodity}
+    # (existing + new) / cap - existing / cap = new / cap
+    new_size = sum(c.size for c in new_commodities; init=0.0)
+    return arc_f.cost_per_bin * new_size / arc_f.bin_capacity
 end

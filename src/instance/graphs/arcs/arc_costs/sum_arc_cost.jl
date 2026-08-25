@@ -117,10 +117,6 @@ function _find_bin_packing(c::SumArcCost)
     return bp
 end
 
-# The buffer-threaded `incremental_cost!(::BinPackingBuffer, ::SumArcCost, ...)`
-# forwarding overload lives in `algorithms/cost_matrix_update.jl`, which is
-# included after `instance/bin.jl` defines `BinPackingBuffer`.
-
 function compute_bin_assignments(
     c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
 )
@@ -143,4 +139,81 @@ function tentative_best_fit_count(
     c::SumArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
 )
     return tentative_best_fit_count(_find_bin_packing(c), comms; presorted)
+end
+
+@inline _sum_incremental_cost_buf(
+    ::BinPackingBuffer, ::Tuple{}, ::Vector{C}, ::Vector{C}, ::Int
+) where {C<:LightCommodity} = 0.0
+@inline _sum_incremental_cost_buf(
+    ::BinPackingBuffer, ::Tuple{}, ::Nothing, ::Vector{<:LightCommodity}, ::Int
+) = 0.0
+@inline function _sum_incremental_cost_buf(
+    buffer::BinPackingBuffer,
+    terms::Tuple,
+    existing::Vector{C},
+    new::Vector{C},
+    n_existing::Int,
+) where {C<:LightCommodity}
+    return incremental_cost!(buffer, first(terms), existing, new; n_existing) +
+           _sum_incremental_cost_buf(buffer, Base.tail(terms), existing, new, n_existing)
+end
+@inline function _sum_incremental_cost_buf(
+    buffer::BinPackingBuffer,
+    terms::Tuple,
+    ::Nothing,
+    new::Vector{<:LightCommodity},
+    n_existing::Int,
+)
+    return incremental_cost!(buffer, first(terms), nothing, new; n_existing) +
+           _sum_incremental_cost_buf(buffer, Base.tail(terms), nothing, new, n_existing)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Buffer-threaded `incremental_cost!` for `SumArcCost`.
+Sums per-term incremental costs, forwarding the shared `buffer` to each term.
+"""
+function incremental_cost!(
+    buffer::BinPackingBuffer,
+    c::SumArcCost,
+    existing::Vector{C},
+    new::Vector{C};
+    n_existing::Int=-1,
+) where {C<:LightCommodity}
+    return _sum_incremental_cost_buf(buffer, c.terms, existing, new, n_existing)
+end
+
+function incremental_cost!(
+    buffer::BinPackingBuffer,
+    c::SumArcCost,
+    ::Nothing,
+    new::Vector{<:LightCommodity};
+    n_existing::Int=-1,
+)
+    return _sum_incremental_cost_buf(buffer, c.terms, nothing, new, n_existing)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Frozen-bin incremental cost for `SumArcCost`. Dispatches uniformly to each
+term's `frozen_incremental_cost!` (bin-packing terms use the frozen bins,
+others fall back to `incremental_cost_with_size` or `incremental_cost!`).
+"""
+function frozen_incremental_cost!(
+    buffer::BinPackingBuffer,
+    c::SumArcCost,
+    existing_bins::AbstractVector{<:Bin},
+    existing_comms::Vector{C},
+    new::Vector{C},
+    new_total_size::Float64=NaN,
+) where {C<:LightCommodity}
+    total = 0.0
+    for t in c.terms
+        total += frozen_incremental_cost!(
+            buffer, t, existing_bins, existing_comms, new, new_total_size
+        )
+    end
+    return total
 end
