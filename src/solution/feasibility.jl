@@ -53,68 +53,9 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol
             end
         end
 
-        # Check start node: if it's exactly the expected code, accept immediately,
-        # otherwise perform tolerant checks comparing spatial IDs and times.
-        start_node_code = path[1]
-        valid_origin = travel_time_graph.origin_codes[bundle_idx]
-        if start_node_code != valid_origin
-            start_label = MetaGraphsNext.label_for(travel_time_graph.graph, start_node_code)
-            origin_label = MetaGraphsNext.label_for(travel_time_graph.graph, valid_origin)
-            # Spatial must match
-            if start_label[1] != origin_label[1]
-                verbose &&
-                    @warn "Bundle $(bundle_idx) starts at spatial node $(start_label[1]) instead of valid origin $(origin_label[1])."
-                return false
-            end
-            # Time must be in a sensible range and respect semantics
-            if is_date_arrival(travel_time_graph)
-                # start τ must be <= origin τ (max duration)
-                if start_label[2] > origin_label[2] || start_label[2] < 0
-                    verbose &&
-                        @warn "Bundle $(bundle_idx) starts at invalid time τ=$(start_label[2]) for arrival-mode origin (max τ=$(origin_label[2]))."
-                    return false
-                end
-            else
-                # elapsed-time: start τ must be >= origin τ (usually 0)
-                if start_label[2] < origin_label[2] ||
-                    start_label[2] > travel_time_graph.max_time_steps
-                    verbose &&
-                        @warn "Bundle $(bundle_idx) starts at invalid time τ=$(start_label[2]) for elapsed-mode origin (min τ=$(origin_label[2]))."
-                    return false
-                end
-            end
-        end
-
-        # Check destination node (compare spatial IDs and time range)
-        end_node_code = path[end]
-        valid_destination = travel_time_graph.destination_codes[bundle_idx]
-        end_label = MetaGraphsNext.label_for(travel_time_graph.graph, end_node_code)
-        destination_label = MetaGraphsNext.label_for(
-            travel_time_graph.graph, valid_destination
-        )
-        if end_node_code != valid_destination
-            # Tolerant check: spatial ID must match and times must be within bounds
-            if end_label[1] != destination_label[1]
-                verbose &&
-                    @warn "Bundle $(bundle_idx) ends at spatial node $(end_label[1]) instead of valid destination $(destination_label[1])."
-                return false
-            end
-            if is_date_arrival(travel_time_graph)
-                # arrival: must end at τ == destination τ (typically 0)
-                if end_label[2] != destination_label[2]
-                    verbose &&
-                        @warn "Bundle $(bundle_idx) ends at time τ=$(end_label[2]) instead of expected $(destination_label[2]) for arrival-mode destination."
-                    return false
-                end
-            else
-                # elapsed: end τ must be <= destination τ (max duration) and >= 0
-                if end_label[2] < 0 || end_label[2] > destination_label[2]
-                    verbose &&
-                        @warn "Bundle $(bundle_idx) ends at invalid time τ=$(end_label[2]) for elapsed-mode destination (max τ=$(destination_label[2]))."
-                    return false
-                end
-            end
-        end
+        _check_origin_node(travel_time_graph, bundle_idx, path; verbose) || return false
+        _check_destination_node(travel_time_graph, bundle_idx, path; verbose) ||
+            return false
     end
 
     # Capacity checks
@@ -146,6 +87,87 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol
         end
     end
 
+    return true
+end
+
+"""
+$TYPEDSIGNATURES
+
+Check that `path` starts at bundle `bundle_idx`'s origin. If the start code is
+exactly the expected origin, accept immediately; otherwise apply a tolerant
+check comparing spatial IDs and respecting the graph's time semantics.
+"""
+function _check_origin_node(
+    ttg::TravelTimeGraph, bundle_idx::Int, path::Vector{Int}; verbose::Bool
+)
+    start_node_code = path[1]
+    valid_origin = ttg.origin_codes[bundle_idx]
+    start_node_code == valid_origin && return true
+
+    start_label = MetaGraphsNext.label_for(ttg.graph, start_node_code)
+    origin_label = MetaGraphsNext.label_for(ttg.graph, valid_origin)
+    # Spatial must match
+    if start_label[1] != origin_label[1]
+        verbose &&
+            @warn "Bundle $(bundle_idx) starts at spatial node $(start_label[1]) instead of valid origin $(origin_label[1])."
+        return false
+    end
+    # Time must be in a sensible range and respect semantics
+    if is_date_arrival(ttg)
+        # start τ must be <= origin τ (max duration)
+        if start_label[2] > origin_label[2] || start_label[2] < 0
+            verbose &&
+                @warn "Bundle $(bundle_idx) starts at invalid time τ=$(start_label[2]) for arrival-mode origin (max τ=$(origin_label[2]))."
+            return false
+        end
+    else
+        # elapsed-time: start τ must be >= origin τ (usually 0)
+        if start_label[2] < origin_label[2] || start_label[2] > ttg.max_time_steps
+            verbose &&
+                @warn "Bundle $(bundle_idx) starts at invalid time τ=$(start_label[2]) for elapsed-mode origin (min τ=$(origin_label[2]))."
+            return false
+        end
+    end
+    return true
+end
+
+"""
+$TYPEDSIGNATURES
+
+Check that `path` ends at bundle `bundle_idx`'s destination. If the end code is
+exactly the expected destination, accept immediately; otherwise apply a tolerant
+check comparing spatial IDs and respecting the graph's time semantics.
+"""
+function _check_destination_node(
+    ttg::TravelTimeGraph, bundle_idx::Int, path::Vector{Int}; verbose::Bool
+)
+    end_node_code = path[end]
+    valid_destination = ttg.destination_codes[bundle_idx]
+    end_node_code == valid_destination && return true
+
+    end_label = MetaGraphsNext.label_for(ttg.graph, end_node_code)
+    destination_label = MetaGraphsNext.label_for(ttg.graph, valid_destination)
+    # Spatial ID must match
+    if end_label[1] != destination_label[1]
+        verbose &&
+            @warn "Bundle $(bundle_idx) ends at spatial node $(end_label[1]) instead of valid destination $(destination_label[1])."
+        return false
+    end
+    if is_date_arrival(ttg)
+        # arrival: must end at τ == destination τ (typically 0)
+        if end_label[2] != destination_label[2]
+            verbose &&
+                @warn "Bundle $(bundle_idx) ends at time τ=$(end_label[2]) instead of expected $(destination_label[2]) for arrival-mode destination."
+            return false
+        end
+    else
+        # elapsed: end τ must be <= destination τ (max duration) and >= 0
+        if end_label[2] < 0 || end_label[2] > destination_label[2]
+            verbose &&
+                @warn "Bundle $(bundle_idx) ends at invalid time τ=$(end_label[2]) for elapsed-mode destination (max τ=$(destination_label[2]))."
+            return false
+        end
+    end
     return true
 end
 

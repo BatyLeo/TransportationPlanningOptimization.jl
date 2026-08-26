@@ -410,15 +410,6 @@ function _add_order_to_assignment!(
 end
 
 function _mode_has_capacity(
-    mode::NetworkArc, existing::Vector{C}, new_comms::Vector{C}
-) where {C<:LightCommodity}
-    mode.capacity == typemax(Int) && return true
-    existing_size = sum(c.size for c in existing; init=0.0)
-    new_size = sum(c.size for c in new_comms; init=0.0)
-    return existing_size + new_size <= mode.capacity + EPS
-end
-
-function _mode_has_capacity(
     mode::NetworkArc, existing_total_size::Float64, new_comms::Vector{<:LightCommodity}
 )
     mode.capacity == typemax(Int) && return true
@@ -484,7 +475,6 @@ function _remove_all_from_pool!(
 ) where {C<:LightCommodity}
     n_to_remove = length(to_remove)
     n_to_remove == 0 && return 0
-    n_pool = length(pool)
     if n_to_remove <= 8
         return _remove_all_from_pool_linear!(pool, to_remove)
     end

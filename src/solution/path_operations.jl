@@ -59,8 +59,7 @@ function project_to_time_space_graph(
 end
 
 # Helper to check if an arc is a shortcut arc.
-_is_shortcut_arc(::NetworkArc) = false
-_is_shortcut_arc(arc::MultiModalArc) = false
+_is_shortcut_arc(::AbstractNetworkArc) = false
 function _is_shortcut_arc(arc::NetworkArc{ShortcutArcCost,K}) where {K}
     return travel_time_steps(arc) == 0
 end
@@ -71,46 +70,19 @@ $TYPEDSIGNATURES
 Remove leading or trailing shortcut nodes from a TTG path, depending on the graph's time semantics.
 """
 function _remove_shortcuts_from_path!(path::Vector{Int}, ttg::TravelTimeGraph)
-    # Remove leading shortcuts for arrival-based graphs, trailing for elapsed-time graphs
-    if length(path) < 2
-        return nothing
-    end
-
-    if is_date_arrival(ttg)
-        # Remove destination nodes of starting shortcut edges (keep the first timed node)
-        while length(path) >= 2
-            src, dst = path[1], path[2]
-            u_label = MetaGraphsNext.label_for(ttg.graph, src)
-            v_label = MetaGraphsNext.label_for(ttg.graph, dst)
-            if !haskey(ttg.graph, u_label, v_label)
-                break
-            end
-            arc = ttg.graph[u_label, v_label]
-            # Only remove if the arc is a shortcut AND stays on the same spatial node
-            if _is_shortcut_arc(arc) && u_label[1] == v_label[1]
-                # Remove the leading node so the path starts at the first valid timed
-                # node (consistent with existing `remove_shortcuts!` behaviour)
-                deleteat!(path, 1)
-            else
-                break
-            end
-        end
-    else
-        # Remove destination nodes of trailing shortcut edges (pop trailing shortcut nodes)
-        while length(path) >= 2
-            src, dst = path[end - 1], path[end]
-            u_label = MetaGraphsNext.label_for(ttg.graph, src)
-            v_label = MetaGraphsNext.label_for(ttg.graph, dst)
-            if !haskey(ttg.graph, u_label, v_label)
-                break
-            end
-            arc = ttg.graph[u_label, v_label]
-            if _is_shortcut_arc(arc) && u_label[1] == v_label[1]
-                pop!(path) # remove trailing shortcut node
-            else
-                break
-            end
-        end
+    # Arrival-based graphs carry shortcuts at the front (strip the leading node,
+    # keeping the first timed node); elapsed-time graphs carry them at the back
+    # (pop the trailing node).
+    from_front = is_date_arrival(ttg)
+    while length(path) >= 2
+        src, dst = from_front ? (path[1], path[2]) : (path[end - 1], path[end])
+        u_label = MetaGraphsNext.label_for(ttg.graph, src)
+        v_label = MetaGraphsNext.label_for(ttg.graph, dst)
+        haskey(ttg.graph, u_label, v_label) || break
+        arc = ttg.graph[u_label, v_label]
+        # Only strip a shortcut arc that stays on the same spatial node.
+        (_is_shortcut_arc(arc) && u_label[1] == v_label[1]) || break
+        from_front ? deleteat!(path, 1) : pop!(path)
     end
     return nothing
 end
