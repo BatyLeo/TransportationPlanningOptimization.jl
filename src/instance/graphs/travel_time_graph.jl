@@ -236,8 +236,11 @@ $TYPEDSIGNATURES
 
 BFS traversal from `start` using `neighbors_fn` (e.g. `Graphs.outneighbors` or
 `Graphs.inneighbors`). Returns the set of all reachable node codes.
+
+The optional `allowed_edge(node, neighbor)` predicate filters the traversal: an edge is
+only followed when it returns `true` (default: follow every edge).
 """
-function _bfs_reachable(graph::MetaGraph, start::Int, neighbors_fn)
+function _bfs_reachable(graph::MetaGraph, start::Int, neighbors_fn; allowed_edge=nothing)
     reachable = Set{Int}()
     queue = DataStructures.Deque{Int}()
     push!(queue, start)
@@ -245,13 +248,40 @@ function _bfs_reachable(graph::MetaGraph, start::Int, neighbors_fn)
     while !isempty(queue)
         node = popfirst!(queue)
         for neighbor in neighbors_fn(graph, node)
-            if !(neighbor in reachable)
+            if !(neighbor in reachable) &&
+                (allowed_edge === nothing || allowed_edge(node, neighbor))
                 push!(reachable, neighbor)
                 push!(queue, neighbor)
             end
         end
     end
     return reachable
+end
+
+"""
+$TYPEDSIGNATURES
+
+Validate that a bundle can reach its destination from its origin in the travel-time graph
+while respecting the bundle's forbidden nodes and arcs.
+
+Runs a forward BFS from the origin, skipping any edge that touches a forbidden node or
+matches a forbidden arc. Returns `true` if the destination is reachable, `false` otherwise.
+"""
+function validate_bundle_feasibility(ttg::TravelTimeGraph, bundle_idx::Int, bundle::Bundle)
+    origin_code = ttg.origin_codes[bundle_idx]
+    destination_code = ttg.destination_codes[bundle_idx]
+    node_id(code) = MetaGraphsNext.label_for(ttg.graph, code)[1]
+    allowed_edge =
+        (u, v) -> begin
+            u_id, v_id = node_id(u), node_id(v)
+            return !(
+                (u_id, v_id) in bundle.forbidden_arcs ||
+                u_id in bundle.forbidden_nodes ||
+                v_id in bundle.forbidden_nodes
+            )
+        end
+    reachable = _bfs_reachable(ttg.graph, origin_code, Graphs.outneighbors; allowed_edge)
+    return destination_code in reachable
 end
 
 """

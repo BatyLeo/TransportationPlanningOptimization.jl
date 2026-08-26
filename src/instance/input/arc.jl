@@ -78,6 +78,20 @@ end
 """
 $TYPEDSIGNATURES
 
+Infer the arc cost types present in a vector of arcs by scanning their actual cost function
+types. Returns a tuple of unique cost types found.
+
+This is a runtime operation that enables automatic cost type detection, but the result
+can be passed to type-stable inner functions (such as [`collect_arcs`](@ref)) via function
+barriers.
+"""
+function infer_cost_types(arcs::Vector{<:Arc})
+    return Tuple(unique(typeof(arc.cost) for arc in arcs))
+end
+
+"""
+$TYPEDSIGNATURES
+
 Collect an iterable of `NetworkArc`s into a type-stable vector with the specified cost types.
 This is useful for creating heterogeneous arc collections with multiple cost function types
 while maintaining type stability.
