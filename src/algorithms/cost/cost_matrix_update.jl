@@ -424,9 +424,11 @@ end
 """
 $TYPEDSIGNATURES
 
-Create a `Vector{<:BinPackingBuffer}` with one buffer per thread. Each thread
-indexes its own buffer via `Threads.threadid()` inside `@threads :static`
-loops, avoiding Channel contention and Julia 1.12's concurrent-resize checks.
+Create a `Vector{<:BinPackingBuffer}` with one buffer per thread. In the
+parallel cost-matrix update the arcs are split into at most `length(pool)`
+chunks and each parallel task borrows a distinct buffer by chunk ordinal, so
+buffers are reused across calls without Channel contention or concurrent
+resizes.
 """
 function create_buffer_pool(n::Int=Threads.maxthreadid())
     return [BinPackingBuffer() for _ in 1:n]
@@ -435,9 +437,12 @@ end
 """
 $TYPEDSIGNATURES
 
-Parallel version of `update_bundle_cost_matrix!`. Distributes arc cost
-computations across threads using `Threads.@threads :static`, with one
-`BinPackingBuffer` per thread indexed by `threadid()`.
+Parallel version of `update_bundle_cost_matrix!`. Splits the bundle arcs into
+`min(length(buffer_pool), length(bundle_arcs))` contiguous chunks with
+OhMyThreads `@tasks` (one task per chunk), each task using its own
+`BinPackingBuffer` from `buffer_pool` indexed by chunk ordinal. Because a
+buffer is owned by a single task for the whole loop, the pattern is safe under
+task migration and never resizes a buffer concurrently.
 
 Reads from `current_solution.assignments` are thread-safe (read-only Dict
 lookups). Writes to `ttg.cost_matrix` are thread-safe because each arc maps
@@ -481,28 +486,40 @@ function parallel_update_bundle_cost_matrix!(
     )
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
+    isempty(bundle_arcs) && return nothing
 
-    Threads.@threads :static for i in eachindex(bundle_arcs)
-        (u_code, v_code) = bundle_arcs[i]
-        su = cache.ttg_code_to_spatial_code[u_code]
-        sv = cache.ttg_code_to_spatial_code[v_code]
+    # Split the arcs into `nchunks` contiguous chunks and give each parallel
+    # task its own `BinPackingBuffer` from `buffer_pool`, indexed by the chunk
+    # ordinal (not `threadid()`). With `chunking = false` there is exactly one
+    # task per chunk, so each buffer is owned by a single task for the whole
+    # loop: safe under task migration, never resized concurrently, and the pool
+    # is reused across calls (no per-call allocation).
+    nchunks = min(length(buffer_pool), length(bundle_arcs))
+    @tasks for (chunk_id, arc_indices) in
+               enumerate(index_chunks(eachindex(bundle_arcs); n=nchunks))
+        @set chunking = false
+        buf = buffer_pool[chunk_id]
+        for i in arc_indices
+            (u_code, v_code) = bundle_arcs[i]
+            su = cache.ttg_code_to_spatial_code[u_code]
+            sv = cache.ttg_code_to_spatial_code[v_code]
 
-        c = if (su, sv) in fa || su in fn || sv in fn
-            Inf
-        else
-            buf = buffer_pool[Threads.threadid()]
-            cost_fn(
-                current_solution,
-                instance,
-                bundle,
-                u_code,
-                v_code,
-                mode_selector;
-                buffer=buf,
-                packing,
-            )
+            c = if (su, sv) in fa || su in fn || sv in fn
+                Inf
+            else
+                cost_fn(
+                    current_solution,
+                    instance,
+                    bundle,
+                    u_code,
+                    v_code,
+                    mode_selector;
+                    buffer=buf,
+                    packing,
+                )
+            end
+            ttg.cost_matrix[u_code, v_code] = c
         end
-        ttg.cost_matrix[u_code, v_code] = c
     end
     return nothing
 end

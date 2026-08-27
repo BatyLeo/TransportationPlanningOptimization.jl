@@ -1,8 +1,7 @@
 """
 $TYPEDSIGNATURES
 
-Find the cheapest path for a bundle in the TravelTimeGraph (considering incremental costs)
-and add it to the solution.
+Find the cheapest path for a bundle in the TravelTimeGraph and add it to the current solution.
 """
 function insert_bundle!(
     current_solution::Solution,
@@ -40,8 +39,8 @@ end
 $TYPEDSIGNATURES
 
 Construct a solution by inserting bundles one by one into an initially empty solution.
-Bundles are processed in decreasing order of their largest single-commodity size
-(matching STP's `maxPackSize`), so bundles with the hardest-to-pack items go first.
+Bundles are processed in decreasing order of their largest single-commodity size,
+so bundles with the hardest-to-pack items go first.
 
 # Keyword arguments
 - `mode_selector::AbstractModeSelector = CheapestMode()`: strategy that decides how
@@ -50,8 +49,8 @@ Bundles are processed in decreasing order of their largest single-commodity size
   collapse to one edge). See [`CheapestMode`](@ref) and [`FillThenSpillMode`](@ref).
 - `packing::Symbol = :frozen`: bin-packing semantics on `BinPackingArcCost`
   arcs. The default `:frozen` caches the committed bins per arc and packs only
-  the new commodities onto the existing bins' remaining capacities via first-fit
-  (STP-style), opening new bins as needed. The opt-in `:ffd_union` re-packs the
+  the new commodities onto the existing bins' remaining capacities via first-fit,
+  opening new bins as needed. The opt-in `:ffd_union` re-packs the
   union of existing and new commodities from scratch (First-Fit Decreasing) on
   every cost evaluation and commit. `:frozen` is cheaper (no union re-pack) and
   gives bin counts within a fraction of a percent of `:ffd_union`. Both the cost
@@ -70,7 +69,7 @@ function greedy_heuristic(
     packing::Symbol=:frozen,
 )
     solution = Solution(instance)
-    # Sort bundles by decreasing max single-order pack size (matches STP).
+    # Sort bundles by decreasing max single-order pack size.
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     # One bin-packing scratch buffer reused across every bundle and arc.
     buffer = BinPackingBuffer()
