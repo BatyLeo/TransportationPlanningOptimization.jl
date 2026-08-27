@@ -326,3 +326,48 @@ function loop_two_nodes!(
     end
     return saved
 end
+
+"""
+$TYPEDSIGNATURES
+
+One two-node consolidation step: pick a random `(src, dst)` pair from
+`valid_pairs` and delegate to `two_node_common_incremental!`. The `refine`
+argument forwards to that move (when true, lifted bundles are individually
+re-inserted after the splice). Returns the per-step cost improvement (`0.0`
+if no bundles traversed the arc or the move was rejected).
+"""
+function _run_two_node_step!(
+    sol::Solution,
+    instance::Instance,
+    valid_pairs::Vector{Tuple{Int,Int}},
+    mode_selector::AbstractModeSelector,
+    rng::Random.AbstractRNG,
+    cost_threshold::Float64,
+    refine::Bool,
+    packing::Symbol,
+    cost_packing::Symbol;
+    bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
+    buffer::BinPackingBuffer=BinPackingBuffer(),
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
+    snapshot_cache::Union{Dict,Nothing}=nothing,
+)
+    isempty(valid_pairs) && return 0.0
+    (src, dst) = rand(rng, valid_pairs)
+    return two_node_common_incremental!(
+        sol,
+        instance,
+        src,
+        dst;
+        mode_selector,
+        cost_threshold,
+        refine,
+        packing,
+        cost_packing,
+        bundle_adjs,
+        buffer,
+        workspace,
+        buffer_pool,
+        snapshot_cache,
+    )
+end

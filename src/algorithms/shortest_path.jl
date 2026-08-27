@@ -1,3 +1,21 @@
+# --- Pre-allocated Dijkstra workspace (avoids per-call array allocation) ---
+
+struct DijkstraWorkspace
+    dists::Vector{Float64}
+    parents::Vector{Int}
+end
+
+function DijkstraWorkspace(n::Int)
+    return DijkstraWorkspace(Vector{Float64}(undef, n), Vector{Int}(undef, n))
+end
+
+function _reset_workspace!(ws::DijkstraWorkspace, origin::Int)
+    fill!(ws.dists, Inf)
+    fill!(ws.parents, 0)
+    ws.dists[origin] = 0.0
+    return ws
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -7,7 +25,7 @@ of `v` on the shortest path from `src` and `dists[v]` is the distance.
 
 The standard `Graphs.dijkstra_shortest_paths` pushes every neighbor into the
 priority queue even when the edge cost is `Inf`, which is wasteful when only
-a small fraction of edges (the current bundle's arcs) carry finite costs.
+a small fraction of edges carry finite costs.
 This version skips `Inf` edges entirely, reducing the number of priority
 queue operations from O(V) to O(bundle_arcs).
 
@@ -24,30 +42,38 @@ function bundle_dijkstra(
     dst::Int=0,
     workspace=nothing,
 )
-    if workspace !== nothing
-        _reset_workspace!(workspace, src)
-        dists = workspace.dists
-        parents = workspace.parents
-    else
+    if isnothing(workspace)
         n = Graphs.nv(graph)
         dists = fill(Inf, n)
         parents = zeros(Int, n)
         dists[src] = 0.0
+    else
+        _reset_workspace!(workspace, src)
+        dists = workspace.dists
+        parents = workspace.parents
     end
 
-    # Lazy min-heap: may contain stale entries (a vertex pushed before a
-    # shorter path was found). Stale pops are detected by the dists check.
     heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
     push!(heap, (0.0, src))
 
     while !isempty(heap)
         d_u, u = pop!(heap)
-        d_u > dists[u] && continue
-        dst > 0 && u == dst && break
+
+        # Skip if this is a stale entry (we already found a shorter path to `u`)
+        if d_u > dists[u]
+            continue
+        end
+
+        # If we have a destination and we just popped it from the heap, we can stop
+        if dst > 0 && u == dst
+            break
+        end
 
         for v in Graphs.outneighbors(graph, u)
             w = cost_matrix[u, v]
-            w == Inf && continue
+            if isinf(w) # skip edges with infinite cost
+                continue
+            end
             alt = d_u + w
             if alt < dists[v]
                 dists[v] = alt
