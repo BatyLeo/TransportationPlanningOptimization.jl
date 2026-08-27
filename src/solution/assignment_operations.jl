@@ -302,6 +302,31 @@ function _fill_then_spill_assign!(
     return cost_delta
 end
 
+"""
+$TYPEDSIGNATURES
+
+Merge `new_commodities` into `slot` and recompute its cost, returning the cost
+delta. Under `:frozen` the commit adds onto the slot's cached bins; otherwise it
+recomputes from scratch. `new_commodities` is sorted desc by size (the `Order`
+invariant), so the merge preserves `slot.sorted=true` and the next remove can
+skip its `_ensure_sorted!` sort.
+"""
+function _commit_new_to_slot!(
+    slot::SingleAssignment{C},
+    arc_cost::AbstractArcCostFunction,
+    new_commodities::Vector{C},
+    packing::Symbol,
+) where {C<:LightCommodity}
+    before = slot.cost
+    _merge_sorted_into_slot!(slot, new_commodities)
+    if packing === :frozen
+        _frozen_commit_single_assignment!(slot, arc_cost, new_commodities)
+    else
+        _update_single_assignment_cost!(slot, arc_cost)
+    end
+    return slot.cost - before
+end
+
 function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
@@ -313,17 +338,7 @@ function _add_order_to_assignment!(
     assignment = get!(assignments, edge) do
         SingleAssignment{C}()
     end::SingleAssignment{C}
-    before = assignment.cost
-    # new_commodities is sorted desc by the Order invariant. The merge
-    # preserves assignment.sorted=true so the next remove can skip its
-    # _ensure_sorted! sort.
-    _merge_sorted_into_slot!(assignment, new_commodities)
-    if packing === :frozen
-        _frozen_commit_single_assignment!(assignment, arc.cost, new_commodities)
-    else
-        _update_single_assignment_cost!(assignment, arc.cost)
-    end
-    return assignment.cost - before
+    return _commit_new_to_slot!(assignment, arc.cost, new_commodities, packing)
 end
 
 function _add_order_to_assignment!(
@@ -357,18 +372,9 @@ function _add_order_to_assignment!(
         )
     end
     slot = assignment.per_mode[best_mode_idx]
-    before = slot.cost
-    # new_commodities is sorted desc by the Order invariant. Merge preserves
-    # slot.sorted=true so the next remove can skip its _ensure_sorted! sort.
-    _merge_sorted_into_slot!(slot, new_commodities)
-    if packing === :frozen
-        _frozen_commit_single_assignment!(
-            slot, arc.modes[best_mode_idx].cost, new_commodities
-        )
-    else
-        _update_single_assignment_cost!(slot, arc.modes[best_mode_idx].cost)
-    end
-    return slot.cost - before
+    return _commit_new_to_slot!(
+        slot, arc.modes[best_mode_idx].cost, new_commodities, packing
+    )
 end
 
 """

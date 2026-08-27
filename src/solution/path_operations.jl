@@ -90,6 +90,35 @@ end
 """
 $TYPEDSIGNATURES
 
+Walk each `(order, path-edge)` pair of `bundle` along `path`, resolve the
+time-space edge `(u_tsg, v_tsg)` and its network `arc`, and accumulate the
+`Float64` deltas returned by `f(edge, arc, order)`. Shared by
+[`add_bundle_path!`](@ref) and [`remove_bundle_path!`](@ref).
+
+Orders within a bundle have distinct delivery time steps in `1:H`, so each
+`(order, arc)` pair projects to a unique TSG edge even under `wrap_time`; the
+result is therefore a plain additive sum with no per-edge grouping (same
+zero-collision argument as the forward `compute_ttg_edge_*` rewrite).
+"""
+function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{Int})
+    cache = instance.index_cache
+    delta = 0.0
+    for order in bundle.orders
+        for k in 1:(length(path) - 1)
+            u_tsg = project_to_time_space_graph(path[k], order, instance)
+            v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
+            su = cache.tsg_code_to_spatial_code[u_tsg]
+            sv = cache.tsg_code_to_spatial_code[v_tsg]
+            arc = cache.spatial_pair_to_arc[(su, sv)]
+            delta += f((u_tsg, v_tsg), arc, order)
+        end
+    end
+    return delta
+end
+
+"""
+$TYPEDSIGNATURES
+
 Add bundle path `path` for bundle `bundle_idx` to the solution `current_solution`.
 This updates the `bundle_paths` and the `assignments` for all arcs along the path.
 
@@ -109,33 +138,17 @@ function add_bundle_path!(
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
     current_solution.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
-    cache = instance.index_cache
-    cost_delta = 0.0
 
-    # Orders within a bundle have distinct delivery time steps in 1:H so they
-    # project to distinct TSG edges on any arc, even under wrap_time. Each
-    # (order, arc) pair therefore touches a unique TSG edge, so no per-edge
-    # grouping is needed (same zero-collision argument as the forward
-    # `compute_ttg_edge_*` rewrite).
-    for order in bundle.orders
-        for k in 1:(length(path) - 1)
-            u_tsg = project_to_time_space_graph(path[k], order, instance)
-            v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
-            su = cache.tsg_code_to_spatial_code[u_tsg]
-            sv = cache.tsg_code_to_spatial_code[v_tsg]
-            arc = cache.spatial_pair_to_arc[(su, sv)]
-            edge = (u_tsg, v_tsg)
-            cost_delta += _add_order_to_assignment!(
-                current_solution.assignments,
-                edge,
-                arc,
-                order.commodities,
-                mode_selector;
-                packing,
-            )
-        end
+    return _foreach_path_edge(instance, bundle, path) do edge, arc, order
+        _add_order_to_assignment!(
+            current_solution.assignments,
+            edge,
+            arc,
+            order.commodities,
+            mode_selector;
+            packing,
+        )
     end
-    return cost_delta
 end
 
 """
@@ -177,27 +190,10 @@ function remove_bundle_path!(
     path = current_solution.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
     bundle = instance.bundles[bundle_idx]
-    cache = instance.index_cache
-    cost_delta = 0.0
 
-    # Orders within a bundle have distinct delivery time steps in 1:H so they
-    # project to distinct TSG edges on any arc, even under wrap_time (same
-    # zero-collision argument as the forward `compute_ttg_edge_*` rewrite).
-    # The cost delta is therefore an additive sum over (order, arc) pairs
-    # without any per-edge grouping.
-    for order in bundle.orders
-        for k in 1:(length(path) - 1)
-            u_tsg = project_to_time_space_graph(path[k], order, instance)
-            v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
-            su = cache.tsg_code_to_spatial_code[u_tsg]
-            sv = cache.tsg_code_to_spatial_code[v_tsg]
-            arc = cache.spatial_pair_to_arc[(su, sv)]
-            edge = (u_tsg, v_tsg)
-            assignment = current_solution.assignments[edge]
-            cost_delta += _remove_commodities_from_assignment!(
-                assignment, arc, order.commodities
-            )
-        end
+    cost_delta = _foreach_path_edge(instance, bundle, path) do edge, arc, order
+        assignment = current_solution.assignments[edge]
+        _remove_commodities_from_assignment!(assignment, arc, order.commodities)
     end
 
     current_solution.bundle_paths[bundle_idx] = Int[]

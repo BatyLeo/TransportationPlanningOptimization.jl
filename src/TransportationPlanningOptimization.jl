@@ -41,8 +41,8 @@ include("instance/index_cache.jl")
 
 include("instance/instance.jl")
 
-include("solution/arc_assignment.jl")
 include("solution/mode_selector.jl")
+include("solution/arc_assignment.jl")
 include("solution/assignment_operations.jl")
 include("solution/solution.jl")
 include("solution/path_operations.jl")
