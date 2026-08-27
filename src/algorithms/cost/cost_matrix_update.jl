@@ -79,11 +79,7 @@ Same projection logic as `compute_ttg_edge_incremental_cost`, but with
 
 When the TTG edge is the bundle's direct arc (spatial labels equal to
 `(bundle.origin_id, bundle.destination_id)`), the per-order ceil rule is
-applied instead of the fractional formula. This matches Renault's
-`get_lb_transport_units`: a direct arc cannot be shared with other bundles,
-so the fractional relaxation describes a fiction there, and the tighter
-per-order ceil bound steers Dijkstra toward multi-hop consolidation when it
-exists.
+applied instead of the fractional formula.
 """
 function compute_ttg_edge_lower_bound_cost(
     current_solution::Solution{C},
@@ -136,9 +132,6 @@ function compute_ttg_edge_lower_bound_cost(
         existing = get(current_solution.assignments, edge, nothing)
         total += _edge_lower_bound_cost(arc, existing, order.commodities, mode_selector)
 
-        # Destination-node cost. Charged on the spatial destination of each
-        # traversed arc, matching STP's `volume_stock_cost`
-        # (ShipperTransportationPlanning.jl/src/Algorithms/Utils/greedy_utils.jl:23).
         node_cost = cache.spatial_code_to_node_cost[sv]
         existing_at_dst_node = if existing === nothing
             C[]
@@ -162,8 +155,7 @@ $TYPEDSIGNATURES
 Lower-bound cost for the bundle's direct arc, summed per order. Mirrors
 Renault's `get_lb_transport_units` for `:direct` arcs: each order contributes
 `ceil(order_size / bin_capacity) * cost_per_bin` on bin-packing arcs (or
-`cost_per_unit_size * order_size` on linear arcs). Existing arc state is
-ignored, matching STP behavior. Used internally by
+`cost_per_unit_size * order_size` on linear arcs).Used internally by
 `compute_ttg_edge_lower_bound_cost` when the TTG edge is identified as the
 bundle's direct arc.
 """

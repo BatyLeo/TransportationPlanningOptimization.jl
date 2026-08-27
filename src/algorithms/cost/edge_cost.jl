@@ -1,36 +1,3 @@
-# ============================================================================
-# Per-arc incremental cost kernel
-#
-# The innermost cost primitive of the routing model. Given a single spatial arc,
-# the commodities already assigned to it (`existing`), and a batch of `new_comms`
-# to add, these functions return the *marginal* cost of adding the batch to that
-# arc. `compute_ttg_edge_incremental_cost` (in cost_matrix_update.jl) calls one
-# of them per (order, projected TSG arc) while assembling the TravelTimeGraph
-# edge weights that Dijkstra routes on.
-#
-# Two families:
-#   * `_edge_incremental_cost`  greedy marginal cost, used for real routing and
-#       insertion decisions. The `packing` keyword picks the bin-packing
-#       semantics: `:frozen` increments against the assignment's committed bins,
-#       `:ffd_union` repacks the existing+new commodity union.
-#   * `_edge_lower_bound_cost`  relaxed variant (fractional bins, no capacity
-#       ceiling) feeding the lower-bound and filtering construction strategies.
-#
-# Both families dispatch on the same three axes:
-#   arc type       NetworkArc (one transport mode) vs MultiModalArc (several
-#                  parallel modes sharing the edge).
-#   existing load  `nothing` (empty arc: both packings agree, pack from scratch)
-#                  vs SingleAssignment / MultiAssignment.
-#   mode selector  ignored for NetworkArc. On a MultiModalArc, CheapestMode puts
-#                  the whole batch on the single cheapest feasible mode (Inf if
-#                  none fits); FillThenSpillMode splits it across modes and sums
-#                  the per-mode increments.
-#
-# The buffer-threading methods do the work; the two no-buffer convenience
-# overloads near the end just allocate a scratch `BinPackingBuffer` and forward,
-# so ad-hoc callers (local search, two-node consolidation, tests) can omit it.
-# ============================================================================
-
 # --- Shared frozen-bin helper ------------------------------------------------
 
 """
@@ -54,6 +21,7 @@ function _frozen_edge_incremental_cost(
     if existing.bins_dirty
         return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
     end
+    # else
     return frozen_incremental_cost!(
         buffer, arc_f, existing.bins, existing.commodities, new_comms, new_total_size
     )

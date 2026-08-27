@@ -1,25 +1,18 @@
 """
 $TYPEDSIGNATURES
 
-Build a sub-instance that retains only bundles whose filtering path (in
-`filtering_solution.bundle_paths`) has more than two nodes (i.e. is not just
-`[origin, destination]`). The returned [`NetworkGraph`](@ref) keeps every
-intermediate node (`node_type == :other`) from the original network so
-consolidation hubs remain available to the retained bundles, and drops only
-`:origin` and `:destination` nodes that no kept bundle references. The
+Build a sub-instance that retains only bundles whose filtering path are not direct paths.
+The returned [`NetworkGraph`](@ref) keeps every intermediate node (`node_type == :other`)
+from the original network so consolidation hubs remain available to the retained bundles,
+and drops only `:origin` and `:destination` nodes that no kept bundle references. The
 [`TravelTimeGraph`](@ref) and [`TimeSpaceGraph`](@ref) are rebuilt on that
 subgraph so the sub-instance is self-consistent.
 
 The returned `Instance` shares the original bundle and commodity objects (no
-deep copy). Only the `bundles` vector and the three graph layers are new. Field
-identifiers like `Bundle.origin_id` / `Bundle.destination_id` (spatial node IDs,
-strings) are not reindexed.
+deep copy). Only the `bundles` vector and the three graph layers are new.
 
 If no bundles survive filtering, a warning is emitted and the returned instance
-has an empty `bundles` vector. To keep the three graph fields well-typed in
-that degenerate case, the original `network_graph`, `travel_time_graph`, and
-`time_space_graph` are reused (the `TravelTimeGraph` constructor refuses an
-empty bundle vector).
+has an empty `bundles` vector.
 """
 function extract_filtered_instance(instance::Instance, filtering_solution::Solution)
     keep_idxs = findall(p -> length(p) > 2, filtering_solution.bundle_paths)
@@ -76,7 +69,6 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
         time_step_to_date=instance.time_step_to_date,
         time_space_graph=sub_tsg,
         travel_time_graph=sub_ttg,
-        # Fresh cache for the rebuilt sub-graphs (codes differ from the original).
         index_cache=build_index_cache(sub_network, sub_ttg, sub_tsg),
     )
 end

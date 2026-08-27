@@ -95,7 +95,7 @@ export write_solution_csv, read_solution_csv
 
 # Algorithms
 export greedy_heuristic, lower_bound, lower_bound_filtering
-export mix_greedy_and_lower_bound, local_search!, solve_filtered
+export mix_greedy_heuristic, local_search!, solve_filtered
 export LocalSearchResult
 
 # ILS framework

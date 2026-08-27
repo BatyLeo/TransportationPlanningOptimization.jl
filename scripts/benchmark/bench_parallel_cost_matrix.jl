@@ -77,7 +77,9 @@ function main()
     # warmup
     run_calls!(sol, sub, buffer_pool, 50; rng=Random.MersenneTwister(1))
     # timed
-    wall, allocs = run_calls!(sol, sub, buffer_pool, n_calls; rng=Random.MersenneTwister(42))
+    wall, allocs = run_calls!(
+        sol, sub, buffer_pool, n_calls; rng=Random.MersenneTwister(42)
+    )
     @printf(
         "  %d calls: %.3f s total | %.1f us/call | %.1f calls/s | %.2f MiB (%.2f KiB/call)\n",
         n_calls,

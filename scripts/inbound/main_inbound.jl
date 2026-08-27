@@ -21,10 +21,7 @@ instance
 filtering_sol = lower_bound_filtering(instance);
 sub_instance = TPO.extract_filtered_instance(instance, filtering_sol)
 
-candidates = mix_greedy_and_lower_bound(sub_instance)
-sub_sol = TPO.choose_best_feasible(
-    [candidates.mixed, candidates.greedy, candidates.lower_bound], sub_instance
-)
+sub_sol = mix_greedy_heuristic(sub_instance)
 
 local_search!(sub_sol, sub_instance; time_limit=30);
 

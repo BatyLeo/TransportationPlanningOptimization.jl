@@ -1,8 +1,7 @@
 """
 $TYPEDSIGNATURES
 
-Build three solutions in a single sweep over bundles (sorted by
-`max_pack_size` descending): pure greedy, pure lower bound, and a mixed
+Build three solutions in a single sweep over bundles: pure greedy, pure lower bound, and a mixed
 solution whose Dijkstra cost matrix blends the two strategies with weights
 that shift toward greedy as more bundles are placed.
 
@@ -10,31 +9,12 @@ Returns `(; mixed, greedy, lower_bound)`. All three solutions are independent
 `Solution` objects, suitable for `cost`, `is_feasible`, and downstream local
 search.
 
-The blend formula matches STP (`mix_greedy_and_lower_bound!` in
-`ShipperTransportationPlanning.jl/src/Algorithms/miscellaneous.jl:835`):
-
 ```
-mix_cost = (i / B) * greedy_cost + (B - i / B) * lb_cost
+mix_cost = (i / B) * greedy_cost + (1 - i / B) * lb_cost
 ```
-
 where `i` is the 1-indexed iteration and `B` is the total bundle count. This
-is reproduced verbatim from STP. The formula is suspected to be a typo (a
-natural convex blend would be `(i / B) + (1 - i / B)`), but Dijkstra is
-invariant to a global scalar on the cost matrix, so the unnormalised form is
-monotonically equivalent to `(i / B^2) * greedy + (1 - i / B^2) * lb`. The LB
-component dominates throughout and the greedy share grows quadratically.
-
-The sweep relies on the shared `ttg.cost_matrix`: each iteration calls
-`update_bundle_cost_matrix!` with the greedy `cost_fn`, snapshots the bundle's
-arc entries, calls it again with the lower-bound `cost_fn` (which overwrites),
-then blends in place on the bundle's arcs only using the snapshot.
-
-The `packing::Symbol = :frozen` keyword selects bin-packing semantics on the
-greedy half: it is forwarded to the greedy cost matrix and to the greedy and
-mixed commits (so those two solutions are self-consistent). See
-[`greedy_heuristic`](@ref) for the `:frozen` versus `:ffd_union` distinction.
-The lower-bound strategy is a fractional relaxation and is unaffected, so the
-`lb_sol` commit keeps `:ffd_union`.
+is a convex blend: the first bundles are placed almost purely on lower-bound
+costs, and the greedy share grows linearly to dominate the last bundles.
 """
 function mix_greedy_and_lower_bound(
     instance::Instance;
@@ -112,11 +92,9 @@ function mix_greedy_and_lower_bound(
             lb_sol, instance, bundle_idx, lb_path; mode_selector, packing=:ffd_union
         )
 
-        # Blend: ttg.cost_matrix now holds LB costs. Apply the blend on the
-        # bundle's arcs only, using the cached greedy snapshot. Reproduces
-        # STP's blend formula verbatim (not the natural convex combination).
+        # Mixed strategy: convex blend of the two cost matrices.
         w_greedy = i / B
-        w_lb = B - i / B
+        w_lb = 1 - i / B
         for (u, v) in bundle_arcs
             lb_cost = ttg.cost_matrix[u, v]
             greedy_cost = greedy_snapshot[(u, v)]
@@ -154,4 +132,18 @@ function choose_best_feasible(candidates::AbstractVector{<:Solution}, instance::
         throw(ArgumentError("no feasible candidate among $(length(candidates)) solutions"))
     end
     return argmin(cost, feasible)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Mix greedy heuristic.
+"""
+function mix_greedy_heuristic(
+    instance::Instance;
+    mode_selector::AbstractModeSelector=CheapestMode(),
+    packing::Symbol=:frozen,
+)
+    candidates = mix_greedy_and_lower_bound(instance; mode_selector, packing)
+    return choose_best_feasible(collect(values(candidates)), instance)
 end
