@@ -28,7 +28,7 @@ $TYPEDSIGNATURES
 
 Initialize an empty solution for the given instance.
 """
-function Solution(instance::Instance{Bundle{Order{IDA,I}}}) where {IDA,I}
+function Solution(instance::Instance{<:Bundle{Order{IDA,I}}}) where {IDA,I}
     C = LightCommodity{I}
     return Solution{C}(
         [Int[] for _ in 1:bundle_count(instance)],

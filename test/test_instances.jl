@@ -314,6 +314,13 @@ end
         instance_grouped = Instance(
             nodes, arcs, commodities, Week(1); group_by=c -> c.info.model
         )
-        length(instance_default.bundles) == 1 && length(instance_grouped.bundles) == 2
+        # The default grouping key is `nothing`; the custom key is the model string.
+        default_group_ok =
+            length(instance_default.bundles) == 1 &&
+            instance_default.bundles[1].group === nothing
+        grouped_groups = Set(b.group for b in instance_grouped.bundles)
+        grouped_ok =
+            length(instance_grouped.bundles) == 2 && grouped_groups == Set(["X", "Y"])
+        default_group_ok && grouped_ok
     end
 end

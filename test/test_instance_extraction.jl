@@ -153,3 +153,59 @@ end
     # Duplicate in full_instance triggers the error too.
     @test_throws ArgumentError TPO.merge_solutions(sol, sub_sol, dup_instance, instance)
 end
+
+struct MergeGroupInfo
+    model::String
+end
+
+@testset "TPO.merge_solutions supports non-default group_by (same OD, distinct groups)" begin
+    # With a non-default `group_by`, two bundles can share an `(origin,
+    # destination)` pair while differing by group. `merge_solutions` keys on the
+    # full `(origin, destination, group)` triple, so it disambiguates them
+    # instead of throwing (which the old OD-only keying would have done).
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin, capacity=10, info=nothing),
+        NetworkNode(; id="B", node_type=:destination, capacity=10, info=nothing),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            travel_time=Week(0),
+            cost=LinearArcCost(1.0),
+            info=nothing,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            size=1.0,
+            quantity=1,
+            arrival_date=DateTime(2024, 1, 1),
+            max_delivery_time=Week(1),
+            info=MergeGroupInfo("X"),
+        ),
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            size=1.0,
+            quantity=1,
+            arrival_date=DateTime(2024, 1, 1),
+            max_delivery_time=Week(1),
+            info=MergeGroupInfo("Y"),
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Week(1); group_by=c -> c.info.model)
+
+    # Two bundles on the same OD, disambiguated only by their group.
+    @test bundle_count(instance) == 2
+    @test Set(b.group for b in instance.bundles) == Set(["X", "Y"])
+
+    sol = greedy_heuristic(instance)
+    # Merging the solution against itself must not throw on the OD collision and
+    # must reproduce a feasible full solution.
+    merged = TPO.merge_solutions(sol, sol, instance, instance)
+    @test is_feasible(merged, instance; verbose=true)
+    @test length(merged.bundle_paths) == 2
+end
