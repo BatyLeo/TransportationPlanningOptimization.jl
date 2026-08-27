@@ -5,15 +5,12 @@ using Random
 
 const TPO = TransportationPlanningOptimization
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "TPO.bin_packing_improvement! does not increase cost" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     c0 = cost(sol)
 
     saved = TPO.bin_packing_improvement!(sol, instance)
@@ -25,14 +22,8 @@ const TPO = TransportationPlanningOptimization
 end
 
 @testset "TPO.bundle_reinsertion_improvement! does not increase cost" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     c0 = cost(sol)
 
     saved = TPO.bundle_reinsertion_improvement!(sol, instance)
@@ -44,14 +35,8 @@ end
 end
 
 @testset "TPO.bundle_reinsertion_improvement! saved matches cost(sol) delta for small" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     c0 = cost(sol)
     saved = TPO.bundle_reinsertion_improvement!(sol, instance)
     @test isapprox(c0 - cost(sol), saved; atol=1e-3)
@@ -59,17 +44,11 @@ end
 end
 
 @testset "local_search! does not increase cost and stays feasible" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     c0 = cost(sol)
 
-    res = local_search!(sol, instance; time_limit=10, rng=MersenneTwister(0))
+    res = local_search!(sol, instance; time_limit=2, rng=MersenneTwister(0))
 
     @test is_feasible(sol, instance)
     @test cost(sol) <= c0 + 1e-6
@@ -145,18 +124,12 @@ end
 end
 
 @testset "TPO.bundle_reinsertion_improvement! cost_threshold filter" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
 
-    sol_no_filter = greedy_heuristic(instance)
+    sol_no_filter = TestFixtures.small_greedy()
     saved_no_filter = TPO.bundle_reinsertion_improvement!(sol_no_filter, instance)
 
-    sol_filtered = greedy_heuristic(instance)
+    sol_filtered = TestFixtures.small_greedy()
     huge_threshold = 1e12  # filter everything
     saved_filtered = TPO.bundle_reinsertion_improvement!(
         sol_filtered, instance; cost_threshold=huge_threshold
@@ -165,7 +138,7 @@ end
     @test is_feasible(sol_filtered, instance)  # untouched solution still feasible
 
     # A modest threshold should let SOME but not all bundles through
-    sol_modest = greedy_heuristic(instance)
+    sol_modest = TestFixtures.small_greedy()
     modest_threshold = 0.5 * saved_no_filter  # roughly half of total improvement
     saved_modest = TPO.bundle_reinsertion_improvement!(
         sol_modest, instance; cost_threshold=modest_threshold
@@ -174,19 +147,13 @@ end
 end
 
 @testset "local_search! terminates on max_no_improv" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
 
     res = local_search!(
         sol,
         instance;
-        time_limit=60,
+        time_limit=10,
         max_no_improv=10,
         max_iter=500_000,
         rng=MersenneTwister(0),
@@ -198,17 +165,11 @@ end
 end
 
 @testset "local_search! returns a usable trace" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
 
     res = local_search!(
-        sol, instance; time_limit=5, sample_every=200, rng=MersenneTwister(0)
+        sol, instance; time_limit=2, sample_every=200, rng=MersenneTwister(0)
     )
 
     @test length(res.timestamps) == length(res.costs)
@@ -222,22 +183,22 @@ end
 end
 
 @testset "local_search! reaches at least standalone reinsertion cost on small" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
 
-    sol_solo = greedy_heuristic(instance)
+    sol_solo = TestFixtures.small_greedy()
     TPO.bundle_reinsertion_improvement!(sol_solo, instance)
     cost_solo = cost(sol_solo)
 
-    sol_ls = greedy_heuristic(instance)
+    sol_ls = TestFixtures.small_greedy()
+    # Bounded by max_iter (deterministic given the fixed rng), not by the
+    # clock: 5000 iterations reliably clears cost_solo with margin on this
+    # instance (empirically the cost plateaus by ~3000 iterations) and runs
+    # in low tens of seconds. time_limit is a generous safety cap only, it
+    # must never be the binding constraint.
     local_search!(
         sol_ls,
         instance;
+        max_iter=5000,
         time_limit=120,
         cost_threshold_relative=0.0,
         rng=MersenneTwister(0),
@@ -251,14 +212,8 @@ end
 end
 
 @testset "_try_reinsert_bundle! same-path does not mutate assignments" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     TPO.bundle_reinsertion_improvement!(sol, instance)
     c_before = cost(sol)
 
@@ -289,14 +244,8 @@ end
 end
 
 @testset "_try_reinsert_bundle! cost delta matches cost(sol) change" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
 
     rng = MersenneTwister(12345)
     n_bundles = length(instance.bundles)

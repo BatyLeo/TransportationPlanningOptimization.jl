@@ -5,17 +5,11 @@ const TPO = TransportationPlanningOptimization
 
 # Already in Main from runtests.jl, but be defensive in case the file is loaded
 # standalone via include from the REPL.
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound: parse_inbound_instance
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 @testset "max_pack_size returns the largest single-commodity size" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
 
     for bundle in instance.bundles
         expected = maximum(c.size for order in bundle.orders for c in order.commodities)
@@ -29,13 +23,7 @@ using .Inbound: parse_inbound_instance
 end
 
 @testset "mix_greedy_and_lower_bound returns three feasible solutions" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
 
     result = TPO.mix_greedy_and_lower_bound(instance)
 
@@ -58,16 +46,10 @@ end
 end
 
 @testset "mix_greedy_and_lower_bound reproduces standalone greedy and lower_bound" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
 
     result = TPO.mix_greedy_and_lower_bound(instance)
-    standalone_greedy = TPO.greedy_heuristic(instance)
+    standalone_greedy = TestFixtures.tiny_greedy()
     standalone_lb = TPO.lower_bound(instance)
 
     @test TPO.cost(result.greedy) ≈ TPO.cost(standalone_greedy) atol = 1e-6
@@ -75,13 +57,7 @@ end
 end
 
 @testset "choose_best_feasible returns the min-cost feasible solution" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
 
     result = TPO.mix_greedy_and_lower_bound(instance)
     candidates = [result.mixed, result.greedy, result.lower_bound]
@@ -93,13 +69,7 @@ end
 end
 
 @testset "choose_best_feasible errors when no candidate is feasible" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
 
     empty_sol = TPO.Solution(instance)  # all empty paths, infeasible
     @test_throws ArgumentError TPO.choose_best_feasible([empty_sol], instance)

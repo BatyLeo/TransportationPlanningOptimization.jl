@@ -3,10 +3,7 @@ using TransportationPlanningOptimization
 using Dates
 const TPO = TransportationPlanningOptimization
 
-# Build a small bag of LightCommodity{Nothing} values for testing.
-function _mk(size::Float64, sup::String="S", cust::String="C")
-    return TPO.LightCommodity(; origin_id=sup, destination_id=cust, size=size, info=nothing)
-end
+isdefined(Main, :_mk) || include("commodity_helpers.jl")
 
 @testset "_drain_first_matches! contract" begin
     @testset "no removal when to_remove is empty" begin
@@ -84,7 +81,7 @@ end
     end
 
     @testset "tail just above linear threshold (boundary)" begin
-        # length(to_remove) == 9 — should force Dict path.
+        # length(to_remove) == 9: should force Dict path.
         pool = [_mk(Float64(i)) for i in 1:9]
         to_remove = [_mk(Float64(i)) for i in 1:9]
         dropped = TPO._drain_first_matches!(pool, to_remove)
@@ -94,7 +91,7 @@ end
     end
 
     @testset "tail just below linear threshold (boundary)" begin
-        # length(to_remove) == 8 — should use linear path.
+        # length(to_remove) == 8: should use linear path.
         pool = [_mk(Float64(i)) for i in 1:8]
         to_remove = [_mk(Float64(i)) for i in 1:8]
         dropped = TPO._drain_first_matches!(pool, to_remove)

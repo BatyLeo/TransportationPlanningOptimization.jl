@@ -3,17 +3,11 @@ using Dates
 using TransportationPlanningOptimization
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound: parse_inbound_instance
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 @testset "solve_filtered returns feasible solution on the sub-instance" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
 
     result = TPO.solve_filtered(instance)
 
@@ -25,13 +19,7 @@ using .Inbound: parse_inbound_instance
 end
 
 @testset "solve_filtered solution is at most greedy on the sub-instance" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
 
     result = TPO.solve_filtered(instance)
     greedy_baseline = TPO.greedy_heuristic(result.sub_instance)

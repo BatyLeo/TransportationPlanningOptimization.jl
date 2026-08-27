@@ -3,6 +3,9 @@ using TransportationPlanningOptimization
 using Dates
 using MetaGraphsNext
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "lower_bound_incremental_cost equals classic for LinearArcCost" begin
     arc_f = LinearArcCost(2.0)
     C = LightCommodity{Nothing}
@@ -79,13 +82,9 @@ end
 end
 
 @testset "compute_ttg_edge_lower_bound_cost uses per-order ceil on direct arc" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    # The "LB <= classic" invariant is already proved on `tiny` in the
+    # "update_bundle_cost_matrix! ..." testset above, so `tiny` suffices here too.
+    instance = TestFixtures.tiny_instance()
     empty_sol = Solution(instance)
     ttg = instance.travel_time_graph
     tsg = instance.time_space_graph

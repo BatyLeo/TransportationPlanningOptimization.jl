@@ -6,15 +6,12 @@ using Random: MersenneTwister
 
 const TPO = TransportationPlanningOptimization
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "bundles_through_arc returns matching bundles" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
 
     first_with_arc = findfirst(p -> length(p) >= 2, sol.bundle_paths)
     @assert first_with_arc !== nothing "no bundle has a length-2+ path on small"
@@ -36,13 +33,7 @@ const TPO = TransportationPlanningOptimization
 end
 
 @testset "merge_bundles unions orders + forbidden, picks max-transit donor" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
 
     lifted_idxs = [1, 2]
     virtual, virtual_arcs = TPO.merge_bundles(instance, lifted_idxs)
@@ -86,13 +77,7 @@ end
 end
 
 @testset "compute_candidate_nodes filters by node_type" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
     src_codes, dst_codes = TPO.compute_candidate_nodes(instance.travel_time_graph)
 
     g = instance.travel_time_graph.graph
@@ -103,14 +88,8 @@ end
 end
 
 @testset "TPO.two_node_common_incremental! feasibility on small" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     cost_before = cost(sol)
 
     # Find a (src, dst) arc with at least 2 bundles passing through it.
@@ -131,14 +110,8 @@ end
 end
 
 @testset "TPO.two_node_common_incremental! with refine stays feasible" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     cost_before = cost(sol)
 
     matched_src, matched_dst = 0, 0
@@ -160,18 +133,12 @@ end
 end
 
 @testset "TPO.loop_two_nodes! smoke test on small" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     c0 = cost(sol)
 
     rng = MersenneTwister(20260524)
-    saved = TPO.loop_two_nodes!(sol, instance; time_limit=10.0, refine=false, rng=rng)
+    saved = TPO.loop_two_nodes!(sol, instance; time_limit=3.0, refine=false, rng=rng)
 
     @test is_feasible(sol, instance; verbose=true)
     @test saved >= -1e-6

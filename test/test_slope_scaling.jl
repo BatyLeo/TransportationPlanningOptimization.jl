@@ -4,18 +4,13 @@ using Dates
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 @testset "slope_scaling_update! populates cost_scaling" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    TestFixtures.reset!()
+    sol = TestFixtures.small_greedy()
 
     @test isempty(instance.travel_time_graph.cost_scaling)
     slope_scaling_update!(instance, sol)
@@ -23,14 +18,9 @@ using .Inbound
 end
 
 @testset "slope_scaling_update! factors are between 0 and 2" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    TestFixtures.reset!()
+    sol = TestFixtures.small_greedy()
     slope_scaling_update!(instance, sol)
 
     for factor in values(instance.travel_time_graph.cost_scaling)
@@ -39,27 +29,17 @@ end
 end
 
 @testset "slope_scaling_update! on empty solution leaves cost_scaling empty" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.small_instance()
+    TestFixtures.reset!()
     sol = Solution(instance)
     slope_scaling_update!(instance, sol)
     @test isempty(instance.travel_time_graph.cost_scaling)
 end
 
 @testset "slope_scaling_update! excludes factors of exactly 1.0" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    TestFixtures.reset!()
+    sol = TestFixtures.small_greedy()
     slope_scaling_update!(instance, sol)
 
     for factor in values(instance.travel_time_graph.cost_scaling)
@@ -68,14 +48,9 @@ end
 end
 
 @testset "slope_scaling_update! clears stale entries between calls" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    TestFixtures.reset!()
+    sol = TestFixtures.small_greedy()
     slope_scaling_update!(instance, sol)
     @test !isempty(instance.travel_time_graph.cost_scaling)
 

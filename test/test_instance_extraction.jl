@@ -4,14 +4,14 @@ using Dates
 
 const TPO = TransportationPlanningOptimization
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "TPO.extract_filtered_instance shrinks bundle count" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    # Structural check: doesn't depend on scale, only on `filt` having some
+    # multi-hop bundles, which `tiny` already provides (verified: all 4
+    # bundles keep a multi-hop path here).
+    instance = TestFixtures.tiny_instance()
     filt = lower_bound_filtering(instance)
     sub = TPO.extract_filtered_instance(instance, filt)
 
@@ -30,13 +30,8 @@ const TPO = TransportationPlanningOptimization
 end
 
 @testset "TPO.extract_filtered_instance preserves graph consistency" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    # Structural check: graph-field propagation doesn't depend on scale.
+    instance = TestFixtures.tiny_instance()
     filt = lower_bound_filtering(instance)
     sub = TPO.extract_filtered_instance(instance, filt)
 
@@ -96,13 +91,8 @@ end
 end
 
 @testset "filter then greedy then merge cheaper than vanilla greedy on small" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    # Explicit cost comparison: needs scale, kept on `small`.
+    instance = TestFixtures.small_instance()
 
     greedy_cost = cost(greedy_heuristic(instance))
 

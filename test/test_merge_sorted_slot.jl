@@ -1,3 +1,9 @@
+using Test
+using TransportationPlanningOptimization
+const TPO = TransportationPlanningOptimization
+
+isdefined(Main, :_mk) || include("commodity_helpers.jl")
+
 const LC = typeof(_mk(1.0))
 
 function _slot(comms::Vector{LC}; sorted::Bool=true)

@@ -5,8 +5,8 @@ using Random
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 # A mock perturbation that removes and reinserts a random bundle
 struct RandomReinsertPerturbation <: AbstractPerturbation end
@@ -54,26 +54,16 @@ function TransportationPlanningOptimization.perturbate!(
     return (0.0, 0)
 end
 
-function build_small_instance()
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    return Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-end
-
 @testset "ILS converges and returns ILSResult" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     start_cost = cost(sol)
 
     result = iterated_local_search!(
         sol,
         instance,
         [RandomReinsertPerturbation()];
-        config=ILSConfig(; time_limit=10, perturbation_time_limit=3, ls_time_limit=3),
+        config=ILSConfig(; time_limit=4, perturbation_time_limit=2, ls_time_limit=1),
         rng=Random.MersenneTwister(42),
         verbose=false,
     )
@@ -90,8 +80,8 @@ end
 end
 
 @testset "ILS with cost_update! callback" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
 
     callback_count = Ref(0)
     function counting_update!(inst, s)
@@ -103,7 +93,7 @@ end
         sol,
         instance,
         [RandomReinsertPerturbation()];
-        config=ILSConfig(; time_limit=10, perturbation_time_limit=3, ls_time_limit=3),
+        config=ILSConfig(; time_limit=4, perturbation_time_limit=2, ls_time_limit=1),
         (cost_update!)=counting_update!,
         rng=Random.MersenneTwister(42),
         verbose=false,
@@ -114,8 +104,8 @@ end
 end
 
 @testset "ILS with on_improvement callback" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
 
     improvements = Tuple{Float64,Float64}[]
     function track_improvement!(s, c, t)
@@ -127,7 +117,7 @@ end
         sol,
         instance,
         [RandomReinsertPerturbation()];
-        config=ILSConfig(; time_limit=10, perturbation_time_limit=3, ls_time_limit=3),
+        config=ILSConfig(; time_limit=4, perturbation_time_limit=2, ls_time_limit=1),
         on_improvement=track_improvement!,
         rng=Random.MersenneTwister(42),
         verbose=false,
@@ -141,9 +131,9 @@ end
 end
 
 @testset "ILS reverts on degradation" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
-    local_search!(sol, instance; time_limit=10.0)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    local_search!(sol, instance; time_limit=3.0)
     start_cost = cost(sol)
 
     result = iterated_local_search!(

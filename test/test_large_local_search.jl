@@ -6,26 +6,16 @@ using Graphs
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
-
-function build_small_instance()
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    return Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-end
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 @testset "large_local_search! with no forbidden arcs matches local_search!" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     start_cost = cost(sol)
 
     improvement = large_local_search!(
-        sol, instance; time_limit=5.0, rng=Random.MersenneTwister(42)
+        sol, instance; time_limit=2.0, rng=Random.MersenneTwister(42)
     )
 
     @test improvement >= -1e-6
@@ -33,8 +23,8 @@ end
 end
 
 @testset "large_local_search! with forbidden predicate" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     ttg = instance.travel_time_graph
     cache = instance.index_cache
 
@@ -52,7 +42,7 @@ end
         sol,
         instance;
         is_forbidden=my_forbidden,
-        time_limit=5.0,
+        time_limit=2.0,
         rng=Random.MersenneTwister(42),
     )
 
@@ -60,13 +50,13 @@ end
 end
 
 @testset "large_local_search! does not degrade solution" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
-    local_search!(sol, instance; time_limit=10.0)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    local_search!(sol, instance; time_limit=2.0)
     optimized_cost = cost(sol)
 
     improvement = large_local_search!(
-        sol, instance; time_limit=5.0, rng=Random.MersenneTwister(42)
+        sol, instance; time_limit=2.0, rng=Random.MersenneTwister(42)
     )
 
     @test cost(sol) <= optimized_cost + 1e-3

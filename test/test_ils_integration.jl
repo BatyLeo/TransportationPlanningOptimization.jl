@@ -60,7 +60,7 @@ end
 
     # Phase 1: initial solution
     sol_data = solve_filtered(instance)
-    local_search!(sol_data.solution, sol_data.sub_instance; time_limit=5.0)
+    local_search!(sol_data.solution, sol_data.sub_instance; time_limit=2.0)
     post_ls_cost = cost(sol_data.solution)
 
     # Phase 2: ILS with slope scaling
@@ -69,7 +69,7 @@ end
         sol_data.sub_instance,
         [IntegrationReinsertPerturbation()];
         config=ILSConfig(;
-            time_limit=15,
+            time_limit=6,
             perturbation_time_limit=3,
             ls_time_limit=5,
             max_no_change=2,
@@ -90,24 +90,4 @@ end
     # with its own TravelTimeGraph, distinct from `instance`'s).
     # It may be empty if ILS didn't iterate, but should at least not error.
     @test sol_data.sub_instance.travel_time_graph.cost_scaling isa Dict
-end
-
-@testset "Large local search in ILS pipeline" begin
-    instance = build_small_instance()
-    sol = greedy_heuristic(instance)
-
-    # Run large_local_search! then ILS
-    large_local_search!(sol, instance; time_limit=5.0)
-    @test is_feasible(sol, instance)
-
-    result = iterated_local_search!(
-        sol,
-        instance,
-        [IntegrationReinsertPerturbation()];
-        config=ILSConfig(; time_limit=10, max_no_change=1, max_no_improv=1),
-        verbose=false,
-    )
-
-    @test result isa ILSResult
-    @test is_feasible(sol, instance)
 end

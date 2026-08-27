@@ -4,15 +4,12 @@ using Dates
 
 const TPO = TransportationPlanningOptimization
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "TPO.remove_bundle_path! on tiny instance" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.tiny_instance()
+    sol = TestFixtures.tiny_greedy()
 
     @test cost(sol) > 0
     @test !isempty(sol.bundle_paths[1])
@@ -26,13 +23,7 @@ const TPO = TransportationPlanningOptimization
 end
 
 @testset "TPO.remove_bundle_path! preserves cost after add-remove-add cycle" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
     # The round-trip cost-preservation invariant holds only under
     # order-independent packing: `TPO.remove_bundle_path!` always re-packs the
     # affected arcs with FFD-union, so re-adding the same commodities must use
@@ -109,14 +100,8 @@ end
 end
 
 @testset "double TPO.remove_bundle_path! is a no-op" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.tiny_instance()
+    sol = TestFixtures.tiny_greedy()
     c_before = cost(sol)
 
     TPO.remove_bundle_path!(sol, instance, 1)
@@ -129,14 +114,8 @@ end
 end
 
 @testset "partial removal makes solution infeasible" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.tiny_instance()
+    sol = TestFixtures.tiny_greedy()
     @test is_feasible(sol, instance)
 
     TPO.remove_bundle_path!(sol, instance, 1)
@@ -144,14 +123,8 @@ end
 end
 
 @testset "TPO.add_bundle_path! and TPO.remove_bundle_path! return cost deltas" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "tiny_nodes.csv"),
-        joinpath(datadir, "tiny_legs.csv"),
-        joinpath(datadir, "tiny_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.tiny_instance()
+    sol = TestFixtures.tiny_greedy()
     c0 = cost(sol)
     saved_path = copy(sol.bundle_paths[1])
 

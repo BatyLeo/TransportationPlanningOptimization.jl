@@ -3,59 +3,60 @@ using TransportationPlanningOptimization
 using Dates
 using MetaGraphsNext
 using Graphs
+using Random
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 const TPO = TransportationPlanningOptimization
 
-@testset "IndexCache agrees with the MetaGraph" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+@testset "IndexCache agrees with the MetaGraph (tiny, exhaustive-as-aggregate)" begin
+    instance = TestFixtures.tiny_instance()
     cache = instance.index_cache
     ng = instance.network_graph.graph
     ttg = instance.travel_time_graph.graph
     tsg = instance.time_space_graph.graph
 
-    # ttg_code_to_spatial_code / ttg_code_to_tau
-    for code in 1:Graphs.nv(ttg)
-        loc, τ = MetaGraphsNext.label_for(ttg, code)
-        @test cache.ttg_code_to_spatial_code[code] == MetaGraphsNext.code_for(ng, loc)
-        @test cache.ttg_code_to_tau[code] == τ
-    end
+    @test all(
+        cache.ttg_code_to_spatial_code[code] ==
+        MetaGraphsNext.code_for(ng, first(MetaGraphsNext.label_for(ttg, code))) &&
+        cache.ttg_code_to_tau[code] == last(MetaGraphsNext.label_for(ttg, code)) for
+        code in 1:Graphs.nv(ttg)
+    )
+    @test all(
+        let (nid, t) = MetaGraphsNext.label_for(tsg, code),
+            s = MetaGraphsNext.code_for(ng, nid)
 
-    # spatial_code_and_time_to_tsg_code / tsg_code_to_spatial_code
-    for code in 1:Graphs.nv(tsg)
+            cache.tsg_code_to_spatial_code[code] == s &&
+                cache.spatial_code_and_time_to_tsg_code[s, t] == code
+        end for code in 1:Graphs.nv(tsg)
+    )
+    @test all(
+        cache.spatial_pair_to_arc[(
+            MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)
+        )] === ng[u, v] for (u, v) in MetaGraphsNext.edge_labels(ng)
+    )
+    @test all(
+        cache.spatial_code_to_node_cost[MetaGraphsNext.code_for(ng, nid)] ===
+        ng[nid].node_cost for nid in MetaGraphsNext.labels(ng)
+    )
+end
+
+@testset "IndexCache agrees at scale (small, sampled)" begin
+    instance = TestFixtures.small_instance()
+    cache = instance.index_cache
+    ng = instance.network_graph.graph
+    tsg = instance.time_space_graph.graph
+    rng = MersenneTwister(0)
+    for code in rand(rng, 1:Graphs.nv(tsg), 500)
         nid, t = MetaGraphsNext.label_for(tsg, code)
         s = MetaGraphsNext.code_for(ng, nid)
         @test cache.tsg_code_to_spatial_code[code] == s
         @test cache.spatial_code_and_time_to_tsg_code[s, t] == code
     end
-
-    # arc_of / node_cost_of: use === (identity, not equality) to verify the cache
-    # stores the exact same object the MetaGraph holds, not a copy.
-    for (u, v) in MetaGraphsNext.edge_labels(ng)
-        su = MetaGraphsNext.code_for(ng, u)
-        sv = MetaGraphsNext.code_for(ng, v)
-        @test cache.spatial_pair_to_arc[(su, sv)] === ng[u, v]
-    end
-
-    for nid in MetaGraphsNext.labels(ng)
-        c = MetaGraphsNext.code_for(ng, nid)
-        @test cache.spatial_code_to_node_cost[c] === ng[nid].node_cost
-    end
 end
 
-@testset "project_to_time_space_graph matches the label-based reference" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+@testset "project_to_time_space_graph matches the label-based reference (tiny)" begin
+    instance = TestFixtures.tiny_instance()
     ttg_struct = instance.travel_time_graph
     ttg = ttg_struct.graph
     tsg = instance.time_space_graph.graph

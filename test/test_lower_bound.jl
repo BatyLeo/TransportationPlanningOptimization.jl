@@ -2,6 +2,9 @@ using Test
 using TransportationPlanningOptimization
 using Dates
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "lower_bound produces a feasible solution with non-empty paths" begin
     # Note: `cost(lb_sol)` is the cost of the path set `lower_bound` mutated as
     # a byproduct of computing the LB cost matrix. The LB itself is the sum of
@@ -25,17 +28,14 @@ using Dates
 end
 
 @testset "lower_bound_filtering leaves at least all multi-hop bundles" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    # `tiny` has a multi-hop bundle under `lower_bound_filtering` (verified: all
+    # 4 bundles keep a path with length > 2), so the assertion below still
+    # holds without needing `small`'s scale.
+    instance = TestFixtures.tiny_instance()
     filt = lower_bound_filtering(instance)
 
     @test all(!isempty, filt.bundle_paths)
-    # On a small instance, at least some bundle should choose a multi-hop path
+    # On tiny, at least some bundle should choose a multi-hop path
     @test any(length(p) > 2 for p in filt.bundle_paths)
 end
 

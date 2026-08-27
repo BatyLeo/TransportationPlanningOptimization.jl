@@ -7,6 +7,9 @@ const TPO = TransportationPlanningOptimization
 isdefined(Main, :Inbound) || include("Inbound.jl")
 using .Inbound
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "Oversized commodity detection" begin
     arc = NetworkArc(;
         travel_time_steps=1, capacity=typemax(Int), cost=BinPackingArcCost(10.0, 65)
@@ -45,16 +48,9 @@ end
 end
 
 @testset "is_feasible detects oversized bins" begin
-    # rebuild the instance locally for this testset
-    instance_name = "small"
-    datadir = joinpath(@__DIR__, "public")
-    nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
-    legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
-    commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
-    (nodes, arcs, commodities) = parse_inbound_instance(
-        nodes_file, legs_file, commodities_file
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    # The oversized-bin branch of `is_feasible` is size-independent, so `tiny`
+    # is enough here.
+    instance = TestFixtures.tiny_instance()
 
     sol = Solution(instance)
     # set a simple bundle path directly (origin -> destination in TTG)

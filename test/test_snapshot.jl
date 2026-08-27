@@ -4,25 +4,19 @@ using Dates
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 @testset "snapshot_solution creates independent copy" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     original_cost = cost(sol)
 
     snap = snapshot_solution(sol, instance)
     @test cost(snap) ≈ original_cost
 
     # Mutate the original solution
-    local_search!(sol, instance; time_limit=5.0)
+    local_search!(sol, instance; time_limit=2.0)
 
     # Snapshot must be unaffected
     @test cost(snap) ≈ original_cost
@@ -30,21 +24,15 @@ using .Inbound
 end
 
 @testset "restore_solution! restores to snapshot state" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     original_cost = cost(sol)
     original_paths = deepcopy(sol.bundle_paths)
 
     snap = snapshot_solution(sol, instance)
 
     # Mutate via local search
-    local_search!(sol, instance; time_limit=5.0)
+    local_search!(sol, instance; time_limit=2.0)
     @test cost(sol) <= original_cost + 1e-6  # should not degrade
 
     # Restore
@@ -55,20 +43,14 @@ end
 end
 
 @testset "restore then re-run local search" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = greedy_heuristic(instance)
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
     snap = snapshot_solution(sol, instance)
 
-    local_search!(sol, instance; time_limit=5.0)
+    local_search!(sol, instance; time_limit=2.0)
     restore_solution!(sol, snap, instance)
 
     # Solution must still be usable after restore
-    local_search!(sol, instance; time_limit=5.0)
+    local_search!(sol, instance; time_limit=2.0)
     @test is_feasible(sol, instance)
 end

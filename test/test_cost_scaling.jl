@@ -1,20 +1,14 @@
 using Test
 using TransportationPlanningOptimization
 using Dates
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
-
 @testset "TravelTimeGraph has cost_scaling field" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
+    TestFixtures.reset!()  # start from a clean scaling dict
     ttg = instance.travel_time_graph
     @test hasproperty(ttg, :cost_scaling)
     @test ttg.cost_scaling isa Dict{Tuple{Int,Int},Float64}
@@ -22,13 +16,8 @@ using .Inbound
 end
 
 @testset "cost_scaling multiplies edge cost" begin
-    datadir = joinpath(@__DIR__, "public")
-    (; nodes, arcs, commodities) = parse_inbound_instance(
-        joinpath(datadir, "small_nodes.csv"),
-        joinpath(datadir, "small_legs.csv"),
-        joinpath(datadir, "small_commodities.csv"),
-    )
-    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    instance = TestFixtures.tiny_instance()
+    TestFixtures.reset!()  # start from a clean scaling dict
     sol = Solution(instance)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
