@@ -22,9 +22,12 @@ quadratic-in-arc-load FFD-repack cost of the previous bundle-by-bundle
 The caller is expected to have run `lower_bound_filtering` (or similar) on
 `full_solution` first, so every bundle of `full_instance` already has a path.
 
-Assumes the default `group_by` (no extra grouping). Two bundles in the same
-instance must therefore have distinct `(origin_id, destination_id)` pairs.
-Throws `ArgumentError` if either instance violates this assumption.
+Bundles are matched on `(origin_id, destination_id, group)`, where `group` is
+the bundle's `group_by` key (`nothing` under the default grouping). This
+supports instances built with a non-default `Instance(...; group_by=...)`, as
+long as no two bundles in the same instance collide on that full triple.
+Throws `ArgumentError` if either instance has two bundles with identical
+`(origin_id, destination_id, group)`.
 """
 function merge_solutions(
     full_solution::Solution,
@@ -35,19 +38,17 @@ function merge_solutions(
     full_ttg = full_instance.travel_time_graph
     sub_ttg = sub_instance.travel_time_graph
 
-    sub_idx_of_bundle = Dict{Tuple{String,String},Int}()
+    sub_idx_of_bundle = Dict{Tuple{String,String,Any},Int}()
     for (i, b) in enumerate(sub_instance.bundles)
-        key = (b.origin_id, b.destination_id)
+        key = (b.origin_id, b.destination_id, b.group)
         if haskey(sub_idx_of_bundle, key)
             throw(
                 ArgumentError(
-                    "merge_solutions only supports OD-unique bundles. " *
-                    "sub_instance has multiple bundles for OD $(key) " *
-                    "(indices $(sub_idx_of_bundle[key]) and $(i)). This can " *
-                    "happen when `Instance(...; group_by=...)` is used with a " *
-                    "non-default key. To support that case, the merge would " *
-                    "need to key on the full `(origin, destination, group)` " *
-                    "tuple instead of `(origin, destination)`.",
+                    "merge_solutions requires bundles unique on " *
+                    "(origin, destination, group). sub_instance has multiple " *
+                    "bundles for $(key) (indices $(sub_idx_of_bundle[key]) and " *
+                    "$(i)). Two bundles share the same origin, destination, and " *
+                    "`group_by` key, so the merge cannot disambiguate them.",
                 ),
             )
         end
@@ -55,16 +56,16 @@ function merge_solutions(
     end
 
     fused_paths = Vector{Vector{Int}}(undef, length(full_instance.bundles))
-    seen_full_keys = Set{Tuple{String,String}}()
+    seen_full_keys = Set{Tuple{String,String,Any}}()
     for (full_i, bundle) in enumerate(full_instance.bundles)
-        key = (bundle.origin_id, bundle.destination_id)
+        key = (bundle.origin_id, bundle.destination_id, bundle.group)
         if key in seen_full_keys
             throw(
                 ArgumentError(
-                    "merge_solutions only supports OD-unique bundles. " *
-                    "full_instance has multiple bundles for OD $(key) " *
-                    "(second occurrence at index $(full_i)). See `sub_instance` " *
-                    "error message above for context.",
+                    "merge_solutions requires bundles unique on " *
+                    "(origin, destination, group). full_instance has multiple " *
+                    "bundles for $(key) (second occurrence at index $(full_i)). " *
+                    "See `sub_instance` error message above for context.",
                 ),
             )
         end

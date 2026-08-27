@@ -58,6 +58,7 @@ include("algorithms/lower_bound.jl")
 include("algorithms/mix_start.jl")
 include("algorithms/instance_extraction.jl")
 include("algorithms/merge_solutions.jl")
+
 include("algorithms/local_search/assignment_snapshot.jl")
 include("algorithms/local_search/bin_repacking.jl")
 include("algorithms/local_search/bundle_reinsertion.jl")

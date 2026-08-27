@@ -8,7 +8,7 @@ While orders in a bundle can have different delivery dates, they should follow t
 # Fields
 $TYPEDFIELDS
 """
-struct Bundle{O<:Order}
+struct Bundle{O<:Order,G}
     "list of orders in the bundle"
     orders::Vector{O}
     "id of the origin node"
@@ -19,19 +19,22 @@ struct Bundle{O<:Order}
     forbidden_nodes::Set{String}
     "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle"
     forbidden_arcs::Set{Tuple{String,String}}
+    "grouping key shared by all commodities in the bundle (from `group_by`); `nothing` under the default grouping"
+    group::G
     "precomputed sum of all commodity sizes across all orders"
     total_size::Float64
 
-    function Bundle{O}(
+    function Bundle{O,G}(
         orders::Vector{O},
         origin_id::String,
         destination_id::String,
         forbidden_nodes::Set{String},
         forbidden_arcs::Set{Tuple{String,String}},
-    ) where {O<:Order}
+        group::G,
+    ) where {O<:Order,G}
         ts = sum(total_size(o) for o in orders; init=0.0)
-        return new{O}(
-            orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, ts
+        return new{O,G}(
+            orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, group, ts
         )
     end
 end
@@ -42,8 +45,11 @@ function Bundle(
     destination_id::String,
     forbidden_nodes::Set{String},
     forbidden_arcs::Set{Tuple{String,String}},
-) where {O<:Order}
-    return Bundle{O}(orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs)
+    group::G=nothing,
+) where {O<:Order,G}
+    return Bundle{O,G}(
+        orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, group
+    )
 end
 
 """
@@ -60,8 +66,11 @@ function Bundle(;
     destination_id::String,
     forbidden_nodes::Set{String}=Set{String}(),
     forbidden_arcs::Set{Tuple{String,String}}=Set{Tuple{String,String}}(),
-) where {O<:Order}
-    return Bundle{O}(orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs)
+    group::G=nothing,
+) where {O<:Order,G}
+    return Bundle{O,G}(
+        orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, group
+    )
 end
 
 """

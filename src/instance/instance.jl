@@ -266,9 +266,10 @@ function _build_bundles(
         end
     end
 
-    bundles = Bundle{Order{is_date_arrival,I}}[]
+    group_type = fieldtype(typeof(first_group_key), 3)
+    bundles = Bundle{Order{is_date_arrival,I},group_type}[]
     for key in keys(bundle_dict)
-        origin_id, destination_id, _ = key
+        origin_id, destination_id, group_key = key
         forbidden_nodes, forbidden_arcs = get(
             bundle_forbidden_dict, key, (Set{String}(), Set{Tuple{String,String}}())
         )
@@ -291,7 +292,12 @@ function _build_bundles(
         end
 
         bundle = Bundle(
-            bundle_dict[key], origin_id, destination_id, forbidden_nodes, forbidden_arcs
+            bundle_dict[key],
+            origin_id,
+            destination_id,
+            forbidden_nodes,
+            forbidden_arcs,
+            group_key,
         )
         push!(bundles, bundle)
     end
