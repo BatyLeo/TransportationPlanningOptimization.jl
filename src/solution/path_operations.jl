@@ -259,7 +259,7 @@ destination-node costs (sum over each bundle's path, charging
 `evaluate(dst.node_cost, comms_on_edge)` for each TSG edge in the path).
 
 Use this when comparing against external systems that include node costs in
-their total (for example STP's `compute_cost`). For arc-only cost use `cost(sol)`.
+their total. For arc-only cost use `cost(sol)`.
 """
 function cost_with_nodes(sol::Solution{C}, instance::Instance) where {C}
     total = cost(sol)

@@ -1,7 +1,7 @@
 """
 $TYPEDSIGNATURES
 
-Run the STP initial-solution pipeline up to (but not including) local search:
+Run the initial-solution pipeline up to (but not including) local search:
 
 1. Run [`lower_bound_filtering`](@ref) on `instance`, pre-routing trivial bundles.
 2. Build the sub-instance of non-trivial bundles via

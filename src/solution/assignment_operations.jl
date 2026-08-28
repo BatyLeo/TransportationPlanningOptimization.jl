@@ -128,10 +128,10 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_cost::SumAr
 end
 
 # Removal-only cost update: recompute `slot.cost` without materializing bins.
-# Matches STP's "does not refill bins" semantics. The `slot.bins` vector becomes
-# stale, and `bins_dirty` is set so downstream code can fall back to non-frozen
-# cost estimation. The next `_update_single_assignment_cost!` (on add) will
-# recompute bins and clear the flag.
+# Uses "does not refill bins" semantics: the `slot.bins` vector becomes stale,
+# and `bins_dirty` is set so downstream code can fall back to non-frozen cost
+# estimation. The next `_update_single_assignment_cost!` (on add) will recompute
+# bins and clear the flag.
 function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::AbstractArcCostFunction)
     _ensure_sorted!(slot)
     slot.cost = _evaluate_with_total_size(
