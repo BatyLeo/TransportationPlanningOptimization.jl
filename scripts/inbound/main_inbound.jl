@@ -23,7 +23,7 @@ sub_instance = TPO.extract_filtered_instance(instance, filtering_sol)
 
 sub_sol = mix_greedy_heuristic(sub_instance)
 
-local_search!(sub_sol, sub_instance; time_limit=30);
+res = local_search!(sub_sol, sub_instance; time_limit=30);
 
 full_solution = TPO.merge_solutions(filtering_sol, sub_sol, instance, sub_instance);
 is_feasible(full_solution, instance; verbose=true)

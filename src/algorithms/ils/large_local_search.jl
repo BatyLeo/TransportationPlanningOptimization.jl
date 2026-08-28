@@ -1,5 +1,3 @@
-using Random
-
 """
 $TYPEDSIGNATURES
 
@@ -46,7 +44,7 @@ function large_local_search!(
         end
 
         # Step 2: Reinsert with the forbidden arcs excluded from the cost matrix
-        for b in shuffle(rng, forbidden_bundles)
+        for b in Random.shuffle(rng, forbidden_bundles)
             _reinsert_with_filter!(sol, instance, b, is_forbidden, mode_selector)
         end
 

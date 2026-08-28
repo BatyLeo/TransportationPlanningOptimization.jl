@@ -9,6 +9,7 @@ using Graphs: Graphs
 using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey, code_for, label_for
 using OhMyThreads: OhMyThreads, @tasks, @set, index_chunks
 using ProgressMeter: @showprogress
+using Random: Random
 using SparseArrays: SparseArrays, SparseMatrixCSC, sparse
 
 include("constants.jl")

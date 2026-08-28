@@ -1,18 +1,9 @@
-using Random
-
 """
 $TYPEDSIGNATURES
 
-Estimate how much cost would be removed if `bundle_idx`'s current path were
-deleted from `sol`. The estimate is a proxy that sums each touched edge's
-total cost weighted by the share of commodities on that edge that belong to
-this bundle. It is not an exact value (a precise computation would require
-running `remove_bundle_path!` and reading the actual delta), but it
-correlates well with the actual delta and is O(arcs-on-path) instead of
-O(arcs-on-path-times-commodities).
-
-Used by `bundle_reinsertion_improvement!` to skip bundles whose potential
-saving is below `cost_threshold`.
+Cheap proxy for the cost delta of removing `bundle_idx`'s path from `sol`.
+Sums each touched edge's cost weighted by the bundle's commodity share on
+that edge. Used to skip low-potential bundles before running Dijkstra.
 """
 function bundle_estimated_removal_cost(sol::Solution, instance::Instance, bundle_idx::Int)
     path = sol.bundle_paths[bundle_idx]
@@ -34,6 +25,24 @@ function bundle_estimated_removal_cost(sol::Solution, instance::Instance, bundle
     return total
 end
 
+"""
+$TYPEDSIGNATURES
+
+Convert each bundle's `bundle_arcs` edge list into an adjacency-list Dict
+(node -> outgoing neighbors), for use with `_lazy_bundle_dijkstra!`.
+"""
+function _compute_bundle_adjacencies(ttg::TravelTimeGraph, n_bundles::Int)
+    bundle_adjs = Vector{Dict{Int,Vector{Int}}}(undef, n_bundles)
+    for i in 1:n_bundles
+        adj = Dict{Int,Vector{Int}}()
+        for (u, v) in ttg.bundle_arcs[i]
+            push!(get!(adj, u, Int[]), v)
+        end
+        bundle_adjs[i] = adj
+    end
+    return bundle_adjs
+end
+
 _assignment_commodity_count(a::SingleAssignment) = length(a.commodities)
 function _assignment_commodity_count(a::MultiAssignment)
     return sum(length(slot.commodities) for slot in a.per_mode; init=0)
@@ -42,14 +51,9 @@ end
 """
 $TYPEDSIGNATURES
 
-Combined cost computation and Dijkstra for a single bundle reinsertion.
-Instead of pre-computing costs for all bundle arcs and then running Dijkstra,
-this evaluates edge costs on-demand as Dijkstra settles each node and stops
-as soon as the destination is reached. Only arcs on the shortest path tree
-up to the destination are evaluated, roughly halving the number of cost
-computations compared to the pre-compute-all approach.
-
-Returns the `parents` vector (for use with `trace_path`).
+Lazy Dijkstra for a single bundle reinsertion: evaluates edge costs on-demand
+as nodes are settled and stops at the destination. Returns the `parents`
+vector (for use with `trace_path`).
 """
 function _lazy_bundle_dijkstra!(
     sol::Solution{C},
@@ -134,23 +138,13 @@ end
 """
 $TYPEDSIGNATURES
 
-Attempt a single-bundle reinsertion. Snapshot the assignment state, remove the
-bundle, compute the cost matrix against the bundle-free solution, run Dijkstra,
-and compare the new path to the old one. When Dijkstra returns the same path
-or no path, restore via snapshot. When a different path is found, add the new
-path with full FFD repack and accept only if the net cost delta is strictly
-negative (improvement greater than `COST_IMPROVEMENT_EPS`). Returns the cost
-improvement (non-negative `Float64`).
+Try reinserting a single bundle: snapshot, remove, run Dijkstra, and accept
+the new path only if the cost strictly improves (by more than
+`COST_IMPROVEMENT_EPS`). Returns the cost improvement (non-negative).
 
-When `remove_before_routing=false`, the bundle is left in the solution during
-cost matrix computation (cheaper but less accurate). The bundle is only removed
-when a genuinely different path is found, avoiding snapshot/restore overhead
-for same-path and no-path cases. The accept/reject decision is always based on
-actual cost deltas regardless of this flag.
-
-Used by `bundle_reinsertion_improvement!` as its per-bundle inner step and by
-`two_node_common_incremental!` as the refine step. Bundles whose path is
-already empty return `0.0` without side effects.
+When `remove_before_routing=false`, the bundle stays in the solution during
+cost computation (cheaper but less accurate), and is only removed when a
+different path is found.
 """
 function _try_reinsert_bundle!(
     sol::Solution,
@@ -210,17 +204,11 @@ function _try_reinsert_bundle!(
         p
     end
     new_path = trace_path(parents, origin, dest)
-
-    if isempty(new_path)
-        if remove_before_routing
-            _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
-        end
-        return 0.0
+    if !isempty(new_path)
+        _remove_shortcuts_from_path!(new_path, ttg)
     end
 
-    _remove_shortcuts_from_path!(new_path, ttg)
-
-    if new_path == old_path
+    if isempty(new_path) || new_path == old_path
         if remove_before_routing
             _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
         end
@@ -252,25 +240,10 @@ end
 """
 $TYPEDSIGNATURES
 
-For each bundle in turn, remove its current path, recompute the cost matrix
-against the now-bundle-less solution, run Dijkstra, and accept the new path
-only if its net cost delta is strictly negative (improvement greater than
-`COST_IMPROVEMENT_EPS`). Otherwise restore the old path. Returns the total cost improvement
-(a non-negative `Float64`).
-
-Bundles whose path is already empty are skipped. The `time_limit` keyword
-caps total wall time spent in the loop (the loop exits between bundles, not
-mid-bundle).
-
-When `cost_threshold > 0`, bundles whose
-`bundle_estimated_removal_cost(sol, instance, i)` is at or below the
-threshold are skipped without attempting a reinsertion. This is a cheap
-filter that avoids running Dijkstra on bundles whose total cost contribution
-is too small to yield a meaningful improvement.
-
-Implementation note: uses the cost deltas returned by `remove_bundle_path!`
-and `add_bundle_path!` to score each move in O(arcs-on-path) per candidate
-rather than calling `cost(sol)` (which is O(|assignments|)).
+Deterministic single-pass bundle reinsertion: iterate over all bundles, try
+reinserting each via [`_try_reinsert_bundle!`](@ref), and accept strictly
+improving moves. Bundles below `cost_threshold` (estimated removal cost) are
+skipped. Returns total cost improvement (non-negative).
 """
 function bundle_reinsertion_improvement!(
     sol::Solution,

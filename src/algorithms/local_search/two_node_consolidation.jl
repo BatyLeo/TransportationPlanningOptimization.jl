@@ -1,5 +1,3 @@
-using Random
-
 """
 $TYPEDSIGNATURES
 
@@ -23,26 +21,12 @@ end
 """
 $TYPEDSIGNATURES
 
-Build a virtual bundle representing the union of `lifted_idxs` for the
-(src, dst) Dijkstra in `two_node_common_incremental!`. Returns
-`(virtual_bundle, virtual_bundle_arcs)`.
+Build a virtual bundle merging `lifted_idxs` for the two-node consolidation
+Dijkstra. Returns `(virtual_bundle, virtual_bundle_arcs)`.
 
-- Orders: concatenation of all lifted bundles' orders.
-- `origin_id` and `destination_id`: copied from the donor (the lifted bundle
-  with the largest `max(o.max_transit_steps for o in bundle.orders)`).
-  Using the donor with the longest delivery window gives the most permissive
-  arc set for cost-matrix updates.
-- `forbidden_nodes` and `forbidden_arcs`: union over lifted bundles, so the
-  merged path is guaranteed to satisfy every lifted bundle's individual
-  constraints.
-
-The returned `virtual_bundle_arcs` is
-`instance.travel_time_graph.bundle_arcs[donor_idx]`, matching the choice in
-Renault's `merge_bundles`. This reuses the donor's precomputed reachable-arc
-set rather than recomputing one for the virtual bundle (which would require
-a BFS that does not amortize).
-
-Throws `ArgumentError` if `lifted_idxs` is empty.
+The donor (bundle with the longest delivery window) provides origin/destination
+and the reachable-arc set. Forbidden nodes/arcs are the union over all lifted
+bundles.
 """
 function merge_bundles(instance::Instance, lifted_idxs::Vector{Int})
     isempty(lifted_idxs) &&
@@ -50,8 +34,9 @@ function merge_bundles(instance::Instance, lifted_idxs::Vector{Int})
 
     lifted = [instance.bundles[i] for i in lifted_idxs]
 
-    donor_b = argmax(b -> maximum(o.max_transit_steps for o in b.orders), lifted)
-    donor_local_idx = findfirst(==(donor_b), lifted)
+    donor_local_idx = argmax(
+        j -> maximum(o.max_transit_steps for o in lifted[j].orders), eachindex(lifted)
+    )
     donor_idx = lifted_idxs[donor_local_idx]
     donor = lifted[donor_local_idx]
 
@@ -118,12 +103,12 @@ end
 """
 $TYPEDSIGNATURES
 
-Return `(src_codes, dst_codes)`, the candidate (src, dst) node pools for the
-two-node consolidation move.
+Return the valid `(src, dst)` pairs for the two-node consolidation move.
 
-- `src_codes`: all TTG node codes whose spatial node has `node_type == :other`
-  (intermediate hubs).
-- `dst_codes`: `src_codes` plus all codes with `node_type == :destination`.
+Source candidates are all TTG node codes whose spatial node has
+`node_type == :other` (intermediate hubs). Destination candidates are those
+plus all codes with `node_type == :destination`. A pair is valid when
+`src != dst` and the edge exists in the TTG.
 
 Mirrors Renault's `compute_src_dst_nodes` (`commonNodes` plus `commonNodes`
 union `plant_nodes`) in TPO's typology.
@@ -142,29 +127,21 @@ function compute_candidate_nodes(ttg::TravelTimeGraph)
             push!(dst_codes, code)
         end
     end
-    return src_codes, dst_codes
+    valid_pairs = Tuple{Int,Int}[]
+    for s in src_codes, d in dst_codes
+        s != d && Graphs.has_edge(g, s, d) && push!(valid_pairs, (s, d))
+    end
+    return valid_pairs
 end
 
 """
 $TYPEDSIGNATURES
 
-Two-node common consolidation local-search move on the arc `(src, dst)`.
-
-1. Lift every bundle whose path traverses `(src, dst)` (via
-   `bundles_through_arc`).
-2. Optionally skip if `cost_threshold > 0` and the sum of
-   `bundle_estimated_removal_cost` over lifted bundles is below the threshold.
-3. Save each lifted bundle's full path. Snapshot total cost.
-4. Remove each lifted bundle entirely.
-5. Build a virtual merged bundle via `merge_bundles`.
-6. Run Dijkstra on the virtual bundle from `src` to `dst`.
-7. For each lifted bundle, splice the new `(src, dst)` sub-segment into its
-   old path and re-add the bundle.
-8. (Refine step added in Phase 3.7 Task 8.)
-9. Accept iff `cost(sol) < cost_before - COST_IMPROVEMENT_EPS`. Otherwise revert all lifted
-   bundles to their saved paths.
-
-Returns the cost improvement achieved (`0.0` if reverted or no lifted bundles).
+Two-node consolidation move on arc `(src, dst)`: lift all bundles traversing
+that arc, merge them, reroute the merged bundle via Dijkstra, splice the new
+sub-path into each lifted bundle, optionally refine, and accept iff the cost
+strictly improves. Returns the cost improvement (`0.0` if reverted or no
+bundles traversed the arc).
 """
 function two_node_common_incremental!(
     sol::Solution,
@@ -270,21 +247,9 @@ end
 """
 $TYPEDSIGNATURES
 
-Random-sampling driver for `two_node_common_incremental!`. Picks (src, dst)
-candidate pairs at random within the time budget. Returns total cost
+Random-sampling driver for [`two_node_common_incremental!`](@ref): picks
+`(src, dst)` pairs at random within the time budget. Returns total cost
 improvement.
-
-Candidate pairs are pre-filtered to those where:
-- `src` has `node_type == :other` (intermediate hub).
-- `dst` has `node_type == :other` or `:destination`.
-- The TTG has an edge from `src` to `dst`.
-
-`cost_threshold_relative` scales the absolute `cost_threshold` passed to the
-move by `cost(sol)` at the start of the driver, so that bundles with
-negligible removal cost are skipped at the same relative magnitude across
-instances. Set to `0.0` to disable the filter.
-
-`rng` is a `Random.AbstractRNG` for deterministic testing.
 """
 function loop_two_nodes!(
     sol::Solution,
@@ -297,14 +262,7 @@ function loop_two_nodes!(
     packing::Symbol=:ffd_union,
     cost_packing::Symbol=:frozen,
 )
-    src_codes, dst_codes = compute_candidate_nodes(instance.travel_time_graph)
-    (isempty(src_codes) || isempty(dst_codes)) && return 0.0
-
-    ttg = instance.travel_time_graph
-    valid_pairs = Tuple{Int,Int}[]
-    for s in src_codes, d in dst_codes
-        s != d && Graphs.has_edge(ttg.graph, s, d) && push!(valid_pairs, (s, d))
-    end
+    valid_pairs = compute_candidate_nodes(instance.travel_time_graph)
     isempty(valid_pairs) && return 0.0
 
     cost_threshold = cost_threshold_relative * cost(sol)

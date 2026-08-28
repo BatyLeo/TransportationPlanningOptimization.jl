@@ -78,13 +78,16 @@ end
 
 @testset "compute_candidate_nodes filters by node_type" begin
     instance = TestFixtures.small_instance()
-    src_codes, dst_codes = TPO.compute_candidate_nodes(instance.travel_time_graph)
+    valid_pairs = TPO.compute_candidate_nodes(instance.travel_time_graph)
 
     g = instance.travel_time_graph.graph
-    @test !isempty(src_codes)
-    @test all(g[label_for(g, c)].node_type == :other for c in src_codes)
-    @test all(g[label_for(g, c)].node_type in (:other, :destination) for c in dst_codes)
-    @test issubset(Set(src_codes), Set(dst_codes))
+    @test !isempty(valid_pairs)
+    for (s, d) in valid_pairs
+        @test g[label_for(g, s)].node_type == :other
+        @test g[label_for(g, d)].node_type in (:other, :destination)
+        @test s != d
+        @test Graphs.has_edge(g, s, d)
+    end
 end
 
 @testset "TPO.two_node_common_incremental! feasibility on small" begin

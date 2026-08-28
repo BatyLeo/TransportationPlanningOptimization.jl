@@ -50,11 +50,12 @@ function _snapshot_path_assignments(
     instance::Instance,
     bundle_idx::Int;
     cache::Union{Dict{Tuple{Int,Int},_SnapshotUnion{C}},Nothing}=nothing,
+    clear::Bool=true,
 ) where {C}
     path = sol.bundle_paths[bundle_idx]
     bundle = instance.bundles[bundle_idx]
     snapshots = if cache !== nothing
-        empty!(cache)
+        clear && empty!(cache)
         cache
     else
         Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
@@ -87,18 +88,7 @@ function _snapshot_multi_bundle_assignments(
 ) where {C}
     snapshots = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
     for bi in bundle_idxs
-        path = sol.bundle_paths[bi]
-        bundle = instance.bundles[bi]
-        for order in bundle.orders
-            for k in 1:(length(path) - 1)
-                u_tsg = project_to_time_space_graph(path[k], order, instance)
-                v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
-                edge = (u_tsg, v_tsg)
-                haskey(snapshots, edge) && continue
-                haskey(sol.assignments, edge) || continue
-                snapshots[edge] = _snapshot_assignment(sol.assignments[edge])
-            end
-        end
+        _snapshot_path_assignments(sol, instance, bi; cache=snapshots, clear=false)
     end
     return snapshots
 end

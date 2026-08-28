@@ -1,5 +1,3 @@
-using Random
-
 """
 $TYPEDEF
 
@@ -35,48 +33,19 @@ end
 """
 $TYPEDSIGNATURES
 
-Random-neighborhood local search driver mirroring STP's `local_search!`. Each
-iteration flips a fair coin to pick one move:
+Random-neighborhood local search. Each iteration flips a fair coin between two
+moves (bundle reintroduction via [`_try_reinsert_bundle!`](@ref) and two-node
+consolidation via [`two_node_common_incremental!`](@ref)), accepting strictly
+improving moves only.
 
-- Bundle reintroduction: a random bundle index is selected, its current path
-  is removed, the cost matrix is recomputed against the now-bundle-less
-  solution, and a Dijkstra-found new path is accepted iff it strictly improves
-  the total cost. Implemented by `_try_reinsert_bundle!`.
-- Two-node consolidation: a random `(src, dst)` pair is selected from the set
-  of valid `:other -> :other / :destination` arcs in the TTG. Every bundle
-  whose current path traverses `(src, dst)` is lifted, a merged virtual bundle
-  is rerouted between the two nodes via Dijkstra, and each lifted bundle's
-  sub-path is spliced through the new segment. Accepted iff the total cost
-  strictly improves. Implemented by `two_node_common_incremental!`.
+Stops when `time_limit`, `max_iter`, or `max_no_improv` consecutive non-improving
+iterations is reached. A final [`bin_packing_improvement!`](@ref) pass runs when
+`allow_repack=true`.
 
-The loop exits when any of three conditions hits: `time_limit` seconds elapsed,
-`max_iter` iterations attempted, or `max_no_improv` consecutive iterations
-without improvement (improvement below `1.0`, matching STP's tolerance).
+Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type.
 
-After the loop a single `bin_packing_improvement!` pass is run when
-`allow_repack=true`. It is not interleaved per iteration because most
-iterations modify zero or very few arcs (a global pass at the end captures the
-same opportunities at lower amortized cost).
-
-Per-move pre-filtering: `cost_threshold_relative * start_cost` is passed as the
-`cost_threshold` to both move types, so candidates whose estimated removal cost
-is below that threshold are skipped without running Dijkstra.
-
-Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type
-(useful for ablation studies). Setting both to false skips straight to the
-final repack.
-
-`refine_two_node` controls whether lifted bundles are individually re-inserted
-after a two-node splice (defaults to `false`, matching STP). Setting it to
-`true` can improve per-move quality at the cost of 4-9x slower two-node moves.
-
-The `packing` keyword defaults to `:ffd_union` and controls the commit
-operations (remove/add path). The `cost_packing` keyword defaults to
-`:frozen` and controls the cost matrix estimation for Dijkstra. Frozen
-packing is cheaper (O(n_new) vs O(n_existing + n_new)) and a good estimate.
-
-Returns a [`LocalSearchResult`](@ref) with diagnostic info (cost improvement,
-iteration counts, and time-series samples for plotting convergence curves).
+Returns a [`LocalSearchResult`](@ref) with cost improvement, iteration counts,
+and time-series samples for convergence analysis.
 """
 function local_search!(
     sol::Solution{C},
@@ -100,11 +69,7 @@ function local_search!(
     cost_threshold = cost_threshold_relative * start_cost
 
     ttg = instance.travel_time_graph
-    src_codes, dst_codes = compute_candidate_nodes(ttg)
-    valid_pairs = Tuple{Int,Int}[]
-    for s in src_codes, d in dst_codes
-        s != d && Graphs.has_edge(ttg.graph, s, d) && push!(valid_pairs, (s, d))
-    end
+    valid_pairs = compute_candidate_nodes(ttg)
     can_consolidate = allow_consolidate && !isempty(valid_pairs)
     can_reintro = allow_reintro && !isempty(instance.bundles)
 
@@ -117,34 +82,21 @@ function local_search!(
 
     n_bundles = length(instance.bundles)
     shared_buffer = BinPackingBuffer()
-    # Pre-compute per-bundle adjacency lists from bundle_arcs. These are
-    # static (independent of the solution) and reused across all lazy
-    # Dijkstra calls to avoid per-reinsertion Dict construction.
-    bundle_adjs = Vector{Dict{Int,Vector{Int}}}(undef, n_bundles)
     n_ttg_nodes = Graphs.nv(ttg.graph)
     workspace = DijkstraWorkspace(n_ttg_nodes)
 
-    # Thread-local buffer pool for parallel cost matrix computation.
-    # One BinPackingBuffer per thread, indexed by threadid().
     buffer_pool = if Threads.nthreads() > 1
         create_buffer_pool()
     else
         nothing
     end
 
-    # Pre-allocated snapshot Dict, reused across iterations via empty!.
     snapshot_cache = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
 
-    if can_reintro
-        ttg = instance.travel_time_graph
-        for i in 1:n_bundles
-            adj = Dict{Int,Vector{Int}}()
-            for (u, v) in ttg.bundle_arcs[i]
-                push!(get!(adj, u, Int[]), v)
-            end
-            bundle_adjs[i] = adj
-        end
-    end
+    # Adjacency lists are needed for lazy Dijkstra (reintro) and for the
+    # refine step inside two-node consolidation.
+    needs_adjs = can_reintro || (can_consolidate && refine_two_node)
+    bundle_adjs = needs_adjs ? _compute_bundle_adjacencies(ttg, n_bundles) : nothing
 
     if can_reintro || can_consolidate
         while (time() - t_start < time_limit) &&
