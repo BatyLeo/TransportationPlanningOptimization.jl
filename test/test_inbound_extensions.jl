@@ -6,18 +6,6 @@ using .Inbound
 
 const TPO = TransportationPlanningOptimization
 
-@testset "CarbonArcCost is linear in volume" begin
-    C = TPO.LightCommodity{Nothing}
-    items = [
-        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
-        for s in (1.0, 2.0, 3.0)
-    ]
-    c = CarbonArcCost(0.5)
-    @test isapprox(TPO.evaluate(c, items), 0.5 * 6.0; atol=1e-9)
-    @test isapprox(TPO.incremental_cost(c, C[], items), 0.5 * 6.0; atol=1e-9)
-    @test isapprox(TPO.lower_bound_incremental_cost(c, C[], items), 0.5 * 6.0; atol=1e-9)
-end
-
 @testset "StockArcCost reads info.stock_cost and scales by distance" begin
     items = [
         LightCommodity(;
@@ -32,12 +20,12 @@ end
     @test isapprox(TPO.evaluate(c, items), 40.0; atol=1e-9)
 end
 
-@testset "NodeVolumeCost is linear in volume" begin
+@testset "LinearNodeCost is linear in volume" begin
     items = [
         LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
         for s in (10.0, 20.0)
     ]
-    c = NodeVolumeCost(3.0)
+    c = LinearNodeCost(3.0)
     # 3.0 * 30 = 90
     @test isapprox(TPO.evaluate(c, items), 90.0; atol=1e-9)
 end
@@ -50,17 +38,17 @@ end
         joinpath(datadir, "tiny_commodities.csv"),
     )
 
-    # Every node should have a NodeVolumeCost.
-    @test all(n -> n.node_cost isa NodeVolumeCost, nodes)
+    # Every node should have a LinearNodeCost.
+    @test all(n -> n.node_cost isa LinearNodeCost, nodes)
 
-    # At least one arc's cost should be a SumArcCost containing CarbonArcCost
-    # and StockArcCost.
+    # At least one arc's cost should be a SumArcCost containing LinearArcCost
+    # (carbon cost) and StockArcCost.
     sum_arcs = filter(a -> a.cost isa SumArcCost, arcs)
     @test !isempty(sum_arcs)
     if !isempty(sum_arcs)
         terms = sum_arcs[1].cost.terms
         types = typeof.(terms)
-        @test any(t -> t <: CarbonArcCost, types)
+        @test any(t -> t <: LinearArcCost, types)
         @test any(t -> t <: StockArcCost, types)
     end
 

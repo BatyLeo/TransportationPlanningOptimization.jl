@@ -41,15 +41,8 @@ const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
 const COMMODITY_LEAD_TIME_COST = :lead_time_cost
 
-# STP integer scaling factor for commodity sizes and arc capacities
+# Integer scaling factor for commodity sizes and arc capacities
 const VOLUME_FACTOR = 100
-
-"""
-    InboundNodeInfo
-
-Test data structure for node metadata in inbound instances.
-"""
-struct InboundNodeInfo end
 
 """
     InboundArcInfo
@@ -72,54 +65,11 @@ struct InboundCommodityInfo
 end
 
 """
-    CarbonArcCost(carbon_per_unit_volume)
-
-Carbon cost on an arc. STP charges `carbonCost * volume / capacity` per order
-(`Algorithms/Utils/greedy_utils.jl:28`). We precompute the per-unit-volume
-rate `carbon_per_unit_volume = carbonCost / capacity` at parse time so the
-runtime formula is plain `factor * volume`.
-"""
-struct CarbonArcCost <: TPO.AbstractArcCostFunction
-    carbon_per_unit_volume::Float64
-end
-
-function TPO.evaluate(
-    c::CarbonArcCost, comms::Vector{<:TPO.LightCommodity}; presorted::Bool=false
-)
-    return c.carbon_per_unit_volume * sum(x.size for x in comms; init=0.0)
-end
-@inline function TPO._evaluate_with_total_size(
-    c::CarbonArcCost,
-    ::Vector{<:TPO.LightCommodity},
-    total_size::Float64;
-    presorted::Bool=false,
-)
-    return c.carbon_per_unit_volume * total_size
-end
-function TPO.incremental_cost(
-    c::CarbonArcCost, _::Vector{C}, new::Vector{C}
-) where {C<:TPO.LightCommodity}
-    return c.carbon_per_unit_volume * sum(x.size for x in new; init=0.0)
-end
-function TPO.lower_bound_incremental_cost(
-    c::CarbonArcCost, e::Vector{C}, n::Vector{C}
-) where {C<:TPO.LightCommodity}
-    return TPO.incremental_cost(c, e, n)
-end
-function TPO.incremental_cost_with_size(
-    c::CarbonArcCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
-) where {C<:TPO.LightCommodity}
-    return c.carbon_per_unit_volume * new_total_size
-end
-
-"""
     StockArcCost(distance)
 
-Stock cost on an arc. STP charges `arcData.distance * order.stockCost` per
-order (`Algorithms/Utils/greedy_utils.jl:34`), where `order.stockCost =
-sum(c.stockCost for c in order.content)`. We carry the arc's distance (km)
-duplicated from the leg CSV and read per-commodity stock cost from
-`commodity.info.stock_cost`.
+Stock cost on an arc, computed as `distance * sum(stockCost)` over orders.
+The arc's distance (km) comes from the leg CSV and per-commodity stock cost
+is read from `commodity.info.stock_cost`.
 
 Requires `Commodity.info` to be an `InboundCommodityInfo` (or any struct
 exposing `stock_cost`). Calling `evaluate` on commodities without that field
@@ -133,52 +83,6 @@ function TPO.evaluate(
     c::StockArcCost, comms::Vector{<:TPO.LightCommodity}; presorted::Bool=false
 )
     return c.distance * sum(x.info.stock_cost for x in comms; init=0.0)
-end
-function TPO.incremental_cost(
-    c::StockArcCost, _::Vector{C}, new::Vector{C}
-) where {C<:TPO.LightCommodity}
-    return c.distance * sum(x.info.stock_cost for x in new; init=0.0)
-end
-function TPO.lower_bound_incremental_cost(
-    c::StockArcCost, e::Vector{C}, n::Vector{C}
-) where {C<:TPO.LightCommodity}
-    return TPO.incremental_cost(c, e, n)
-end
-
-"""
-Node volume / platform cost charged on the destination node of each
-traversed arc. STP charges `dstData.volumeCost * volume / VOLUME_FACTOR`. TPO
-uses raw m3 so the formula simplifies to `volume_cost * total_size`.
-"""
-struct NodeVolumeCost <: TPO.AbstractNodeCostFunction
-    volume_cost::Float64
-end
-
-function TPO.evaluate(c::NodeVolumeCost, comms::Vector{<:TPO.LightCommodity})
-    return c.volume_cost * sum(x.size for x in comms; init=0.0)
-end
-@inline function TPO._evaluate_with_total_size(
-    c::NodeVolumeCost,
-    ::Vector{<:TPO.LightCommodity},
-    total_size::Float64;
-    presorted::Bool=false,
-)
-    return c.volume_cost * total_size
-end
-function TPO.incremental_cost(
-    c::NodeVolumeCost, _::Vector{C}, new::Vector{C}
-) where {C<:TPO.LightCommodity}
-    return c.volume_cost * sum(x.size for x in new; init=0.0)
-end
-function TPO.lower_bound_incremental_cost(
-    c::NodeVolumeCost, e::Vector{C}, n::Vector{C}
-) where {C<:TPO.LightCommodity}
-    return TPO.incremental_cost(c, e, n)
-end
-function TPO.incremental_cost_with_size(
-    c::NodeVolumeCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
-) where {C<:TPO.LightCommodity}
-    return c.volume_cost * new_total_size
 end
 
 """
@@ -214,7 +118,7 @@ function parse_inbound_instance(
             id=string(row[NODE_ID]),
             node_type=node_type_symbol,
             capacity=Int(row[NODE_CAPACITY]),
-            node_cost=NodeVolumeCost(Float64(row[NODE_COST]) / VOLUME_FACTOR),
+            node_cost=LinearNodeCost(Float64(row[NODE_COST]) / VOLUME_FACTOR),
         )
     end
 
@@ -243,7 +147,7 @@ function parse_inbound_instance(
             BinPackingArcCost(shipment_cost, capacity)
         end
         cost_tuple = (
-            base_cost, CarbonArcCost(carbon_cost / capacity), StockArcCost(distance)
+            base_cost, LinearArcCost(carbon_cost / capacity), StockArcCost(distance)
         )
         return Arc(;
             origin_id=string(row[ARC_ORIGIN_ID]),
@@ -287,18 +191,20 @@ function parse_inbound_instance(
     return (; nodes, arcs=raw_arcs, commodities)
 end
 
+# ---- ILS code below could be moved to another file
+
 using Random
 using SparseArrays
 using JuMP
 using HiGHS
 using MetaGraphsNext: MetaGraphsNext
 
-# ─── Perturbation types mirroring STP's neighborhoods ───
+# ─── Perturbation types ───
 
 """
     PlantPerturbation
 
-Mirrors STP's `:single_plant` neighborhood.
+Plant-based perturbation.
 Selects all bundles delivering to a randomly chosen plant (destination node),
 removes them, and reinserts in random order via Dijkstra.
 """
@@ -307,7 +213,7 @@ struct PlantPerturbation <: TPO.AbstractPerturbation end
 """
     SupplierPerturbation
 
-Mirrors STP's supplier-based bundle selection.
+Supplier-based perturbation.
 Selects all bundles originating from a randomly chosen supplier,
 removes them, and reinserts in random order via Dijkstra.
 """
@@ -346,7 +252,7 @@ function _perturbate_bundle_group!(
 
     after = TPO.cost(sol)
 
-    # Revert if cost increased by more than 1.5% (matches STP's objTol)
+    # Revert if cost increased by more than 1.5%
     if after > before * 1.015
         TPO.restore_solution!(sol, snap, instance)
         return (0.0, 0)
@@ -384,12 +290,12 @@ function TPO.perturbate!(
     return _perturbate_bundle_group!(sol, instance, bundle_idxs; rng, verbose)
 end
 
-# ─── MILP-based perturbation mirroring STP's LNS ───
+# ─── MILP-based perturbation ───
 
 """
     MILPPlantPerturbation(; max_variables=1_000_000)
 
-Arc-flow MILP perturbation mirroring STP's `:single_plant` neighborhood.
+Arc-flow MILP perturbation for a single plant neighborhood.
 Selects bundles delivering to a randomly chosen plant, builds an arc-flow
 MILP with packing constraints on the TimeSpaceGraph common arcs, solves
 it with HiGHS, and applies the resulting paths.
@@ -435,7 +341,6 @@ end
 _non_bp_cost(cost::TPO.BinPackingArcCost, comms) = 0.0
 _non_bp_cost(cost::TPO.LinearArcCost, comms) = TPO.evaluate(cost, comms)
 _non_bp_cost(cost::TPO.ShortcutArcCost, comms) = 0.0
-_non_bp_cost(cost::CarbonArcCost, comms) = TPO.evaluate(cost, comms)
 _non_bp_cost(cost::StockArcCost, comms) = TPO.evaluate(cost, comms)
 _non_bp_cost(cost::TPO.AbstractArcCostFunction, comms) = TPO.evaluate(cost, comms)
 function _non_bp_cost(cost::TPO.SumArcCost, comms)
@@ -571,9 +476,8 @@ function _milp_arc_cost(instance, bundle_idx, u_ttg, v_ttg)
     end
 
     # For linear arcs (no bin packing), the transport cost is already in _non_bp_cost.
-    # For outsource/direct in STP, the per-order truck cost is added.
-    # In TPO, LinearArcCost.evaluate already gives cost_per_unit_size * volume,
-    # which is the continuous relaxation of ceil(volume/capacity) * shipment_cost.
+    # LinearArcCost.evaluate gives cost_per_unit_size * volume, which is the
+    # continuous relaxation of ceil(volume/capacity) * shipment_cost.
     return max(cost, 1e-5)
 end
 
@@ -940,12 +844,9 @@ function TPO.perturbate!(
     return (improvement, n_changed)
 end
 
-export InboundNodeInfo,
-    InboundArcInfo,
+export InboundArcInfo,
     InboundCommodityInfo,
-    CarbonArcCost,
     StockArcCost,
-    NodeVolumeCost,
     parse_inbound_instance,
     PlantPerturbation,
     SupplierPerturbation,

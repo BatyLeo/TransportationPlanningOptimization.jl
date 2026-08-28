@@ -51,28 +51,6 @@ function lower_bound_incremental_cost(
 end
 
 """
-$TYPEDEF
-
-Default zero-valued node cost.
-Use this node cost when there is no incurred cost at the considered node
-"""
-struct NoNodeCost <: AbstractNodeCostFunction end
-
-evaluate(::NoNodeCost, ::Vector{<:LightCommodity}) = 0.0
-
-# Explicit zero specializations: avoid the `vcat` allocation the generic fallback would
-# incur on every routing-loop call for the (common) no-op node cost.
-function incremental_cost(::NoNodeCost, ::Vector{C}, ::Vector{C}) where {C<:LightCommodity}
-    return 0.0
-end
-
-function lower_bound_incremental_cost(
-    ::NoNodeCost, ::Vector{C}, ::Vector{C}
-) where {C<:LightCommodity}
-    return 0.0
-end
-
-"""
 $TYPEDSIGNATURES
 
 Fast path when `new_total_size` is precomputed. Falls back to `incremental_cost`.
@@ -96,4 +74,59 @@ function incremental_cost!(
     n_existing::Int=-1,
 ) where {C<:LightCommodity}
     return incremental_cost(node_f, existing, new)
+end
+
+# ─── NoNodeCost ──────────────────────────────────────────────────────────────
+
+"""
+$TYPEDEF
+
+Default zero-valued node cost.
+Use this node cost when there is no incurred cost at the considered node
+"""
+struct NoNodeCost <: AbstractNodeCostFunction end
+
+evaluate(::NoNodeCost, ::Vector{<:LightCommodity}) = 0.0
+
+# Explicit zero specializations: avoid the `vcat` allocation the generic fallback would
+# incur on every routing-loop call for the (common) no-op node cost.
+function incremental_cost(::NoNodeCost, ::Vector{C}, ::Vector{C}) where {C<:LightCommodity}
+    return 0.0
+end
+
+function lower_bound_incremental_cost(
+    ::NoNodeCost, ::Vector{C}, ::Vector{C}
+) where {C<:LightCommodity}
+    return 0.0
+end
+
+# ─── LinearNodeCost ──────────────────────────────────────────────────────────
+
+"""
+$TYPEDEF
+
+Linear node cost proportional to total volume.
+The formula is `cost_per_unit_size * sum(commodity.size)`.
+
+$TYPEDFIELDS
+"""
+struct LinearNodeCost <: AbstractNodeCostFunction
+    "unit cost per unit of size"
+    cost_per_unit_size::Float64
+end
+
+function evaluate(c::LinearNodeCost, comms::Vector{<:LightCommodity})
+    return c.cost_per_unit_size * sum(x.size for x in comms; init=0.0)
+end
+
+function incremental_cost(
+    c::LinearNodeCost, _::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return evaluate(c, new)
+end
+
+function incremental_cost_with_size(
+    c::LinearNodeCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
+) where {C<:LightCommodity}
+    return c.cost_per_unit_size * new_total_size
 end

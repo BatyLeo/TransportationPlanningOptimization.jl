@@ -756,8 +756,8 @@ end
 # translate each package's solution into the other package's representation
 # and recompute the total cost there. Asserts the recomputed cost matches the
 # original package's reported cost. This isolates the cost model (per-arc
-# BinPackingArcCost + LinearArcCost + CarbonArcCost + StockArcCost plus
-# per-destination-node NodeVolumeCost) from algorithm divergence in path
+# BinPackingArcCost + LinearArcCost + StockArcCost plus
+# per-destination-node LinearNodeCost) from algorithm divergence in path
 # choice, sort key, RNG order, and Dijkstra tie breaks.
 #
 # Residual sources of error after cost composition + Inbound extensions:

@@ -217,7 +217,7 @@ end
 # Three-argument overloads dispatched from `_direct_arc_lb_cost`. The
 # size-only terms ignore the commodities vector. Generic
 # `AbstractArcCostFunction` terms fall back to `lower_bound_incremental_cost`
-# against an empty existing-set so SumArcCost terms like CarbonArcCost and
+# against an empty existing-set so SumArcCost terms like LinearArcCost and
 # StockArcCost can be evaluated using the order's commodities.
 function _direct_arc_order_lb_cost(
     cost::BinPackingArcCost, order_size::Real, ::Vector{<:LightCommodity}

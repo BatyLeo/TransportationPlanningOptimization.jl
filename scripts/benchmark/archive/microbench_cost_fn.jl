@@ -63,7 +63,7 @@ const ME = TPO.MetaGraphsNext
 """
 Variant A — drop the node-cost block. Skips the second incremental_cost!
 call per order. Returns a cost that is *not* equal to baseline (it omits the
-NodeVolumeCost contribution), but that's fine: we are timing per-arc work,
+LinearNodeCost contribution), but that's fine: we are timing per-arc work,
 not validating cost values.
 """
 function cost_fn_no_node(

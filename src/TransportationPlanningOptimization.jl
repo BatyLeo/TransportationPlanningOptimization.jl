@@ -77,7 +77,7 @@ include("algorithms/ils/iterated_local_search.jl")
 # Types
 export LightCommodity, Commodity, Order, Bundle, Instance
 export NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
-export AbstractNodeCostFunction, NoNodeCost
+export AbstractNodeCostFunction, NoNodeCost, LinearNodeCost
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost, SumArcCost
 export NetworkGraph, TimeSpaceGraph, TravelTimeGraph
 export Solution

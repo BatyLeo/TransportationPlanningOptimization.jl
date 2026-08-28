@@ -17,26 +17,19 @@ end
     @test n.node_cost isa NoNodeCost
 end
 
-using Dates
+@testset "LinearNodeCost is linear in volume" begin
+    C = LightCommodity{Nothing}
+    items = [
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (10.0, 20.0)
+    ]
+    c = LinearNodeCost(3.0)
+    @test isapprox(TPO.evaluate(c, items), 90.0; atol=1e-9)
+    @test isapprox(TPO.incremental_cost(c, C[], items), 90.0; atol=1e-9)
+    @test isapprox(TPO.incremental_cost_with_size(c, C[], items, 30.0), 90.0; atol=1e-9)
+end
 
-# Local node-cost subtype for testing the integration. Mirrors the shape that
-# Inbound's NodeVolumeCost will take in Task 6.
-struct _TestNodeCost <: AbstractNodeCostFunction
-    factor::Float64
-end
-function TPO.evaluate(c::_TestNodeCost, comms::Vector{<:LightCommodity})
-    return c.factor * sum(x.size for x in comms; init=0.0)
-end
-function TPO.incremental_cost(
-    c::_TestNodeCost, ::Vector{C}, new::Vector{C}
-) where {C<:LightCommodity}
-    return c.factor * sum(x.size for x in new; init=0.0)
-end
-function TPO.lower_bound_incremental_cost(
-    c::_TestNodeCost, e::Vector{C}, n::Vector{C}
-) where {C<:LightCommodity}
-    return TPO.incremental_cost(c, e, n)
-end
+using Dates
 
 @testset "compute_ttg_edge_* adds destination node cost" begin
     datadir = joinpath(@__DIR__, "public")
@@ -53,7 +46,7 @@ end
             node_type=n.node_type,
             capacity=n.capacity,
             info=n.info,
-            node_cost=(n.node_type == :destination ? _TestNodeCost(1.0) : NoNodeCost()),
+            node_cost=(n.node_type == :destination ? LinearNodeCost(1.0) : NoNodeCost()),
         ) for n in nodes
     ]
 
