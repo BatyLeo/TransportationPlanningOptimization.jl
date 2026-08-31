@@ -49,7 +49,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Construct an [`Order`](@ref) from a list of[ `LightCommodity`](@ref).
+Construct an [`Order`](@ref) from a list of [`LightCommodity`](@ref).
 """
 function Order(;
     commodities::Vector{LightCommodity{I}},
