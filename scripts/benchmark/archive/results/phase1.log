@@ -1,488 +1,0 @@
-Set parameter WLSAccessID
-Set parameter WLSSecret
-Set parameter LicenseID to value 2599044
-┌ Error: Error during loading of extension TransportationPlanningOptimizationGurobiExt of TransportationPlanningOptimization, use `Base.retry_load_extensions()` to retry.
-│   exception =
-│    1-element ExceptionStack:
-│    InitError: Gurobi Error 10009: License 2599044 has expired
-│    Stacktrace:
-│      [1] _check_ret
-│        @ ~/.julia/packages/Gurobi/K2XSK/src/MOI_wrapper/MOI_wrapper.jl:442 [inlined]
-│      [2] Gurobi.Env(params::Nothing; started::Bool, output_flag::Int64, memory_limit::Nothing)
-│        @ Gurobi ~/.julia/packages/Gurobi/K2XSK/src/MOI_wrapper/MOI_wrapper.jl:176
-│      [3] Env (repeats 2 times)
-│        @ ~/.julia/packages/Gurobi/K2XSK/src/MOI_wrapper/MOI_wrapper.jl:143 [inlined]
-│      [4] __init__()
-│        @ TransportationPlanningOptimizationGurobiExt ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/ext/TransportationPlanningOptimizationGurobiExt.jl:9
-│      [5] run_module_init(mod::Module, i::Int64)
-│        @ Base ./loading.jl:1443
-│      [6] register_restored_modules(sv::Core.SimpleVector, pkg::Base.PkgId, path::String)
-│        @ Base ./loading.jl:1431
-│      [7] _include_from_serialized(pkg::Base.PkgId, path::String, ocachepath::String, depmods::Vector{Any}; register::Bool)
-│        @ Base ./loading.jl:1319
-│      [8] _include_from_serialized
-│        @ ./loading.jl:1274 [inlined]
-│      [9] _require_search_from_serialized(pkg::Base.PkgId, sourcepath::String, build_id::UInt128, stalecheck::Bool; reasons::Dict{String, Int64}, DEPOT_PATH::Vector{String})
-│        @ Base ./loading.jl:2115
-│     [10] __require_prelocked(pkg::Base.PkgId, env::Nothing)
-│        @ Base ./loading.jl:2609
-│     [11] _require_prelocked(uuidkey::Base.PkgId, env::Nothing)
-│        @ Base ./loading.jl:2493
-│     [12] _require_prelocked(uuidkey::Base.PkgId)
-│        @ Base ./loading.jl:2487
-│     [13] run_extension_callbacks(extid::Base.ExtensionId)
-│        @ Base ./loading.jl:1607
-│     [14] run_extension_callbacks(pkgid::Base.PkgId)
-│        @ Base ./loading.jl:1644
-│     [15] run_package_callbacks(modkey::Base.PkgId)
-│        @ Base ./loading.jl:1460
-│     [16] _require_search_from_serialized(pkg::Base.PkgId, sourcepath::String, build_id::UInt128, stalecheck::Bool; reasons::Dict{String, Int64}, DEPOT_PATH::Vector{String})
-│        @ Base ./loading.jl:2134
-│     [17] _require_search_from_serialized
-│        @ ./loading.jl:2009 [inlined]
-│     [18] __require_prelocked(pkg::Base.PkgId, env::String)
-│        @ Base ./loading.jl:2627
-│     [19] _require_prelocked(uuidkey::Base.PkgId, env::String)
-│        @ Base ./loading.jl:2493
-│     [20] macro expansion
-│        @ ./loading.jl:2421 [inlined]
-│     [21] macro expansion
-│        @ ./lock.jl:376 [inlined]
-│     [22] __require(into::Module, mod::Symbol)
-│        @ Base ./loading.jl:2386
-│     [23] require(into::Module, mod::Symbol)
-│        @ Base ./loading.jl:2362
-│     [24] include(mapexpr::Function, mod::Module, _path::String)
-│        @ Base ./Base.jl:307
-│     [25] top-level scope
-│        @ ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/scripts/benchmark/run_comparison.jl:5
-│     [26] include(mod::Module, _path::String)
-│        @ Base ./Base.jl:306
-│     [27] exec_options(opts::Base.JLOptions)
-│        @ Base ./client.jl:317
-│     [28] _start()
-│        @ Base ./client.jl:550
-│    during initialization of module TransportationPlanningOptimizationGurobiExt
-└ @ Base loading.jl:1617
-=== JIT warmup on small (timings discarded) ===
-┌ Warning: 895 duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept.
-└ @ Main.Inbound ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/test/Inbound.jl:242
-Progress:   5%|██▏                                      |  ETA: 0:00:02[KProgress:  23%|█████████▌                               |  ETA: 0:00:01[KProgress:  61%|████████████████████████▉                |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:00[K
-Progress:   1%|▋                                        |  ETA: 0:00:08[KProgress:   4%|█▉                                       |  ETA: 0:00:04[KProgress:   9%|███▉                                     |  ETA: 0:00:03[KProgress:  17%|███████▏                                 |  ETA: 0:00:02[KProgress:  26%|██████████▋                              |  ETA: 0:00:02[KProgress:  37%|███████████████                          |  ETA: 0:00:01[KProgress:  48%|███████████████████▊                     |  ETA: 0:00:01[KProgress:  60%|████████████████████████▋                |  ETA: 0:00:01[KProgress:  76%|███████████████████████████████▎         |  ETA: 0:00:00[KProgress:  92%|█████████████████████████████████████▊   |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:01[K
-[ Info: Reading nodes from CSV file small_nodes.csv (262 lines)
-┌ Info: Read 262 nodes : Dict(:pol => 12, :plant => 5, :platform => 25, :pod => 12, :supplier => 208)
-│   :ignored = ":unknown_type => 0, :missing_data => 0, :same_node => 0"
-└   :time = 0.4
-[ Info: Reading legs from CSV file small_legs.csv (3764 lines)
-┌ Info: Read 3077 legs : Dict(:shortcut => 208, :delivery => 174, :outsource => 1501, :direct => 1127, :cross_plat => 854, :oversea => 108)
-│   :ignored = ":unknown_source => 0, :unknown_dest => 0, :unknown_type => 0, :missing_data => 0, :same_arc => 895"
-│   :time = 0.0
-│   :min_cost = 5.405617165101159
-│   :max_cost = 198195.5131184985
-└   :mean_cost = 2903.4506131644084
-[ Info: Reading commodity orders from CSV file small_commodities.csv (7427 lines)
-┌ Info: Read 312 bundles, 1983 orders and 45323 commodities (7427 without quantities) on a 8 steps time horizon
-│   :ignored = ":unknown_bundle => 0, :missing_data => 0"
-└   :time = 0.2
-[ Info: Adding properties to instance
-Common arcs : 1886 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 1886 (travel time graph)
-Reachbility properties : 
-Common network done, bundles |||
-Mean bundle arcs : 1202.2 (1180 -> 1625)
-All usable arcs : 5677
-[ Info: Travel-time graph has 835 nodes and 6810 arcs
-[ Info: Time-space graph has 2096 nodes and 22952 arcs
-┌ Info: Full properties added
-└   :time = 0.3
-Lower Bound filtering insertion progress : 
-|||| 1% |||| 2% |||| 3% |||| 4% |||| 5% |||| 6% |||| 7% |||| 8% |||| 9% |||| 10% |||| 11% |||| 12% |||| 13% |||| 14% |||| 15% |||| 16% |||| 17% |||| 18% |||| 19% |||| 20% |||| 21% |||| 22% |||| 23% |||| 24% |||| 25% |||| 26% |||| 27% |||| 28% |||| 29% |||| 30% |||| 31% |||| 32% |||| 33% |||| 34% |||| 35% |||| 36% |||| 37% |||| 38% |||| 39% |||| 40% |||| 41% |||| 42% |||| 43% |||| 44% |||| 45% |||| 46% |||| 47% |||| 48% |||| 49% |||| 50% |||| 51% |||| 52% |||| 53% |||| 54% |||| 55% |||| 56% |||| 57% |||| 58% |||| 59% |||| 60% |||| 61% |||| 62% |||| 63% |||| 64% |||| 65% |||| 66% |||| 67% |||| 68% |||| 69% |||| 70% |||| 71% |||| 72% |||| 73% |||| 74% |||| 75% |||| 76% |||| 77% |||| 78% 
-[ Info: Lower bound filtering inside cost = 2.7996839502183353e6
-
-[ Info: Filtered instance has 250 nodes, 2931 legs, 291 bundles, 1847 orders and 33951 commodities
-[ Info: Extracted cost is 606850.3718955531
-Common arcs : 1886 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||
-Mean bundle arcs : 1203.5 (1180 -> 1625)
-All usable arcs : 5438
-[ Info: Adding properties to instance
-Common arcs : 1886 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 1886 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||
-Mean bundle arcs : 1203.5 (1180 -> 1625)
-All usable arcs : 5438
-[ Info: Travel-time graph has 799 nodes and 6520 arcs
-[ Info: Time-space graph has 2000 nodes and 21880 arcs
-┌ Info: Full properties added
-└   :time = 0.1
-All introduction progress :  1%  2%  3% | 4%  5%  6% | 7%  8%  9% | 10%  11%  12%  13% | 14%  15%  16% | 17%  18%  19% | 20%  21%  22%  23% | 24%  25%  26% | 27%  28%  29% | 30%  31%  32%  33% | 34%  35%  36% | 37%  38%  39% | 40%  41%  42%  43% | 44%  45%  46% | 47%  48%  49% | 50%  51%  52%  53% | 54%  55%  56% | 57%  58%  59% | 60%  61%  62%  63% | 64%  65%  66% | 67%  68%  69% | 70%  71%  72%  73% | 74%  75%  76% | 77%  78%  79% | 80%  81%  82%  83% | 84%  85%  86% | 87%  88%  89% | 90%  91%  92%  93% | 94%  95%  96% | 97% 
-Lower bound computed : 2.192833578112782e6
-Deep feasibility checking...
-Deep feasibility checking...
-Deep feasibility checking...
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 3.2528657535718437e6
-Deep feasibility checking...
-┌ Info: Bin packing improvement
-│   improvement = -94.8459992596007
-└   timeTaken = 0.06
-┌ Info: Full local search done
-│   totImprov = -24805.236073707565
-│   relImprov = -0.94
-│   timeTaken = 1.07
-│   feasible = true
-│   allowRepack = true
-│   allowReintro = true
-└   allowConsolidate = true
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 3.230237351070322e6
-Deep feasibility checking...
-=== Warmup done ===
-
-
-=== Running small (LS budget: 10s) ===
-┌ Warning: 895 duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept.
-└ @ Main.Inbound ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/test/Inbound.jl:242
-Progress:   6%|██▍                                      |  ETA: 0:00:02[KProgress:  25%|██████████▍                              |  ETA: 0:00:01[KProgress:  63%|█████████████████████████▊               |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:00[K
-Progress:   1%|▍                                        |  ETA: 0:00:11[KProgress:   4%|█▊                                       |  ETA: 0:00:05[KProgress:   9%|███▉                                     |  ETA: 0:00:03[KProgress:  17%|██████▉                                  |  ETA: 0:00:02[KProgress:  25%|██████████▏                              |  ETA: 0:00:02[KProgress:  35%|██████████████▍                          |  ETA: 0:00:01[KProgress:  45%|██████████████████▌                      |  ETA: 0:00:01[KProgress:  57%|███████████████████████▌                 |  ETA: 0:00:01[KProgress:  71%|█████████████████████████████            |  ETA: 0:00:00[KProgress:  86%|███████████████████████████████████      |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:01[K
-[ Info: Reading nodes from CSV file small_nodes.csv (262 lines)
-┌ Info: Read 262 nodes : Dict(:pol => 12, :plant => 5, :platform => 25, :pod => 12, :supplier => 208)
-│   :ignored = ":unknown_type => 0, :missing_data => 0, :same_node => 0"
-└   :time = 0.0
-[ Info: Reading legs from CSV file small_legs.csv (3764 lines)
-┌ Info: Read 3077 legs : Dict(:shortcut => 208, :delivery => 174, :outsource => 1501, :direct => 1127, :cross_plat => 854, :oversea => 108)
-│   :ignored = ":unknown_source => 0, :unknown_dest => 0, :unknown_type => 0, :missing_data => 0, :same_arc => 895"
-│   :time = 0.0
-│   :min_cost = 5.405617165101159
-│   :max_cost = 198195.5131184985
-└   :mean_cost = 2903.4506131644084
-[ Info: Reading commodity orders from CSV file small_commodities.csv (7427 lines)
-┌ Info: Read 312 bundles, 1983 orders and 45323 commodities (7427 without quantities) on a 8 steps time horizon
-│   :ignored = ":unknown_bundle => 0, :missing_data => 0"
-└   :time = 0.0
-[ Info: Adding properties to instance
-Common arcs : 1886 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 1886 (travel time graph)
-Reachbility properties : 
-Common network done, bundles |||
-Mean bundle arcs : 1202.2 (1180 -> 1625)
-All usable arcs : 5677
-[ Info: Travel-time graph has 835 nodes and 6810 arcs
-[ Info: Time-space graph has 2096 nodes and 22952 arcs
-┌ Info: Full properties added
-└   :time = 0.1
-Lower Bound filtering insertion progress : 
-|||| 1% |||| 2% |||| 3% |||| 4% |||| 5% |||| 6% |||| 7% |||| 8% |||| 9% |||| 10% |||| 11% |||| 12% |||| 13% |||| 14% |||| 15% |||| 16% |||| 17% |||| 18% |||| 19% |||| 20% |||| 21% |||| 22% |||| 23% |||| 24% |||| 25% |||| 26% |||| 27% |||| 28% |||| 29% |||| 30% |||| 31% |||| 32% |||| 33% |||| 34% |||| 35% |||| 36% |||| 37% |||| 38% |||| 39% |||| 40% |||| 41% |||| 42% |||| 43% |||| 44% |||| 45% |||| 46% |||| 47% |||| 48% |||| 49% |||| 50% |||| 51% |||| 52% |||| 53% |||| 54% |||| 55% |||| 56% |||| 57% |||| 58% |||| 59% |||| 60% |||| 61% |||| 62% |||| 63% |||| 64% |||| 65% |||| 66% |||| 67% |||| 68% |||| 69% |||| 70% |||| 71% |||| 72% |||| 73% |||| 74% |||| 75% |||| 76% |||| 77% |||| 78% 
-[ Info: Lower bound filtering inside cost = 2.7996839502183353e6
-
-[ Info: Filtered instance has 250 nodes, 2931 legs, 291 bundles, 1847 orders and 33951 commodities
-[ Info: Extracted cost is 606850.3718955531
-Common arcs : 1886 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||
-Mean bundle arcs : 1203.5 (1180 -> 1625)
-All usable arcs : 5438
-[ Info: Adding properties to instance
-Common arcs : 1886 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 1886 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||
-Mean bundle arcs : 1203.5 (1180 -> 1625)
-All usable arcs : 5438
-[ Info: Travel-time graph has 799 nodes and 6520 arcs
-[ Info: Time-space graph has 2000 nodes and 21880 arcs
-┌ Info: Full properties added
-└   :time = 0.1
-All introduction progress :  1%  2%  3% | 4%  5%  6% | 7%  8%  9% | 10%  11%  12%  13% | 14%  15%  16% | 17%  18%  19% | 20%  21%  22%  23% | 24%  25%  26% | 27%  28%  29% | 30%  31%  32%  33% | 34%  35%  36% | 37%  38%  39% | 40%  41%  42%  43% | 44%  45%  46% | 47%  48%  49% | 50%  51%  52%  53% | 54%  55%  56% | 57%  58%  59% | 60%  61%  62%  63% | 64%  65%  66% | 67%  68%  69% | 70%  71%  72%  73% | 74%  75%  76% | 77%  78%  79% | 80%  81%  82%  83% | 84%  85%  86% | 87%  88%  89% | 90%  91%  92%  93% | 94%  95%  96% | 97% 
-Lower bound computed : 2.192833578112782e6
-Deep feasibility checking...
-Deep feasibility checking...
-Deep feasibility checking...
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 3.2528657535718437e6
-Deep feasibility checking...
-┌ Info: Bin packing improvement
-│   improvement = 0.0
-└   timeTaken = 0.0
-┌ Info: Full local search done
-│   totImprov = -45666.98234632673
-│   relImprov = -1.73
-│   timeTaken = 10.01
-│   feasible = true
-│   allowRepack = true
-│   allowReintro = true
-└   allowConsolidate = true
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 3.2093756040277025e6
-Deep feasibility checking...
-
-small         (312 bundles)
-  stage                   TPO            STP    TPO/STP
-  build s                0.11           0.16       0.71
-  filter s               0.41           0.52       0.79
-  init s                 1.15           1.23       0.94
-  init cost         3302815.8      3252865.8     1.0154
-  LS iters               1546           7031      0.220
-  LS iter/s             154.5          699.2      0.221
-  LS saved           101655.7        45667.0     2.2260
-  LS final          3225432.1      3209375.6     1.0050
-
-=== Running medium (LS budget: 30s) ===
-┌ Warning: 1680 duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept.
-└ @ Main.Inbound ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/test/Inbound.jl:242
-Progress:   1%|▎                                        |  ETA: 0:00:20[KProgress:   2%|▉                                        |  ETA: 0:00:12[KProgress:   4%|█▊                                       |  ETA: 0:00:08[KProgress:   7%|██▉                                      |  ETA: 0:00:06[KProgress:  11%|████▍                                    |  ETA: 0:00:05[KProgress:  15%|██████                                   |  ETA: 0:00:04[KProgress:  21%|████████▊                                |  ETA: 0:00:03[KProgress:  29%|███████████▉                             |  ETA: 0:00:02[KProgress:  36%|██████████████▊                          |  ETA: 0:00:02[KProgress:  46%|██████████████████▋                      |  ETA: 0:00:01[KProgress:  57%|███████████████████████▍                 |  ETA: 0:00:01[KProgress:  68%|███████████████████████████▉             |  ETA: 0:00:01[KProgress:  81%|█████████████████████████████████▎       |  ETA: 0:00:00[KProgress:  95%|███████████████████████████████████████  |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:01[K
-Progress:   0%|▏                                        |  ETA: 0:00:37[KProgress:   1%|▍                                        |  ETA: 0:00:29[KProgress:   1%|▌                                        |  ETA: 0:00:29[KProgress:   2%|▉                                        |  ETA: 0:00:22[KProgress:   3%|█▎                                       |  ETA: 0:00:20[KProgress:   4%|█▊                                       |  ETA: 0:00:17[KProgress:   5%|██▏                                      |  ETA: 0:00:16[KProgress:   7%|██▊                                      |  ETA: 0:00:14[KProgress:   8%|███▍                                     |  ETA: 0:00:12[KProgress:  10%|████                                     |  ETA: 0:00:11[KProgress:  11%|████▌                                    |  ETA: 0:00:11[KProgress:  13%|█████▌                                   |  ETA: 0:00:09[KProgress:  16%|██████▍                                  |  ETA: 0:00:08[KProgress:  18%|███████▍                                 |  ETA: 0:00:07[KProgress:  21%|████████▌                                |  ETA: 0:00:07[KProgress:  23%|█████████▌                               |  ETA: 0:00:06[KProgress:  26%|██████████▊                              |  ETA: 0:00:06[KProgress:  29%|███████████▉                             |  ETA: 0:00:05[KProgress:  32%|█████████████                            |  ETA: 0:00:06[KProgress:  34%|██████████████▏                          |  ETA: 0:00:05[KProgress:  37%|███████████████▎                         |  ETA: 0:00:05[KProgress:  40%|████████████████▍                        |  ETA: 0:00:04[KProgress:  43%|█████████████████▌                       |  ETA: 0:00:04[KProgress:  45%|██████████████████▌                      |  ETA: 0:00:04[KProgress:  48%|███████████████████▊                     |  ETA: 0:00:03[KProgress:  51%|████████████████████▉                    |  ETA: 0:00:03[KProgress:  54%|██████████████████████▏                  |  ETA: 0:00:03[KProgress:  57%|███████████████████████▍                 |  ETA: 0:00:03[KProgress:  60%|████████████████████████▊                |  ETA: 0:00:02[KProgress:  63%|██████████████████████████               |  ETA: 0:00:02[KProgress:  67%|███████████████████████████▍             |  ETA: 0:00:02[KProgress:  70%|████████████████████████████▊            |  ETA: 0:00:02[KProgress:  74%|██████████████████████████████▏          |  ETA: 0:00:01[KProgress:  77%|███████████████████████████████▌         |  ETA: 0:00:01[KProgress:  81%|█████████████████████████████████▏       |  ETA: 0:00:01[KProgress:  85%|██████████████████████████████████▊      |  ETA: 0:00:01[KProgress:  88%|████████████████████████████████████▏    |  ETA: 0:00:01[KProgress:  92%|█████████████████████████████████████▋   |  ETA: 0:00:00[KProgress:  96%|███████████████████████████████████████▏ |  ETA: 0:00:00[KProgress:  99%|████████████████████████████████████████▋|  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:04[K
-[ Info: Reading nodes from CSV file medium_nodes.csv (416 lines)
-┌ Info: Read 416 nodes : Dict(:pol => 12, :plant => 13, :platform => 27, :pod => 12, :supplier => 352)
-│   :ignored = ":unknown_type => 0, :missing_data => 0, :same_node => 0"
-└   :time = 0.0
-[ Info: Reading legs from CSV file medium_legs.csv (9164 lines)
-┌ Info: Read 7836 legs : Dict(:shortcut => 352, :delivery => 536, :outsource => 2436, :direct => 4978, :cross_plat => 1106, :oversea => 108)
-│   :ignored = ":unknown_source => 0, :unknown_dest => 0, :unknown_type => 0, :missing_data => 0, :same_arc => 1680"
-│   :time = 0.0
-│   :min_cost = 5.405617165101159
-│   :max_cost = 198195.5131184985
-└   :mean_cost = 2406.9819160517545
-[ Info: Reading commodity orders from CSV file medium_commodities.csv (27413 lines)
-┌ Info: Read 632 bundles, 6632 orders and 160214 commodities (27413 without quantities) on a 12 steps time horizon
-│   :ignored = ":unknown_bundle => 0, :missing_data => 0"
-└   :time = 0.1
-[ Info: Adding properties to instance
-Common arcs : 2399 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 2399 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||||||
-Mean bundle arcs : 1469.7 (1415 -> 2025)
-All usable arcs : 9188
-[ Info: Travel-time graph has 1289 nodes and 13346 arcs
-[ Info: Time-space graph has 4992 nodes and 89808 arcs
-┌ Info: Full properties added
-└   :time = 0.3
-Lower Bound filtering insertion progress : 
-||||||| 1% ||||||| 2% ||||||| 3% ||||||| 4% ||||||| 5% ||||||| 6% ||||||| 7% ||||||| 8% ||||||| 9% ||||||| 10% ||||||| 11% ||||||| 12% ||||||| 13% ||||||| 14% ||||||| 15% ||||||| 16% ||||||| 17% ||||||| 18% ||||||| 19% ||||||| 20% ||||||| 21% ||||||| 22% ||||||| 23% ||||||| 24% ||||||| 25% ||||||| 26% ||||||| 27% ||||||| 28% ||||||| 29% ||||||| 30% ||||||| 31% ||||||| 32% ||||||| 33% ||||||| 34% ||||||| 35% ||||||| 36% ||||||| 37% ||||||| 38% ||||||| 39% ||||||| 40% ||||||| 41% ||||||| 42% ||||||| 43% ||||||| 44% ||||||| 45% ||||||| 46% ||||||| 47% ||||||| 48% ||||||| 49% ||||||| 50% ||||||| 51% ||||||| 52% ||||||| 53% ||||||| 54% ||||||| 55% ||||||| 56% ||||||| 57% ||||||| 58% ||||||| 59% ||||||| 60% ||||||| 61% ||||||| 62% ||||||| 63% ||||||| 64% ||||||| 65% ||||||| 66% ||||||| 67% ||||||| 68% ||||||| 69% ||||||| 70% ||||||| 71% ||||||| 72% ||||||| 73% ||||||| 74% ||||||| 75% ||||||| 76% ||||||| 77% ||||||| 78% ||||||| 79% ||||||| 80% ||||||| 81% ||||||| 82% ||||||| 83% ||||||| 84% ||||||| 85% ||||||| 86% ||||||| 87% ||||||| 88% ||||||| 89% ||||||| 90% ||
-[ Info: Lower bound filtering inside cost = 1.005944017068329e7
-
-[ Info: Filtered instance has 402 nodes, 7563 legs, 586 bundles, 6119 orders and 112786 commodities
-[ Info: Extracted cost is 2.824642927172704e6
-Common arcs : 2399 (travel time graph)
-Reachbility properties : 
-Common network done, bundles |||||
-Mean bundle arcs : 1472.5 (1415 -> 2025)
-All usable arcs : 8909
-[ Info: Adding properties to instance
-Common arcs : 2399 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 2399 (travel time graph)
-Reachbility properties : 
-Common network done, bundles |||||
-Mean bundle arcs : 1472.5 (1415 -> 2025)
-All usable arcs : 8909
-[ Info: Travel-time graph has 1247 nodes and 12927 arcs
-[ Info: Time-space graph has 4824 nodes and 86700 arcs
-┌ Info: Full properties added
-└   :time = 0.7
-All introduction progress :  1% | 2%  3% | 4% | 5%  6% | 7%  8% | 9% | 10%  11% | 12%  13% | 14% | 15%  16% | 17%  18% | 19% | 20%  21% | 22%  23% | 24% | 25%  26% | 27%  28% | 29% | 30%  31% | 32%  33% | 34% | 35%  36% | 37%  38% | 39% | 40%  41% | 42%  43% | 44% | 45%  46% | 47%  48% | 49% | 50%  51% | 52%  53% | 54% | 55%  56% | 57%  58% | 59% | 60%  61% | 62%  63% | 64% | 65%  66% | 67%  68% | 69% | 70%  71% | 72%  73% | 74% | 75%  76% | 77%  78% | 79% | 80%  81% | 82%  83% | 84% | 85%  86% | 87%  88% | 89% | 90%  91% | 92%  93% | 94% | 95%  96% | 97% 
-Lower bound computed : 7.23479724305059e6
-Deep feasibility checking...
-Deep feasibility checking...
-Deep feasibility checking...
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 1.1490479685887385e7
-Deep feasibility checking...
-┌ Info: Bin packing improvement
-│   improvement = 0.0
-└   timeTaken = 0.0
-┌ Info: Full local search done
-│   totImprov = -143836.23020318954
-│   relImprov = -1.66
-│   timeTaken = 30.01
-│   feasible = true
-│   allowRepack = true
-│   allowReintro = true
-└   allowConsolidate = true
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 1.1348456773233054e7
-Deep feasibility checking...
-
-medium        (632 bundles)
-  stage                   TPO            STP    TPO/STP
-  build s                0.60           0.49       1.23
-  filter s               2.05           2.47       0.83
-  init s                 4.87           5.61       0.87
-  init cost        11628863.7     11490479.7     1.0120
-  LS iters                799           9226      0.087
-  LS iter/s              26.6          305.3      0.087
-  LS saved           152504.1       143836.2     1.0603
-  LS final         11506715.5     11348456.8     1.0139
-
-=== Running large (LS budget: 60s) ===
-┌ Warning: 1418 duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept.
-└ @ Main.Inbound ~/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/test/Inbound.jl:242
-Progress:   0%|▏                                        |  ETA: 0:01:42[KProgress:   1%|▎                                        |  ETA: 0:01:08[KProgress:   1%|▎                                        |  ETA: 0:01:23[KProgress:   2%|▋                                        |  ETA: 0:00:55[KProgress:   2%|▊                                        |  ETA: 0:00:53[KProgress:   3%|█▏                                       |  ETA: 0:00:43[KProgress:   3%|█▎                                       |  ETA: 0:00:39[KProgress:   4%|█▋                                       |  ETA: 0:00:33[KProgress:   5%|██▏                                      |  ETA: 0:00:27[KProgress:   7%|███                                      |  ETA: 0:00:20[KProgress:  10%|████                                     |  ETA: 0:00:16[KProgress:  12%|████▉                                    |  ETA: 0:00:14[KProgress:  15%|██████▏                                  |  ETA: 0:00:11[KProgress:  19%|███████▉                                 |  ETA: 0:00:09[KProgress:  26%|██████████▊                              |  ETA: 0:00:06[KProgress:  37%|███████████████▏                         |  ETA: 0:00:04[KProgress:  47%|███████████████████▏                     |  ETA: 0:00:03[KProgress:  57%|███████████████████████▎                 |  ETA: 0:00:02[KProgress:  68%|███████████████████████████▉             |  ETA: 0:00:01[KProgress:  79%|████████████████████████████████▍        |  ETA: 0:00:01[KProgress:  95%|██████████████████████████████████████▉  |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:03[K
-Progress:   1%|▍                                        |  ETA: 0:00:13[KProgress:   2%|▉                                        |  ETA: 0:00:14[KProgress:   6%|██▎                                      |  ETA: 0:00:07[KProgress:   9%|███▋                                     |  ETA: 0:00:05[KProgress:  12%|█████                                    |  ETA: 0:00:05[KProgress:  16%|██████▌                                  |  ETA: 0:00:04[KProgress:  19%|███████▊                                 |  ETA: 0:00:04[KProgress:  22%|█████████                                |  ETA: 0:00:04[KProgress:  26%|██████████▌                              |  ETA: 0:00:03[KProgress:  29%|███████████▉                             |  ETA: 0:00:03[KProgress:  32%|█████████████▎                           |  ETA: 0:00:03[KProgress:  36%|██████████████▉                          |  ETA: 0:00:03[KProgress:  40%|████████████████▍                        |  ETA: 0:00:03[KProgress:  44%|██████████████████▏                      |  ETA: 0:00:02[KProgress:  48%|███████████████████▊                     |  ETA: 0:00:02[KProgress:  52%|█████████████████████▍                   |  ETA: 0:00:02[KProgress:  56%|███████████████████████                  |  ETA: 0:00:02[KProgress:  59%|████████████████████████▏                |  ETA: 0:00:02[KProgress:  62%|█████████████████████████▌               |  ETA: 0:00:02[KProgress:  67%|███████████████████████████▍             |  ETA: 0:00:01[KProgress:  71%|█████████████████████████████            |  ETA: 0:00:01[KProgress:  75%|██████████████████████████████▌          |  ETA: 0:00:01[KProgress:  80%|█████████████████████████████████        |  ETA: 0:00:01[KProgress:  86%|███████████████████████████████████▏     |  ETA: 0:00:01[KProgress:  90%|████████████████████████████████████▉    |  ETA: 0:00:00[KProgress:  96%|███████████████████████████████████████▏ |  ETA: 0:00:00[KProgress: 100%|█████████████████████████████████████████| Time: 0:00:03[K
-[ Info: Reading nodes from CSV file large_nodes.csv (681 lines)
-┌ Info: Read 681 nodes : Dict(:pol => 16, :plant => 9, :platform => 22, :pod => 16, :supplier => 618)
-│   :ignored = ":unknown_type => 0, :missing_data => 0, :same_node => 0"
-└   :time = 0.0
-[ Info: Reading legs from CSV file large_legs.csv (6685 lines)
-┌ Info: Read 5885 legs : Dict(:shortcut => 618, :delivery => 168, :outsource => 2390, :direct => 3394, :cross_plat => 481, :oversea => 252)
-│   :ignored = ":unknown_source => 0, :unknown_dest => 0, :unknown_type => 0, :missing_data => 0, :same_arc => 1418"
-│   :time = 0.0
-│   :min_cost = 0.326403
-│   :max_cost = 55642.91143044688
-└   :mean_cost = 1527.0614900490389
-[ Info: Reading commodity orders from CSV file large_commodities.csv (98750 lines)
-┌ Info: Read 1165 bundles, 14358 orders and 825642 commodities (98750 without quantities) on a 16 steps time horizon
-│   :ignored = ":unknown_bundle => 0, :missing_data => 0"
-└   :time = 0.5
-[ Info: Adding properties to instance
-Common arcs : 2380 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 2380 (travel time graph)
-Reachbility properties : 
-Common network done, bundles |||||||||||
-Mean bundle arcs : 648.3 (27 -> 1157)
-All usable arcs : 12002
-[ Info: Travel-time graph has 3091 nodes and 16250 arcs
-[ Info: Time-space graph has 10896 nodes and 84272 arcs
-┌ Info: Full properties added
-└   :time = 0.6
-Lower Bound filtering insertion progress : 
-|||||| 1% |||||| 2% |||||| 3% |||||| 4% |||||| 5% |||||| 6% |||||| 7% |||||| 8% |||||| 9% |||||| 10% |||||| 11% |||||| 12% |||||| 13% |||||| 14% |||||| 15% |||||| 16% |||||| 17% |||||| 18% |||||| 19% |||||| 20% |||||| 21% |||||| 22% |||||| 23% |||||| 24% |||||| 25% |||||| 26% |||||| 27% |||||| 28% |||||| 29% |||||| 30% |||||| 31% |||||| 32% |||||| 33% |||||| 34% |||||| 35% |||||| 36% |||||| 37% |||||| 38% |||||| 39% |||||| 40% |||||| 41% |||||| 42% |||||| 43% |||||| 44% |||||| 45% |||||| 46% |||||| 47% |||||| 48% |||||| 49% |||||| 50% |||||| 51% |||||| 52% |||||| 53% |||||| 54% |||||| 55% |||||| 56% |||||| 57% |||||| 58% |||||| 59% |||||| 60% |||||| 61% |||||| 62% |||||| 63% |||||| 64% |||||| 65% |||||| 66% |||||| 67% |||||| 68% |||||| 69% |||||| 70% |||||| 71% |||||| 72% |||||| 73% |||||| 74% |||||| 75% |||||| 76% |||||| 77% |||||| 78% |||||| 79% |||||| 80% |||||| 81% |||||| 82% |||||| 83% |||||| 84% |||||| 85% |||||| 86% |||||| 87% |||||| 88% |||||| 89% |||||| 90% |||||| 91% |||||| 92% |||||| 93% |||||| 94% |||||| 95% |||||| 96% |||||| 97% 
-[ Info: Lower bound filtering inside cost = 2.182911695677523e7
-
-[ Info: Filtered instance has 563 nodes, 4933 legs, 836 bundles, 9473 orders and 92805 commodities
-[ Info: Extracted cost is 1.4831784902437394e7
-Common arcs : 2380 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||||||||
-Mean bundle arcs : 682.2 (27 -> 1157)
-All usable arcs : 10217
-[ Info: Adding properties to instance
-Common arcs : 2380 (travel time graph)
-┌ Warning: 0 bundles have no path in the travel time graph
-└ @ ShipperTransportationPlanning ~/Documents/80_CERMICS/00_repositories/Renault/ShipperTransportationPlanning.jl/src/Structures/Instance.jl:49
-Properties added to bundles
-Properties added to orders
-Common arcs : 2380 (travel time graph)
-Reachbility properties : 
-Common network done, bundles ||||||||
-Mean bundle arcs : 682.2 (27 -> 1157)
-All usable arcs : 10217
-[ Info: Travel-time graph has 2619 nodes and 14163 arcs
-[ Info: Time-space graph has 9008 nodes and 70928 arcs
-┌ Info: Full properties added
-└   :time = 0.2
-All introduction progress :  1% | 2% | 3% | 4% | 5% | 6% | 7% | 8% | 9% | 10%  11% | 12% | 13% | 14% | 15% | 16% | 17% | 18% | 19% | 20%  21% | 22% | 23% | 24% | 25% | 26% | 27% | 28% | 29% | 30%  31% | 32% | 33% | 34% | 35% | 36% | 37% | 38% | 39% | 40%  41% | 42% | 43% | 44% | 45% | 46% | 47% | 48% | 49% | 50%  51% | 52% | 53% | 54% | 55% | 56% | 57% | 58% | 59% | 60%  61% | 62% | 63% | 64% | 65% | 66% | 67% | 68% | 69% | 70%  71% | 72% | 73% | 74% | 75% | 76% | 77% | 78% | 79% | 80%  81% | 82% | 83% | 84% | 85% | 86% | 87% | 88% | 89% | 90%  91% | 92% |
-Lower bound computed : 6.997332051047884e6
-Deep feasibility checking...
-Deep feasibility checking...
-Deep feasibility checking...
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 2.594384848917209e7
-Deep feasibility checking...
-┌ Info: Bin packing improvement
-│   improvement = 0.0
-└   timeTaken = 0.0
-┌ Info: Full local search done
-│   totImprov = -740959.832780882
-│   relImprov = -6.7
-│   timeTaken = 60.01
-│   feasible = true
-│   allowRepack = true
-│   allowReintro = true
-└   allowConsolidate = true
-[ Info: Fusing solutions
-[ Info: Repaired 0 paths, with full repair for 0 paths
-Deep feasibility checking...
-┌ Info: Fused solution properties
-│   :repaired = count (generic function with 10 methods)
-│   :feasible = true
-└   :total_cost = 2.5201140718458742e7
-Deep feasibility checking...
-
-large         (1165 bundles)
-  stage                   TPO            STP    TPO/STP
-  build s                1.17           1.16       1.01
-  filter s               3.36           1.77       1.90
-  init s                 3.58           5.31       0.67
-  init cost        25861973.6     25943848.5     0.9968
-  LS iters               5986          41284      0.145
-  LS iter/s              96.9          686.0      0.141
-  LS saved           909023.2       740959.8     1.2268
-  LS final         25168378.7     25201140.7     0.9987
-
-
-Results written to /Users/taleboy/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/scripts/benchmark/results/comparison.csv and /Users/taleboy/Documents/80_CERMICS/00_repositories/Renault/TransportationPlanningOptimization.jl/scripts/benchmark/results/comparison.md
-
-======================================================================
-3×26 DataFrame
- Row │ instance  n_bundles  tpo_build_s  stp_build_s  tpo_filter_s  stp_filter_s  tpo_init_cost  stp_init_cost  init_cost_ratio  tpo_init_s  stp_init_s  tpo_ls_cost  stp_ls_cost  ls_cost_ratio  tpo_ls_s  stp_ls_s  tpo_ls_iters  stp_ls_iters  tpo_ls_iter_per_s  stp_ls_iter_per_s  tpo_ls_saved  stp_ls_saved   tpo_init_feasible  stp_init_feasible  tpo_ls_feasible  stp_ls_feasible
-     │ String    Int64      Float64      Float64      Float64       Float64       Float64        Float64        Float64          Float64     Float64     Float64      Float64      Float64        Float64   Float64   Int64         Int64         Float64            Float64            Float64       Float64        Bool               Bool               Bool             Bool
-─────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   1 │ small           312         0.11         0.16          0.41          0.52      3.30282e6      3.25287e6           1.0154        1.15        1.23    3.22543e6    3.20938e6         1.005      10.01     10.06          1546          7031              154.5              699.2     1.01656e5  45667.0                     true               true             true             true
-   2 │ medium          632         0.6          0.49          2.05          2.47      1.16289e7      1.14905e7           1.012         4.87        5.61    1.15067e7    1.13485e7         1.0139     30.02     30.22           799          9226               26.6              305.3     1.52504e5      1.43836e5               true               true             true             true
-   3 │ large          1165         1.17         1.16          3.36          1.77      2.5862e7       2.59438e7           0.9968        3.58        5.31    2.51684e7    2.52011e7         0.9987     61.75     60.18          5986         41284               96.9              686.0     9.09023e5      7.4096e5                true               true             true             true

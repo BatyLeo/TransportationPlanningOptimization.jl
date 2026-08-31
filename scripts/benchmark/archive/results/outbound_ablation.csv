@@ -1,4 +1,0 @@
-label,time_step,keep_modes,n_nodes,n_arcs,n_commodities,parse_s,build_s,greedy_s,greedy_cost
-mono_monthly,30 days,false,715,327065,6797,9.259,19.951,44.991,1.8325309939999998e7
-multi_monthly,30 days,true,715,539448,6797,6.205,18.233,103.125,1.8325069820000004e7
-multi_singlebucket,800 days,true,715,539448,6797,5.804,3.32,59.357,1.8325069819999997e7
