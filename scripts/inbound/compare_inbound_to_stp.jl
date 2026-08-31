@@ -98,9 +98,7 @@ function _translate_tpo_to_stp(tpo_sol, tpo_instance, stp_instance)
         translated = Int[]
         ok = true
         for code in path
-            mapped = _tpo_to_stp_code(
-                code, tpo_instance, stp_instance, stp_node_by_account
-            )
+            mapped = _tpo_to_stp_code(code, tpo_instance, stp_instance, stp_node_by_account)
             if mapped === nothing
                 ok = false
                 break
@@ -120,9 +118,7 @@ function _build_stp_from_translated(
     for (_, bundle) in enumerate(stp_instance.bundles)
         key = (bundle.supplier.account, bundle.customer.account)
         haskey(paths_by_od, key) || continue
-        STP.update_solution!(
-            sol, stp_instance, bundle, copy(paths_by_od[key]); sorted=true
-        )
+        STP.update_solution!(sol, stp_instance, bundle, copy(paths_by_od[key]); sorted=true)
     end
     return sol
 end
@@ -169,9 +165,11 @@ function _run_tpo(instance, ls_limit::Real)
         )
     end
 
-    full_cost(sub_sol) = TPO.cost_with_nodes(
-        TPO.merge_solutions(filtering_sol, sub_sol, instance, sub), instance
-    )
+    function full_cost(sub_sol)
+        return TPO.cost_with_nodes(
+            TPO.merge_solutions(filtering_sol, sub_sol, instance, sub), instance
+        )
+    end
     greedy_cost = full_cost(candidates.greedy)
     lb_cost = full_cost(candidates.lower_bound)
     mixed_cost = full_cost(candidates.mixed)
@@ -185,9 +183,7 @@ function _run_tpo(instance, ls_limit::Real)
     ls_time = 0.0
     if ls_limit > 0
         local ls_result
-        ls_time = @elapsed ls_result = TPO.local_search!(
-            chosen, sub; time_limit=ls_limit
-        )
+        ls_time = @elapsed ls_result = TPO.local_search!(chosen, sub; time_limit=ls_limit)
         ls_iters = ls_result.n_iter
         ls_saved = ls_result.saved
     end
@@ -197,11 +193,18 @@ function _run_tpo(instance, ls_limit::Real)
     ls_feasible = TPO.is_feasible(ls_full, instance)
 
     return (;
-        filter_time, init_time,
-        greedy_cost, lb_cost, mixed_cost,
-        init_cost, init_feasible,
-        ls_cost, ls_time, ls_feasible,
-        ls_iters, ls_saved,
+        filter_time,
+        init_time,
+        greedy_cost,
+        lb_cost,
+        mixed_cost,
+        init_cost,
+        init_feasible,
+        ls_cost,
+        ls_time,
+        ls_feasible,
+        ls_iters,
+        ls_saved,
         full_solution=ls_full,
     )
 end
@@ -225,9 +228,11 @@ function _run_stp(instance, ls_limit::Real; ils_limit::Real=0)
         chosen = _stp_choose_best(mix_sol, greedy_sol, lb_sol, sub)
     end
 
-    full_cost(sub_sol) = STP.compute_cost(
-        instance, STP.merge_solutions(sub_sol, filtering_sol, instance, sub)
-    )
+    function full_cost(sub_sol)
+        return STP.compute_cost(
+            instance, STP.merge_solutions(sub_sol, filtering_sol, instance, sub)
+        )
+    end
     greedy_cost = full_cost(greedy_sol)
     lb_cost = full_cost(lb_sol)
     mixed_cost = full_cost(mix_sol)
@@ -266,7 +271,8 @@ function _run_stp(instance, ls_limit::Real; ils_limit::Real=0)
         mktemp() do path, io
             redirect_stdout(io) do
                 STP.ILS!(
-                    chosen, sub;
+                    chosen,
+                    sub;
                     timeLimit=Int(ils_limit),
                     perturbTimeLimit=pert_limit,
                     lsTimeLimit=inner_ls,
@@ -280,11 +286,18 @@ function _run_stp(instance, ls_limit::Real; ils_limit::Real=0)
     end
 
     return (;
-        filter_time, init_time,
-        greedy_cost, lb_cost, mixed_cost,
-        init_cost, init_feasible,
-        ls_cost, ls_time, ls_feasible,
-        ls_iters, ls_saved,
+        filter_time,
+        init_time,
+        greedy_cost,
+        lb_cost,
+        mixed_cost,
+        init_cost,
+        init_feasible,
+        ls_cost,
+        ls_time,
+        ls_feasible,
+        ls_iters,
+        ls_saved,
         ils_cost,
     )
 end
@@ -337,19 +350,32 @@ function compare_instance(name::String, ls_limit::Real; ils_limit::Real=0)
 
     return (;
         n_bundles=length(tpo_instance.bundles),
-        tpo_build_time, stp_build_time,
-        tpo_filter_time=tpo.filter_time, stp_filter_time=stp.filter_time,
-        tpo_init_time=tpo.init_time, stp_init_time=stp.init_time,
-        tpo_greedy_cost=tpo.greedy_cost, stp_greedy_cost=stp.greedy_cost,
-        tpo_lb_cost=tpo.lb_cost, stp_lb_cost=stp.lb_cost,
-        tpo_mixed_cost=tpo.mixed_cost, stp_mixed_cost=stp.mixed_cost,
-        tpo_init_cost=tpo.init_cost, stp_init_cost=stp.init_cost,
-        tpo_init_feasible=tpo.init_feasible, stp_init_feasible=stp.init_feasible,
-        tpo_ls_cost=tpo.ls_cost, stp_ls_cost=stp.ls_cost,
-        tpo_ls_time=tpo.ls_time, stp_ls_time=stp.ls_time,
-        tpo_ls_feasible=tpo.ls_feasible, stp_ls_feasible=stp.ls_feasible,
-        tpo_ls_iters=tpo.ls_iters, stp_ls_iters=stp.ls_iters,
-        tpo_ls_saved=tpo.ls_saved, stp_ls_saved=stp.ls_saved,
+        tpo_build_time,
+        stp_build_time,
+        tpo_filter_time=tpo.filter_time,
+        stp_filter_time=stp.filter_time,
+        tpo_init_time=tpo.init_time,
+        stp_init_time=stp.init_time,
+        tpo_greedy_cost=tpo.greedy_cost,
+        stp_greedy_cost=stp.greedy_cost,
+        tpo_lb_cost=tpo.lb_cost,
+        stp_lb_cost=stp.lb_cost,
+        tpo_mixed_cost=tpo.mixed_cost,
+        stp_mixed_cost=stp.mixed_cost,
+        tpo_init_cost=tpo.init_cost,
+        stp_init_cost=stp.init_cost,
+        tpo_init_feasible=tpo.init_feasible,
+        stp_init_feasible=stp.init_feasible,
+        tpo_ls_cost=tpo.ls_cost,
+        stp_ls_cost=stp.ls_cost,
+        tpo_ls_time=tpo.ls_time,
+        stp_ls_time=stp.ls_time,
+        tpo_ls_feasible=tpo.ls_feasible,
+        stp_ls_feasible=stp.ls_feasible,
+        tpo_ls_iters=tpo.ls_iters,
+        stp_ls_iters=stp.ls_iters,
+        tpo_ls_saved=tpo.ls_saved,
+        stp_ls_saved=stp.ls_saved,
         stp_ils_cost=stp.ils_cost,
         cross_translated=cv.n_translated,
         cross_total=cv.n_total,
@@ -424,75 +450,101 @@ function print_row(name::String, r)
     @printf("  %-14s %14s %14s %10s\n", "metric", "TPO", "STP", "TPO/STP")
     @printf(
         "  %-14s %14.2f %14.2f %10.2f\n",
-        "build s", r.tpo_build_time, r.stp_build_time,
+        "build s",
+        r.tpo_build_time,
+        r.stp_build_time,
         r.tpo_build_time / r.stp_build_time,
     )
     @printf(
         "  %-14s %14.2f %14.2f %10.2f\n",
-        "filter s", r.tpo_filter_time, r.stp_filter_time,
+        "filter s",
+        r.tpo_filter_time,
+        r.stp_filter_time,
         r.tpo_filter_time / r.stp_filter_time,
     )
     @printf(
         "  %-14s %14.2f %14.2f %10.2f\n",
-        "init s", r.tpo_init_time, r.stp_init_time,
+        "init s",
+        r.tpo_init_time,
+        r.stp_init_time,
         r.tpo_init_time / r.stp_init_time,
     )
     @printf(
         "  %-14s %14.1f %14.1f %10.4f\n",
-        "greedy cost", r.tpo_greedy_cost, r.stp_greedy_cost,
+        "greedy cost",
+        r.tpo_greedy_cost,
+        r.stp_greedy_cost,
         r.tpo_greedy_cost / r.stp_greedy_cost,
     )
     @printf(
         "  %-14s %14.1f %14.1f %10.4f\n",
-        "LB cost", r.tpo_lb_cost, r.stp_lb_cost,
+        "LB cost",
+        r.tpo_lb_cost,
+        r.stp_lb_cost,
         r.tpo_lb_cost / r.stp_lb_cost,
     )
     @printf(
         "  %-14s %14.1f %14.1f %10.4f\n",
-        "mixed cost", r.tpo_mixed_cost, r.stp_mixed_cost,
+        "mixed cost",
+        r.tpo_mixed_cost,
+        r.stp_mixed_cost,
         r.tpo_mixed_cost / r.stp_mixed_cost,
     )
     @printf(
         "  %-14s %14.1f %14.1f %10.4f\n",
-        "init cost", r.tpo_init_cost, r.stp_init_cost,
+        "init cost",
+        r.tpo_init_cost,
+        r.stp_init_cost,
         r.tpo_init_cost / r.stp_init_cost,
     )
     if r.tpo_ls_iters > 0 || r.stp_ls_iters > 0
         @printf(
             "  %-14s %14d %14d %10.3f\n",
-            "LS iters", r.tpo_ls_iters, r.stp_ls_iters,
+            "LS iters",
+            r.tpo_ls_iters,
+            r.stp_ls_iters,
             _safe_div(r.tpo_ls_iters, max(r.stp_ls_iters, 1)),
         )
         tpo_ips = _safe_div(r.tpo_ls_iters, r.tpo_ls_time)
         stp_ips = _safe_div(r.stp_ls_iters, r.stp_ls_time)
         @printf(
             "  %-14s %14.1f %14.1f %10.3f\n",
-            "LS iter/s", tpo_ips, stp_ips,
+            "LS iter/s",
+            tpo_ips,
+            stp_ips,
             _safe_div(tpo_ips, max(stp_ips, 1e-9)),
         )
         @printf("  %-14s %14.1f %14.1f\n", "LS saved", r.tpo_ls_saved, r.stp_ls_saved)
     end
     @printf(
         "  %-14s %14.1f %14.1f %10.4f\n",
-        "LS cost", r.tpo_ls_cost, r.stp_ls_cost,
+        "LS cost",
+        r.tpo_ls_cost,
+        r.stp_ls_cost,
         r.tpo_ls_cost / r.stp_ls_cost,
     )
     if INCLUDE_ILS && !isnan(r.stp_ils_cost)
         @printf(
             "  %-14s %14s %14.1f %10.6f\n",
-            "ILS cost", "n/a", r.stp_ils_cost,
+            "ILS cost",
+            "n/a",
+            r.stp_ils_cost,
             r.stp_ils_cost / r.stp_ls_cost,
         )
     end
     @printf(
         "  %-14s %d / %d  feasible=%s  cost_agreement=%.6f\n",
-        "cross-valid", r.cross_translated, r.cross_total,
-        r.cross_feasible, r.cross_cost_ratio,
+        "cross-valid",
+        r.cross_translated,
+        r.cross_total,
+        r.cross_feasible,
+        r.cross_cost_ratio,
     )
     if !(r.tpo_ls_feasible && r.stp_ls_feasible)
         @printf(
             "  WARNING infeasible: tpo_ls=%s stp_ls=%s\n",
-            r.tpo_ls_feasible, r.stp_ls_feasible,
+            r.tpo_ls_feasible,
+            r.stp_ls_feasible,
         )
     end
     return nothing
@@ -518,9 +570,12 @@ function write_markdown(df::DataFrame, path::String)
             @printf(
                 io,
                 "| %s | %d | %.4f | %.4f | %.4f | %.4f | %.4f |\n",
-                row.instance, row.n_bundles,
-                row.greedy_cost_ratio, row.lb_cost_ratio,
-                row.mixed_cost_ratio, row.init_cost_ratio,
+                row.instance,
+                row.n_bundles,
+                row.greedy_cost_ratio,
+                row.lb_cost_ratio,
+                row.mixed_cost_ratio,
+                row.init_cost_ratio,
                 row.ls_cost_ratio,
             )
         end
@@ -548,9 +603,12 @@ function write_markdown(df::DataFrame, path::String)
                 io,
                 "| %s | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f |\n",
                 row.instance,
-                row.tpo_build_s, row.stp_build_s,
-                row.tpo_filter_s, row.stp_filter_s,
-                row.tpo_init_s, row.stp_init_s,
+                row.tpo_build_s,
+                row.stp_build_s,
+                row.tpo_filter_s,
+                row.stp_filter_s,
+                row.tpo_init_s,
+                row.stp_init_s,
             )
         end
         println(io)
@@ -563,20 +621,19 @@ function write_markdown(df::DataFrame, path::String)
             println(io, "## Local Search Throughput")
             println(io)
             println(
-                io,
-                "| Instance | TPO iters | STP iters | TPO iter/s | STP iter/s | Ratio |",
+                io, "| Instance | TPO iters | STP iters | TPO iter/s | STP iter/s | Ratio |"
             )
             println(io, "|---|---|---|---|---|---|")
             for row in ls_rows
-                ratio = _safe_div(
-                    row.tpo_ls_iter_per_s, max(row.stp_ls_iter_per_s, 1e-9)
-                )
+                ratio = _safe_div(row.tpo_ls_iter_per_s, max(row.stp_ls_iter_per_s, 1e-9))
                 @printf(
                     io,
                     "| %s | %d | %d | %.1f | %.1f | %.3f |\n",
                     row.instance,
-                    row.tpo_ls_iters, row.stp_ls_iters,
-                    row.tpo_ls_iter_per_s, row.stp_ls_iter_per_s,
+                    row.tpo_ls_iters,
+                    row.stp_ls_iters,
+                    row.tpo_ls_iter_per_s,
+                    row.stp_ls_iter_per_s,
                     ratio,
                 )
             end
@@ -588,8 +645,7 @@ function write_markdown(df::DataFrame, path::String)
             println(io, "## Cross-Package Validation")
             println(io)
             println(
-                io,
-                "| Instance | Translated | Total | Feasible in STP | Cost Agreement |",
+                io, "| Instance | Translated | Total | Feasible in STP | Cost Agreement |"
             )
             println(io, "|---|---|---|---|---|")
             for row in eachrow(df)
@@ -597,8 +653,10 @@ function write_markdown(df::DataFrame, path::String)
                     io,
                     "| %s | %d | %d | %s | %.6f |\n",
                     row.instance,
-                    row.cross_translated, row.cross_total,
-                    row.cross_feasible, row.cross_cost_ratio,
+                    row.cross_translated,
+                    row.cross_total,
+                    row.cross_feasible,
+                    row.cross_cost_ratio,
                 )
             end
             println(io)
@@ -616,7 +674,8 @@ function write_markdown(df::DataFrame, path::String)
                     io,
                     "| %s | %.1f | %.1f | %.6f |\n",
                     row.instance,
-                    row.stp_ls_cost, row.stp_ils_cost,
+                    row.stp_ls_cost,
+                    row.stp_ils_cost,
                     row.ils_ls_ratio,
                 )
             end
@@ -635,7 +694,8 @@ function write_markdown(df::DataFrame, path::String)
                     io,
                     "- **%s**: tpo_ls=%s, stp_ls=%s\n",
                     row.instance,
-                    row.tpo_ls_feasible, row.stp_ls_feasible,
+                    row.tpo_ls_feasible,
+                    row.stp_ls_feasible,
                 )
             end
         end
