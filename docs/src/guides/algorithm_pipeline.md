@@ -51,22 +51,15 @@ lb_solution = lower_bound(instance)
 
 ### Mixed start
 
-[`mix_greedy_and_lower_bound`](@ref) builds three solutions simultaneously in a single pass: pure greedy, pure lower bound, and a **blended** solution whose cost matrix interpolates between greedy and lower-bound costs.
+[`mix_greedy_heuristic`](@ref) is the convenience wrapper: it builds three candidate solutions internally and returns the cheapest feasible one.
+
+```julia
+solution = mix_greedy_heuristic(instance)
+```
+
+Under the hood, [`mix_greedy_and_lower_bound`](@ref TransportationPlanningOptimization.mix_greedy_and_lower_bound) builds three solutions simultaneously in a single pass: pure greedy, pure lower bound, and a **blended** solution whose cost matrix interpolates between greedy and lower-bound costs.
 The blend weight shifts toward greedy as more bundles are placed.
-
-```julia
-candidates = mix_greedy_and_lower_bound(instance)
-# candidates.mixed, candidates.greedy, candidates.lower_bound
-```
-
-Use [`choose_best_feasible`](@ref TransportationPlanningOptimization.choose_best_feasible) to pick the cheapest feasible one:
-
-```julia
-best = choose_best_feasible(
-    [candidates.mixed, candidates.greedy, candidates.lower_bound],
-    instance,
-)
-```
+Then [`choose_best_feasible`](@ref TransportationPlanningOptimization.choose_best_feasible) picks the cheapest feasible candidate.
 
 ## Filtering Pipeline
 

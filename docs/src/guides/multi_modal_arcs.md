@@ -91,4 +91,3 @@ If *no* mode on an edge has enough capacity for an order, `CheapestMode` cannot 
 ## See Also
 
 - [Cost functions](@ref cost_functions_guide) for `LinearArcCost` and `BinPackingArcCost` details.
-- A future capacity-shape guide will cover step-bin-packing and min/max capacity constraints.

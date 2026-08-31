@@ -148,6 +148,16 @@ To add a node cost, pass a `node_cost` keyword to [`NetworkNode`](@ref):
 NetworkNode(; id="Hub", node_type=:other, node_cost=my_custom_cost)
 ```
 
+### LinearNodeCost
+
+[`LinearNodeCost`](@ref) is a built-in node cost proportional to total volume:
+
+```julia
+NetworkNode(; id="Hub", node_type=:other, node_cost=LinearNodeCost(2.0))
+```
+
+The cost is `cost_per_unit_size * sum(commodity.size)` for all commodities transiting the node.
+
 ### Implementing a custom node cost
 
 Subtype [`AbstractNodeCostFunction`](@ref) and implement `evaluate`:
