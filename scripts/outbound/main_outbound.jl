@@ -1,6 +1,6 @@
 using TransportationPlanningOptimization
 const TPO = TransportationPlanningOptimization
-include("Outbound.jl")
+include(joinpath(@__DIR__, "Outbound.jl"))
 using .Outbound
 
 using DataFrames

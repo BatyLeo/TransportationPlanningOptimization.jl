@@ -10,7 +10,7 @@ using GLMakie
 using Tyler
 
 instance = "world"
-datadir = joinpath(@__DIR__, "..", "data", "inbound")
+datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
 nodes_file = joinpath(datadir, "$(instance)_nodes.csv")
 legs_file = joinpath(datadir, "$(instance)_legs.csv")
 commodities_file = joinpath(datadir, "$(instance)_commodities.csv")

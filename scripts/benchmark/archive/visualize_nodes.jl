@@ -4,7 +4,7 @@ using Tyler.TileProviders
 using Tyler.MapTiles
 using Tyler.Extents
 
-data_dir = joinpath(@__DIR__, "..", "data", "outbound", "parsed")
+data_dir = joinpath(@__DIR__, "..", "..", "data", "outbound", "parsed")
 nodes_file = joinpath(data_dir, "parsed_nodes.csv")
 
 nodes_df = CSV.read(nodes_file, DataFrame)
