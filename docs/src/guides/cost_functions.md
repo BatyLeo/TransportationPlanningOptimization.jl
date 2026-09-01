@@ -1,6 +1,9 @@
 # [Cost Functions](@id cost_functions_guide)
 
-TransportationPlanningOptimization.jl supports two types of cost functions for arcs, each suited to different transportation scenarios.
+TransportationPlanningOptimization.jl supports cost functions on both arcs and nodes.
+Arc costs are the primary cost model, while node costs add per-node contributions (e.g., storage or handling fees).
+
+## Arc Cost Functions
 
 ## LinearArcCost
 
@@ -101,6 +104,89 @@ This flexibility allows modeling realistic multi-modal transportation networks w
 
 ---
 
-## Advanced: Custom Cost Functions
+## SumArcCost
 
-To implement custom cost logic, create a new type that subtypes `AbstractArcCostFunction` and implement the required interface. See the API reference for details on the cost function interface.
+[`SumArcCost`](@ref) combines multiple cost terms on a single arc.
+The total cost is the sum of each term's cost.
+This is useful when an arc has both a per-vehicle cost and a per-unit handling fee, for example.
+
+### Constructor
+
+```julia
+SumArcCost((BinPackingArcCost(100.0, 10), LinearArcCost(2.0)))
+```
+
+The argument is a tuple of [`AbstractArcCostFunction`](@ref) instances.
+At most one term may be a [`BinPackingArcCost`](@ref) (bin-packing methods dispatch to that term).
+
+### Example
+
+```julia
+using TransportationPlanningOptimization
+using Dates
+
+# An arc with both a truck cost and a per-unit handling fee
+arc = Arc(;
+    origin_id="Warehouse",
+    destination_id="Customer",
+    cost=SumArcCost((BinPackingArcCost(500.0, 20), LinearArcCost(3.0))),
+    travel_time=Day(1),
+)
+```
+
+---
+
+## Node Cost Functions
+
+Node costs add per-node cost contributions on top of arc costs.
+They are evaluated at every node a bundle passes through, based on the commodities transiting that node.
+
+By default, nodes use [`NoNodeCost`](@ref) (zero cost).
+To add a node cost, pass a `node_cost` keyword to [`NetworkNode`](@ref):
+
+```julia
+NetworkNode(; id="Hub", node_type=:other, node_cost=my_custom_cost)
+```
+
+### LinearNodeCost
+
+[`LinearNodeCost`](@ref) is a built-in node cost proportional to total volume:
+
+```julia
+NetworkNode(; id="Hub", node_type=:other, node_cost=LinearNodeCost(2.0))
+```
+
+The cost is `cost_per_unit_size * sum(commodity.size)` for all commodities transiting the node.
+
+### Implementing a custom node cost
+
+Subtype [`AbstractNodeCostFunction`](@ref) and implement `evaluate`:
+
+```julia
+struct HandlingCost <: AbstractNodeCostFunction
+    cost_per_unit::Float64
+end
+
+function TransportationPlanningOptimization.evaluate(
+    c::HandlingCost, commodities::Vector{<:LightCommodity}
+)
+    return c.cost_per_unit * sum(comm.size for comm in commodities)
+end
+```
+
+Optionally override `incremental_cost(c, existing, new)` for efficiency (the default computes `evaluate(c, existing + new) - evaluate(c, existing)`, which allocates a temporary vector).
+Override `lower_bound_incremental_cost` only when the lower-bound relaxation differs from the true incremental cost.
+
+---
+
+## Custom Arc Cost Functions
+
+To implement custom arc cost logic, create a new type that subtypes [`AbstractArcCostFunction`](@ref) and implement:
+
+- `evaluate(c, commodities; presorted=false)`: total cost for a set of commodities.
+- `incremental_cost(c, existing, new)` (optional): marginal cost of adding `new` commodities to `existing` ones.
+  Defaults to `evaluate(c, existing + new) - evaluate(c, existing)`.
+- `lower_bound_incremental_cost(c, existing, new)` (optional): relaxed cost used by the lower-bound pass.
+  Defaults to `incremental_cost`.
+
+See the API reference for the full interface.

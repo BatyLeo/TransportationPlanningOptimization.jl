@@ -13,10 +13,8 @@ using .Inbound
 @testset "Instance creation" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, cost=10.0, capacity=100, info=nothing),
-            NetworkNode(;
-                id="2", node_type=:destination, cost=20.0, capacity=200, info=nothing
-            ),
+            NetworkNode(; id="1", node_type=:origin, capacity=100, info=nothing),
+            NetworkNode(; id="2", node_type=:destination, capacity=200, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -70,11 +68,9 @@ end
 @testset "Instance bundle aggregation" begin
     @test begin
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, cost=5.0, capacity=50, info=nothing),
-            NetworkNode(; id="B", node_type=:other, cost=10.0, capacity=100, info=nothing),
-            NetworkNode(;
-                id="C", node_type=:destination, cost=15.0, capacity=150, info=nothing
-            ),
+            NetworkNode(; id="A", node_type=:origin, capacity=50, info=nothing),
+            NetworkNode(; id="B", node_type=:other, capacity=100, info=nothing),
+            NetworkNode(; id="C", node_type=:destination, capacity=150, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -134,10 +130,8 @@ end
 @testset "Instance with linear arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=1000, info=nothing),
-            NetworkNode(;
-                id="2", node_type=:destination, cost=0.0, capacity=1000, info=nothing
-            ),
+            NetworkNode(; id="1", node_type=:origin, capacity=1000, info=nothing),
+            NetworkNode(; id="2", node_type=:destination, capacity=1000, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -166,10 +160,8 @@ end
 @testset "Instance with bin packing arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=500, info=nothing),
-            NetworkNode(;
-                id="2", node_type=:destination, cost=0.0, capacity=500, info=nothing
-            ),
+            NetworkNode(; id="1", node_type=:origin, capacity=500, info=nothing),
+            NetworkNode(; id="2", node_type=:destination, capacity=500, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -198,11 +190,9 @@ end
 @testset "Instance with heterogeneous arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=1000, info=nothing),
-            NetworkNode(; id="2", node_type=:other, cost=0.0, capacity=1000, info=nothing),
-            NetworkNode(;
-                id="3", node_type=:destination, cost=0.0, capacity=1000, info=nothing
-            ),
+            NetworkNode(; id="1", node_type=:origin, capacity=1000, info=nothing),
+            NetworkNode(; id="2", node_type=:other, capacity=1000, info=nothing),
+            NetworkNode(; id="3", node_type=:destination, capacity=1000, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -251,10 +241,8 @@ end
 @testset "Instance time period handling" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, cost=0.0, capacity=100, info=nothing),
-            NetworkNode(;
-                id="2", node_type=:destination, cost=0.0, capacity=100, info=nothing
-            ),
+            NetworkNode(; id="1", node_type=:origin, capacity=100, info=nothing),
+            NetworkNode(; id="2", node_type=:destination, capacity=100, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -288,10 +276,8 @@ end
             model::String
         end
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=10, info=nothing),
-            NetworkNode(;
-                id="B", node_type=:destination, cost=0.0, capacity=10, info=nothing
-            ),
+            NetworkNode(; id="A", node_type=:origin, capacity=10, info=nothing),
+            NetworkNode(; id="B", node_type=:destination, capacity=10, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -328,6 +314,13 @@ end
         instance_grouped = Instance(
             nodes, arcs, commodities, Week(1); group_by=c -> c.info.model
         )
-        length(instance_default.bundles) == 1 && length(instance_grouped.bundles) == 2
+        # The default grouping key is `nothing`; the custom key is the model string.
+        default_group_ok =
+            length(instance_default.bundles) == 1 &&
+            instance_default.bundles[1].group === nothing
+        grouped_groups = Set(b.group for b in instance_grouped.bundles)
+        grouped_ok =
+            length(instance_grouped.bundles) == 2 && grouped_groups == Set(["X", "Y"])
+        default_group_ok && grouped_ok
     end
 end

@@ -9,31 +9,38 @@ using Graphs
 using Dates
 using TransportationPlanningOptimization
 
+const TPO = TransportationPlanningOptimization
+
 # ── Shared fixtures ────────────────────────────────────────────────────────────
 
 const _TRUCK = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
 const _TRAIN = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
 
 const _NODES_AB = [
-    NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=0, info=nothing),
-    NetworkNode(; id="B", node_type=:destination, cost=0.0, capacity=0, info=nothing),
+    NetworkNode(; id="A", node_type=:origin, capacity=0, info=nothing),
+    NetworkNode(; id="B", node_type=:destination, capacity=0, info=nothing),
 ]
 
 function _ng_case1()
-    return NetworkGraph(_NODES_AB, [("A", "B", _TRUCK), ("A", "B", _TRAIN)])
+    return NetworkGraph(
+        _NODES_AB, [("A", "B", _TRUCK), ("A", "B", _TRAIN)]; allow_multimodal=true
+    )
 end
 
 function _ng_case2()
     same_speed_train = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(5.0))
-    return NetworkGraph(_NODES_AB, [("A", "B", _TRUCK), ("A", "B", same_speed_train)])
+    return NetworkGraph(
+        _NODES_AB, [("A", "B", _TRUCK), ("A", "B", same_speed_train)]; allow_multimodal=true
+    )
 end
 
 function _bundle_AB(; max_transit_steps=3)
-    commodity = LightCommodity(;
-        origin_id="A", destination_id="B", size=1.0, is_date_arrival=false
-    )
+    commodity = LightCommodity(; origin_id="A", destination_id="B", size=1.0)
     order = Order(;
-        commodities=[commodity], time_step=1, max_transit_steps=max_transit_steps
+        commodities=[commodity],
+        time_step=1,
+        max_transit_steps=max_transit_steps,
+        is_date_arrival=false,
     )
     return Bundle(; orders=[order], origin_id="A", destination_id="B")
 end
@@ -48,19 +55,23 @@ end
     @test length(edge_data.modes) == 2
 end
 
-# ── TimeSpaceGraph, case 1 ────────────────────────────────────────────────────
+# ── TSG/TTG, case 1 (multi-modal-specific projection only, single-mode ────────
+#    vertex/edge structure itself is owned by test_graphs.jl) ─────────────────
 
-@testset "TimeSpaceGraph case 1: each mode becomes a distinct edge" begin
+@testset "TSG/TTG case 1: distinct transit times keep modes on separate edges" begin
     tsg = TimeSpaceGraph(_ng_case1(), 3; wrap_time=false)
-    # 2 nodes × 3 time steps = 6 vertices
-    @test nv(tsg.graph) == 6
-    # truck (tt=1): (A,1)→(B,2), (A,2)→(B,3)  = 2 arcs
-    # train (tt=2): (A,1)→(B,3)                = 1 arc
-    @test ne(tsg.graph) == 3
-    # Each edge carries the original single-mode NetworkArc
+    # truck (tt=1): (A,1)→(B,2), (A,2)→(B,3), train (tt=2): (A,1)→(B,3). Distinct
+    # arrival times mean these stay plain NetworkArc edges (not merged into a
+    # MultiModalArc), even though the underlying NetworkGraph arc IS one.
     @test tsg.graph[("A", 1), ("B", 2)] isa NetworkArc
     @test tsg.graph[("A", 1), ("B", 3)] isa NetworkArc
     @test tsg.graph[("A", 2), ("B", 3)] isa NetworkArc
+
+    ttg = TravelTimeGraph(_ng_case1(), [_bundle_AB(; max_transit_steps=3)])
+    # truck and train project to two distinct TTG edges out of the same origin
+    # node, rather than collapsing to one MultiModalArc edge.
+    @test haskey(ttg.graph, ("A", 0), ("B", 1))
+    @test haskey(ttg.graph, ("A", 0), ("B", 2))
 end
 
 # ── TimeSpaceGraph, case 2 ────────────────────────────────────────────────────
@@ -69,23 +80,11 @@ end
     tsg = TimeSpaceGraph(_ng_case2(), 3; wrap_time=false)
     # 2 nodes × 3 time steps = 6 vertices
     @test nv(tsg.graph) == 6
-    # Both modes transit_time=1: (A,1)→(B,2), (A,2)→(B,3) — each a MultiModalArc
+    # Both modes transit_time=1: (A,1)→(B,2), (A,2)→(B,3) (each a MultiModalArc)
     @test ne(tsg.graph) == 2
     @test tsg.graph[("A", 1), ("B", 2)] isa MultiModalArc
     @test length(tsg.graph[("A", 1), ("B", 2)].modes) == 2
     @test tsg.graph[("A", 2), ("B", 3)] isa MultiModalArc
-end
-
-# ── TravelTimeGraph, case 1 ───────────────────────────────────────────────────
-
-@testset "TravelTimeGraph case 1: each mode becomes a distinct edge" begin
-    ttg = TravelTimeGraph(_ng_case1(), [_bundle_AB(; max_transit_steps=3)])
-    # Vertices: (A,0) + (B,0)…(B,3) = 5
-    @test nv(ttg.graph) == 5
-    # Arcs: truck (A,0)→(B,1), train (A,0)→(B,2), shortcuts (B,0..2)→(B,1..3) = 5
-    @test ne(ttg.graph) == 5
-    @test haskey(ttg.graph, ("A", 0), ("B", 1))
-    @test haskey(ttg.graph, ("A", 0), ("B", 2))
 end
 
 # ── TravelTimeGraph, case 2 ───────────────────────────────────────────────────
@@ -103,12 +102,13 @@ end
 
 # ── Greedy mode selection (case 2) ────────────────────────────────────────────
 
-@testset "Greedy heuristic selects cheapest mode in case 2" begin
+@testset "Greedy heuristic selects cheapest mode across multi-modal scenarios" begin
+    # Case 2 (same transit time -> single MultiModalArc edge): cheaper mode
+    # (5.0/unit) wins over the more expensive one (10.0/unit).
     nodes = [
         NetworkNode(; id="A", node_type=:origin),
         NetworkNode(; id="B", node_type=:destination),
     ]
-    # Two arcs with same transit time: truck 10.0/unit, train 5.0/unit
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
@@ -127,7 +127,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
 
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
@@ -135,10 +135,82 @@ end
     @test cost(sol) == 5.0
 
     assignment = only(values(sol.assignments))
-    @test assignment isa MultiAssignment
+    @test assignment isa TPO.MultiAssignment
     @test length(assignment.per_mode) == 2
     # Exactly one mode slot received the commodity
     @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 1
+
+    # Case 1 (distinct transit times -> two separate TTG/TSG edges, no single
+    # MultiModalArc): the cheap-but-slow train (5.0/unit, 2 days) still wins
+    # over the fast-but-expensive truck (10.0/unit, 1 day) when both fit the
+    # delivery deadline.
+    nodes_c1 = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs_c1 = [
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(5.0), travel_time=Day(2)
+        ),
+    ]
+    commodities_c1 = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(2),
+            size=1.0,
+        ),
+    ]
+    instance_c1 = Instance(nodes_c1, arcs_c1, commodities_c1, Day(1); allow_multimodal=true)
+    sol_c1 = greedy_heuristic(instance_c1)
+    @test is_feasible(sol_c1, instance_c1)
+    @test cost(sol_c1) == 5.0
+
+    # Heterogeneous cost function types on one MultiModalArc edge (same transit
+    # time, so the two modes collapse to one edge): Linear (5.0/unit, cap 10)
+    # vs. BinPacking (100.0/bin of 10). Linear is cheaper for 2 units, so all
+    # commodities route there: 2 × 5.0 = 10.0.
+    nodes_het = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs_het = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=BinPackingArcCost(100.0, 10),
+            travel_time=Day(1),
+            capacity=100,
+        ),
+    ]
+    commodities_het = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=2,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance_het = Instance(
+        nodes_het, arcs_het, commodities_het, Day(1); allow_multimodal=true
+    )
+    sol_het = greedy_heuristic(instance_het)
+    @test is_feasible(sol_het, instance_het)
+    @test cost(sol_het) == 10.0
 end
 
 # ── Per-mode capacity (case 2) ────────────────────────────────────────────────
@@ -175,7 +247,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance)
 
     @test is_feasible(sol, instance)
@@ -183,18 +255,20 @@ end
     @test cost(sol) == 20.0
 
     assignment = only(values(sol.assignments))
-    @test assignment isa MultiAssignment
+    @test assignment isa TPO.MultiAssignment
     # Only the expensive mode (modes[2]) carries commodities
     @test isempty(commodities_of(assignment.per_mode[1]))
     @test length(commodities_of(assignment.per_mode[2])) == 2
 end
 
-@testset ":cheapest path becomes infeasible when no mode has capacity" begin
+@testset "greedy_heuristic raises ArgumentError when no mode combination has capacity" begin
+    # Default (CheapestMode, no spill): neither mode alone has enough capacity
+    # for 3 units (caps 1 and 2), even though the *combined* capacity would
+    # suffice. CheapestMode never spills across modes, so this is infeasible.
     nodes = [
         NetworkNode(; id="A", node_type=:origin),
         NetworkNode(; id="B", node_type=:destination),
     ]
-    # Both modes too small for 3 units
     arcs = [
         Arc(;
             origin_id="A",
@@ -221,8 +295,28 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     @test_throws ArgumentError greedy_heuristic(instance)
+
+    # FillThenSpillMode (spills across modes): still infeasible when the
+    # *combined* capacity (1 + 2 = 3) is insufficient for the 5 units needed.
+    # Regression guard: this must raise, not silently under-place commodities.
+    commodities_insufficient = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=5,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
+    instance_insufficient = Instance(
+        nodes, arcs, commodities_insufficient, Day(1); allow_multimodal=true
+    )
+    @test_throws ArgumentError greedy_heuristic(
+        instance_insufficient; mode_selector=FillThenSpillMode()
+    )
 end
 
 # ── fill_then_spill mode selection (case 2) ──────────────────────────────────
@@ -258,7 +352,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
     @test is_feasible(sol, instance)
@@ -266,7 +360,7 @@ end
     @test cost(sol) == 15.0
 
     assignment = only(values(sol.assignments))
-    @test assignment isa MultiAssignment
+    @test assignment isa TPO.MultiAssignment
     @test count(slot -> !isempty(commodities_of(slot)), assignment.per_mode) == 2
 end
 
@@ -301,7 +395,7 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
     sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
     @test is_feasible(sol, instance)
@@ -334,120 +428,6 @@ end
     @test_throws Union{TypeError,MethodError} greedy_heuristic(
         instance; mode_selector=:cheapest
     )
-end
-
-# ── FillThenSpillMode silent-infeasibility regression ─────────────────────────
-
-@testset "FillThenSpillMode rejects when combined capacity is insufficient" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
-    # Combined capacity = 1 + 2 = 3, but the commodity needs 5 units.
-    arcs = [
-        Arc(;
-            origin_id="A",
-            destination_id="B",
-            cost=LinearArcCost(5.0),
-            travel_time=Day(1),
-            capacity=1,
-        ),
-        Arc(;
-            origin_id="A",
-            destination_id="B",
-            cost=LinearArcCost(10.0),
-            travel_time=Day(1),
-            capacity=2,
-        ),
-    ]
-    commodities = [
-        Commodity(;
-            origin_id="A",
-            destination_id="B",
-            quantity=5,
-            departure_date=DateTime(2021, 1, 1),
-            max_delivery_time=Day(1),
-            size=1.0,
-        ),
-    ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
-    @test_throws ArgumentError greedy_heuristic(instance; mode_selector=FillThenSpillMode())
-end
-
-# ── Case-1 end-to-end greedy ──────────────────────────────────────────────────
-
-@testset "Greedy picks cheaper mode in case 1 (distinct transit times)" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
-    # Fast+expensive truck and slow+cheap train, both within max_delivery_time.
-    arcs = [
-        Arc(;
-            origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
-        ),
-        Arc(;
-            origin_id="A", destination_id="B", cost=LinearArcCost(5.0), travel_time=Day(2)
-        ),
-    ]
-    commodities = [
-        Commodity(;
-            origin_id="A",
-            destination_id="B",
-            quantity=1,
-            departure_date=DateTime(2024, 1, 1),
-            max_delivery_time=Day(2),
-            size=1.0,
-        ),
-    ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
-    sol = greedy_heuristic(instance)
-    @test is_feasible(sol, instance)
-    # Cheap train wins: 1 unit * 5.0 = 5.0
-    @test cost(sol) == 5.0
-end
-
-# ── Heterogeneous cost functions on the same MultiModalArc ───────────────────
-
-@testset "MultiModalArc with heterogeneous cost functions on one edge" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
-    # Same transit time so the two modes collapse to one MultiModalArc edge,
-    # but the cost functions are of different concrete types.
-    arcs = [
-        Arc(;
-            origin_id="A",
-            destination_id="B",
-            cost=LinearArcCost(5.0),
-            travel_time=Day(1),
-            capacity=10,
-        ),
-        Arc(;
-            origin_id="A",
-            destination_id="B",
-            cost=BinPackingArcCost(100.0, 10),
-            travel_time=Day(1),
-            capacity=100,
-        ),
-    ]
-    commodities = [
-        Commodity(;
-            origin_id="A",
-            destination_id="B",
-            quantity=2,
-            departure_date=DateTime(2024, 1, 1),
-            max_delivery_time=Day(1),
-            size=1.0,
-        ),
-    ]
-    instance = Instance(nodes, arcs, commodities, Day(1))
-    sol = greedy_heuristic(instance)
-    @test is_feasible(sol, instance)
-    # Linear: 2 units * 5.0 = 10. Bin-packing: 1 bin (capacity 10) * 100.0 = 100.
-    # Linear is cheaper, so all commodities go there.
-    @test cost(sol) == 10.0
 end
 
 # ── Order-bucketing under wrap_time (case 2 collision on a single TSG edge) ──
@@ -497,7 +477,9 @@ end
             size=1.0,
         ),
     ]
-    instance = Instance(nodes, arcs, commodities, Day(1); wrap_time=true)
+    instance = Instance(
+        nodes, arcs, commodities, Day(1); wrap_time=true, allow_multimodal=true
+    )
 
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance)
@@ -510,7 +492,28 @@ end
     @test cost(sol) == cost(reconstructed)
 end
 
-@testset "NetworkGraph rejects pre-built MultiModalArc and abstract vectors" begin
+@testset "MultiModalArc eltype: union narrowing" begin
+    truck = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
+    train = NetworkArc(; travel_time_steps=2, cost=BinPackingArcCost(100.0, 10))
+
+    # Heterogeneous cost functions: must narrow to a small Union, NOT the
+    # abstract NetworkArc join. This is the inline, union-splittable layout.
+    hetero = MultiModalArc([truck, train])
+    ET = eltype(hetero.modes)
+    @test ET == Union{typeof(truck),typeof(train)}   # narrowed, not the abstract join
+    @test Base.isbitsunion(ET)                        # inline storage with type tag, no boxing
+    @test hetero.modes[1] === truck
+    @test hetero.modes[2] === train
+
+    # Homogeneous cost functions: unchanged: a single concrete eltype.
+    a = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
+    b = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
+    homo = MultiModalArc([a, b])
+    @test eltype(homo.modes) === NetworkArc{LinearArcCost,Nothing}
+    @test isconcretetype(eltype(homo.modes))
+end
+
+@testset "NetworkGraph rejects pre-built MultiModalArc, abstract vectors, and duplicate legs by default" begin
     truck = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(10.0))
     train = NetworkArc(; travel_time_steps=2, cost=LinearArcCost(5.0))
 
@@ -525,8 +528,15 @@ end
     abstract_vec = Tuple{String,String,AbstractNetworkArc}[("A", "B", truck)]
     @test_throws MethodError NetworkGraph(_NODES_AB, abstract_vec)
 
+    # Default (strict): duplicate (origin, destination) raises ArgumentError.
+    @test_throws ArgumentError NetworkGraph(
+        _NODES_AB, [("A", "B", truck), ("A", "B", train)]
+    )
+
     # The supported entry path with two NetworkArc entries on the same leg still
-    # promotes to a MultiModalArc edge inside the graph.
-    ng = NetworkGraph(_NODES_AB, [("A", "B", truck), ("A", "B", train)])
+    # promotes to a MultiModalArc edge inside the graph when opt-in is set.
+    ng = NetworkGraph(
+        _NODES_AB, [("A", "B", truck), ("A", "B", train)]; allow_multimodal=true
+    )
     @test ng.graph["A", "B"] isa MultiModalArc
 end

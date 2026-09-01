@@ -8,11 +8,13 @@ A Julia package for solving transportation planning problems.
 
 ## Features
 
-- **Multi-commodity flow** over transportation networks with time-dependent routing
-- **Multiple cost models**: Support for linear costs (proportional to volume) and bin packing costs (discrete per vehicle/container)
-- **Routing constraints**: option to model forbidden nodes and arcs restrictions
-- **Time discretization**: handle delivery deadlines and transit times with flexible time steps
-- **Efficient algorithms**: greedy heuristics for fast and good quality solution generation
+- **Multi-commodity routing** over time-expanded transportation networks
+- **Flexible cost models**: linear costs (`LinearArcCost`), bin-packing costs (`BinPackingArcCost`), composite costs (`SumArcCost`), and custom node costs
+- **Multi-modal arcs**: multiple transport modes on the same edge with automatic mode selection
+- **Routing constraints**: forbidden nodes and arcs per commodity
+- **Construction heuristics**: greedy, lower-bound relaxation, and a blended strategy
+- **Local search**: bundle reintroduction and two-node consolidation with configurable stopping criteria
+- **Solution I/O**: save and reload solutions as CSV
 
 ## Installation
 
@@ -57,6 +59,9 @@ commodities = [
 instance = Instance(nodes, arcs, commodities, Day(1))
 solution = greedy_heuristic(instance)
 
+# Improve with local search
+local_search!(solution, instance; time_limit=60.0)
+
 # Validate and evaluate
 is_feasible(solution, instance; verbose=true)
 println("Total cost: ", cost(solution))
@@ -68,9 +73,12 @@ println("Total cost: ", cost(solution))
 Pages = [
     "getting_started.md",
     "tutorials/basic_example.md",
-    "tutorials/csv_example.md",
+    "guides/algorithm_pipeline.md",
     "guides/cost_functions.md",
     "guides/forbidden_constraints.md",
+    "guides/multi_modal_arcs.md",
+    "guides/solution_io.md",
+    "guides/type_transformations.md",
     "api.md",
 ]
 Depth = 1

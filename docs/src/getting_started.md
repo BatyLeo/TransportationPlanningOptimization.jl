@@ -27,11 +27,11 @@ Physical locations in your network. Each node represents:
 
 ```julia
 NetworkNode(;
-    id::String,                    # Unique identifier
-    node_type::Symbol,             # :origin, :destination, or :other
-    cost::Float64 = 0.0,           # Handling cost per unit
-    capacity::Int = typemax(Int),  # Maximum throughput
-    info = nothing                 # Optional metadata
+    id::String,                                        # Unique identifier
+    node_type::Symbol,                                 # :origin, :destination, or :other
+    capacity::Int = typemax(Int),                      # Maximum throughput
+    info = nothing,                                    # Optional metadata
+    node_cost::AbstractNodeCostFunction = NoNodeCost() # Per-node cost function
 )
 ```
 

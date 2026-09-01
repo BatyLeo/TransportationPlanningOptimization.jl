@@ -2,30 +2,32 @@
 $TYPEDEF
 
 An internal structure representing a group of commodities to be delivered together.
+The commodities are sorted in descending order of size to facilitate packing
+heuristics.
 Commodities in an `Order` share the same:
 - Origin node
 - Destination node
-- Delivery date (interpreted as a deadline or release depending on `is_date_arrival`)
+- Delivery date (interpreted as a deadline or release depending on `is_date_arrival` value)
 
 # Type Parameters
-- `is_date_arrival::Bool`: Inherited from the commodities. `true` for deadline-driven, `false` for release-driven.
-- `I`: Additional problem-specific information.
+- `is_date_arrival::Bool`: `true` for deadline-driven, `false` for release-driven orders.
+- `I`: Additional problem-specific information type.
 
 # Fields
 $TYPEDFIELDS
 """
 struct Order{is_date_arrival,I}
-    "list of commodities in the order"
-    commodities::Vector{LightCommodity{is_date_arrival,I}}
-    "time step corresponding to the delivery arrival/departure date"
+    "list of commodities in the order, **kept sorted by descending size**"
+    commodities::Vector{LightCommodity{I}}
+    "time step corresponding to the delivery arrival or departure date"
     time_step::Int
-    "maximum number of time steps for delivery among all commodities in the order"
+    "maximum number of time steps for delivery (among all commodities in the order)"
     max_transit_steps::Int
+    "precomputed sum of all commodity sizes"
+    total_size::Float64
 
     function Order{is_date_arrival,I}(
-        commodities::Vector{LightCommodity{is_date_arrival,I}},
-        time_step::Int,
-        max_transit_steps::Int,
+        commodities::Vector{LightCommodity{I}}, time_step::Int, max_transit_steps::Int
     ) where {is_date_arrival,I}
         if time_step <= 0
             throw(DomainError(time_step, "Time steps start from 1."))
@@ -37,30 +39,40 @@ struct Order{is_date_arrival,I}
                 ),
             )
         end
-        return new{is_date_arrival,I}(commodities, time_step, max_transit_steps)
+        # Sort commodities by size descending to facilitate packing heuristics.
+        sort!(commodities; by=c -> c.size, rev=true)
+        ts = sum(c.size for c in commodities; init=0.0)
+        return new{is_date_arrival,I}(commodities, time_step, max_transit_steps, ts)
     end
 end
 
+"""
+$TYPEDSIGNATURES
+
+Construct an [`Order`](@ref) from a list of [`LightCommodity`](@ref).
+"""
 function Order(;
-    commodities::Vector{LightCommodity{is_date_arrival,I}},
+    commodities::Vector{LightCommodity{I}},
     time_step::Int,
     max_transit_steps::Int,
-) where {is_date_arrival,I}
+    is_date_arrival::Bool=false,
+) where {I}
     return Order{is_date_arrival,I}(commodities, time_step, max_transit_steps)
 end
 
-function Base.show(io::IO, order::Order)
+function Base.show(io::IO, order::Order{is_date_arrival,I}) where {is_date_arrival,I}
+    date_kind = is_date_arrival ? "arrival_date" : "departure_date"
     return print(
         io,
-        "Order(time_step=$(order.time_step), num_commodities=$(length(order.commodities)), max_transit_steps=$(order.max_transit_steps))",
+        "Order($date_kind=$(order.time_step), " *
+        "num_commodities=$(length(order.commodities)), " *
+        "max_transit_steps=$(order.max_transit_steps))",
     )
 end
 
 """
 $TYPEDSIGNATURES
 
-Compute the total size of all commodities in the order.
+Total size of all commodities in the order (precomputed at construction).
 """
-function total_size(order::Order)
-    return sum(c.size for c in order.commodities; init=0.0)
-end
+total_size(order::Order) = order.total_size

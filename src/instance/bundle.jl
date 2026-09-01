@@ -1,30 +1,76 @@
 """
 $TYPEDEF
 
-A collection of `Order`s that share the same origin and destination.
-While orders in a bundle can have different delivery dates, they should follow the same path (in the travel time graph).
+A collection of [`Order`](@ref)s that share the same origin and destination.
+While orders in a bundle can have different delivery dates, they should follow the same path
+(in the travel time graph).
 
 # Fields
 $TYPEDFIELDS
 """
-struct Bundle{O<:Order}
+struct Bundle{O<:Order,G}
+    "list of orders in the bundle"
     orders::Vector{O}
+    "id of the origin node"
     origin_id::String
+    "id of the destination node"
     destination_id::String
     "set of node IDs that are forbidden for this bundle (cannot be traversed)"
     forbidden_nodes::Set{String}
     "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle"
     forbidden_arcs::Set{Tuple{String,String}}
+    "grouping key shared by all commodities in the bundle (from `group_by`); `nothing` under the default grouping"
+    group::G
+    "precomputed sum of all commodity sizes across all orders"
+    total_size::Float64
+
+    function Bundle{O,G}(
+        orders::Vector{O},
+        origin_id::String,
+        destination_id::String,
+        forbidden_nodes::Set{String},
+        forbidden_arcs::Set{Tuple{String,String}},
+        group::G,
+    ) where {O<:Order,G}
+        ts = sum(total_size(o) for o in orders; init=0.0)
+        return new{O,G}(
+            orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, group, ts
+        )
+    end
 end
 
+function Bundle(
+    orders::Vector{O},
+    origin_id::String,
+    destination_id::String,
+    forbidden_nodes::Set{String},
+    forbidden_arcs::Set{Tuple{String,String}},
+    group::G=nothing,
+) where {O<:Order,G}
+    return Bundle{O,G}(
+        orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, group
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Construct a [`Bundle`](@ref) from a list of [`Order`](@ref)s and the shared origin and destination
+node IDs.
+The `forbidden_nodes` and `forbidden_arcs` fields are optional and can be used to specify additional
+constraints on the paths that can be taken by this bundle.
+"""
 function Bundle(;
     orders::Vector{O},
     origin_id::String,
     destination_id::String,
     forbidden_nodes::Set{String}=Set{String}(),
     forbidden_arcs::Set{Tuple{String,String}}=Set{Tuple{String,String}}(),
-) where {O<:Order}
-    return Bundle{O}(orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs)
+    group::G=nothing,
+) where {O<:Order,G}
+    return Bundle{O,G}(
+        orders, origin_id, destination_id, forbidden_nodes, forbidden_arcs, group
+    )
 end
 
 """
@@ -47,8 +93,16 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the total size of all commodities in the bundle.
+Total size of all commodities in the bundle (precomputed at construction).
 """
-function total_size(bundle::Bundle)
-    return sum(total_size(order) for order in bundle.orders; init=0.0)
+total_size(bundle::Bundle) = bundle.total_size
+
+"""
+$TYPEDSIGNATURES
+
+Compute the maximum single-commodity size across all orders in the bundle.
+Used to sort bundles for the greedy heuristic.
+"""
+function max_pack_size(bundle::Bundle)
+    return maximum(c.size for order in bundle.orders for c in order.commodities; init=0.0)
 end

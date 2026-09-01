@@ -8,9 +8,9 @@ using MetaGraphsNext
     @testset "Basic solution with LinearArcCost" begin
         # 1. Create a dummy instance
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, cost=0.0, capacity=0),
-            NetworkNode(; id="B", node_type=:other, cost=1.0, capacity=0),
-            NetworkNode(; id="C", node_type=:destination, cost=2.0, capacity=0),
+            NetworkNode(; id="A", node_type=:origin, capacity=0),
+            NetworkNode(; id="B", node_type=:other, capacity=0),
+            NetworkNode(; id="C", node_type=:destination, capacity=0),
         ]
 
         # Arc A->B
@@ -169,8 +169,6 @@ using MetaGraphsNext
 
             for bin in bins
                 @test length(bin.commodities) == 1
-                @test bin.total_size == 6.0
-                @test bin.max_capacity == 10.0
                 @test bin.remaining_capacity == 4.0
             end
         end

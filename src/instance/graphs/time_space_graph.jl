@@ -1,7 +1,8 @@
 """
 $TYPEDEF
 
-A `TimeSpaceGraph` represents a time-expanded version of a network graph, where each node is replicated for each time step in the time horizon.
+A `TimeSpaceGraph` represents a time-expanded version of a network graph, where each node is
+replicated for each time step in the time horizon.
 
 # Fields
 $TYPEDFIELDS
@@ -81,8 +82,7 @@ $TYPEDSIGNATURES
 
 Project a `MultiModalArc` into the time-space graph. Modes are grouped by
 `travel_time_steps`. Each singleton group emits a plain `NetworkArc` edge.
-Groups of two or more modes with the same transit time emit a single
-`MultiModalArc` edge carrying just that subset (case 2).
+Groups of two or more modes with the same transit time emit a single `MultiModalArc`.
 """
 function _add_network_arc!(
     time_space_graph::TimeSpaceGraph,
@@ -130,8 +130,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Constructor for `TimeSpaceGraph`.
-Creates timed copies of all nodes and arcs from the `network_graph` for each step in `1:time_horizon_length`.
+Constructor for `TimeSpaceGraph`. Creates timed copies of all nodes and arcs from the
+`network_graph` for each step in `1:time_horizon_length`.
 """
 function TimeSpaceGraph(
     network_graph::NetworkGraph, time_horizon_length::Int; wrap_time::Bool

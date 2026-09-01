@@ -1,0 +1,169 @@
+"""
+$TYPEDEF
+
+Representation of an arc in the network graph.
+
+# Fields
+$TYPEDFIELDS
+"""
+struct Arc{C<:AbstractArcCostFunction,K,T<:Period}
+    "id of the origin node"
+    origin_id::String
+    "id of the destination node"
+    destination_id::String
+    "travel time in number of discrete time steps (0 if less than the time discretization step)"
+    travel_time::T
+    "capacity of the arc (in size units)"
+    capacity::Int
+    "cost function associated with the arc"
+    cost::C
+    "additional information associated with the arc"
+    info::K
+end
+
+"""
+$TYPEDSIGNATURES
+
+Process an arc cost argument. Accepts a single `AbstractArcCostFunction` or
+a tuple of them. Returns the single cost unwrapped (no `SumArcCost` overhead
+for the common case), or a `SumArcCost` when multiple costs are provided.
+
+Throws `ArgumentError` on an empty tuple (matches `SumArcCost`'s own check).
+"""
+_process_arc_cost(c::AbstractArcCostFunction) = c
+function _process_arc_cost(t::Tuple{Vararg{AbstractArcCostFunction}})
+    isempty(t) && throw(ArgumentError("Arc constructor: cost cannot be an empty tuple"))
+    return length(t) == 1 ? only(t) : SumArcCost(t)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Keyword constructor for `Arc`. Accepts `cost` as either a single
+`AbstractArcCostFunction` or a tuple of them (auto-wrapped via `SumArcCost`
+when more than one is given).
+"""
+function Arc(;
+    origin_id::AbstractString,
+    destination_id::AbstractString,
+    travel_time::Period,
+    cost,
+    capacity::Int=typemax(Int),
+    info=nothing,
+)
+    cost_function = _process_arc_cost(cost)
+    return Arc(
+        String(origin_id),
+        String(destination_id),
+        travel_time,
+        capacity,
+        cost_function,
+        info,
+    )
+end
+
+function Base.show(io::IO, arc::Arc)
+    return print(
+        io,
+        "Arc(",
+        "origin_id=$(arc.origin_id), ",
+        "destination_id=$(arc.destination_id), ",
+        "capacity=$(arc.capacity == typemax(Int) ? "∞" : string(arc.capacity)), ",
+        "cost=$(arc.cost), ",
+        "info=$(arc.info)",
+        ")",
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Infer the arc cost types present in a vector of arcs by scanning their actual cost function
+types. Returns a tuple of unique cost types found.
+
+This is a runtime operation that enables automatic cost type detection, but the result
+can be passed to type-stable inner functions (such as [`collect_arcs`](@ref)) via function
+barriers.
+"""
+function infer_cost_types(arcs::Vector{<:Arc})
+    return Tuple(unique(typeof(arc.cost) for arc in arcs))
+end
+
+"""
+$TYPEDSIGNATURES
+
+Collect an iterable of `NetworkArc`s into a type-stable vector with the specified cost types.
+This is useful for creating heterogeneous arc collections with multiple cost function types
+while maintaining type stability.
+
+# Arguments
+- `cost_types`: a tuple or Union of cost function types
+  - Tuple syntax: `(LinearArcCost, BinPackingArcCost)`
+  - Union syntax: `Union{LinearArcCost, BinPackingArcCost}`
+- `arcs`: iterable of NetworkArc objects with potentially different cost types
+- `validate`: whether to validate that all arc cost types are included (default: true)
+
+# Examples
+```julia
+# Using tuple (recommended)
+arcs = [NetworkArc(cost=LinearArcCost(1.0), ...), NetworkArc(cost=BinPackingArcCost(2.0, 10), ...)]
+typed_arcs = collect_arcs((LinearArcCost, BinPackingArcCost), arcs)
+
+# Using Union (also works)
+const MyCostTypes = Union{LinearArcCost, BinPackingArcCost}
+typed_arcs = collect_arcs(MyCostTypes, arcs)
+```
+"""
+function collect_arcs(
+    cost_types::Tuple, arcs::Vector{<:Arc}, time_step::Period; validate::Bool=true
+)
+    # Convert tuple to Union
+    CostUnion = Union{cost_types...}
+    return collect_arcs(CostUnion, arcs, time_step; validate=validate)
+end
+
+function collect_arcs(
+    union_types::Type{CostUnion},
+    arcs::Vector{<:Arc},
+    time_step::Period;
+    validate::Bool=true,
+) where {CostUnion}
+    if isempty(arcs)
+        return NetworkArc{CostUnion,Nothing}[]
+    end
+
+    # Get the info type from the first arc
+    first_arc = first(arcs)
+    K = typeof(first_arc.info)
+
+    # Optional validation: check that all cost types are covered
+    if validate
+        # Check each arc's cost type
+        for arc in arcs
+            cost_type = typeof(arc.cost)
+            if !(cost_type <: CostUnion)
+                error("""
+                    Cost type $cost_type found in arcs but not declared.
+                    Declared types: $(join(string.(union_types), ", "))
+
+                    You need to add $cost_type to your cost types:
+                    collect_arcs(($(join(string.(union_types), ", ")), $cost_type), arcs)
+                    """)
+            end
+        end
+    end
+
+    # Convert all arcs to the union type and return as (origin_id, destination_id, NetworkArc)
+    return [
+        (
+            arc.origin_id,
+            arc.destination_id,
+            NetworkArc{CostUnion,K}(;
+                capacity=arc.capacity,
+                travel_time_steps=period_steps(arc.travel_time, time_step; roundup=floor),
+                cost=arc.cost,
+                info=arc.info,
+            ),
+        ) for arc in arcs
+    ]
+end

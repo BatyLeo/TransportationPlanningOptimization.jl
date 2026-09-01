@@ -91,10 +91,10 @@ function read_solution_csv(
     required_cols = [
         :bundle_idx, :origin_id, :destination_id, :node_id, :point_number, :point_type
     ]
-    missing = setdiff(required_cols, Symbol.(names(df)))
-    if !isempty(missing)
+    missing_cols = setdiff(required_cols, Symbol.(names(df)))
+    if !isempty(missing_cols)
         error(
-            "CSV missing required columns: $(join(missing, ", ")). Required columns are: $(join(required_cols, ", ")).",
+            "CSV missing required columns: $(join(missing_cols, ", ")). Required columns are: $(join(required_cols, ", ")).",
         )
     end
 
@@ -153,7 +153,8 @@ function read_solution_csv(
             target_spatial_id = spatial_sequence[j]
 
             # BFS to find path from current_code to any timed node with target_spatial_id
-            queue = [(current_code, Int[])]
+            queue = DataStructures.Deque{Tuple{Int,Vector{Int}}}()
+            push!(queue, (current_code, Int[]))
             visited = Set{Int}([current_code])
             found_path_segment = nothing
 
