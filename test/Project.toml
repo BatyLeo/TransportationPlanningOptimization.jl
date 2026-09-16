@@ -21,7 +21,16 @@ TransportationPlanningOptimization = {path = ".."}
 
 [compat]
 Aqua = "0.8"
-CSV = "0.10"
+BenchmarkTools = "1.8.0"
+CSV = "0.10, 1.0"
+DataFrames = "1.8.2"
+Dates = "< 0.0.1, 1"
+Graphs = "1.15.0"
+HiGHS = "1.25.4"
 JET = "0.9, 0.12"
-JuliaFormatter = "1"
+JuMP = "1.31.2"
+JuliaFormatter = "1, 2.14"
 ProgressMeter = "1"
+Random = "< 0.0.1, 1"
+SparseArrays = "< 0.0.1, 1"
+Test = "< 0.0.1, 1"
