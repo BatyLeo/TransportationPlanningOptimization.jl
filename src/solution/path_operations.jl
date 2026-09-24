@@ -123,8 +123,8 @@ Add bundle path `path` for bundle `bundle_idx` to the solution `current_solution
 This updates the `bundle_paths` and the `assignments` for all arcs along the path.
 
 Returns the cost increase produced by adding `path` (a non-negative `Float64`).
-The increase is computed as the sum of per-edge cost changes via
-`_update_single_assignment_cost!`.
+The increase is the sum, over every path edge, of the arc-cost change (via
+`_update_single_assignment_cost!`) plus the change in the head node's cost.
 """
 function add_bundle_path!(
     current_solution::Solution{C},
@@ -138,14 +138,18 @@ function add_bundle_path!(
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
     current_solution.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
+    cache = instance.index_cache
 
     return _foreach_path_edge(instance, bundle, path) do edge, arc, order
-        _add_order_to_assignment!(
+        sv = cache.tsg_code_to_spatial_code[edge[2]]
+        return _add_order_to_assignment!(
             current_solution.assignments,
             edge,
             arc,
             order.commodities,
-            mode_selector;
+            mode_selector,
+            cache.spatial_code_to_node_cost,
+            sv;
             packing,
         )
     end
@@ -157,9 +161,9 @@ $TYPEDSIGNATURES
 Reverse the effect of `add_bundle_path!` for bundle `bundle_idx`. Drops the
 bundle's commodities from every TSG edge along the stored path, then clears
 `bundle_paths[bundle_idx]`. Returns the cost decrease produced by the removal
-(a non-positive `Float64` whose magnitude equals the dropped cost contribution
-of the bundle on its path). Returns `0.0` when the bundle path is already
-empty.
+(a non-positive `Float64` whose magnitude equals the dropped arc and head-node
+cost contribution of the bundle on its path). Returns `0.0` when the bundle
+path is already empty.
 
 Per-edge details:
 - On `BinPackingArcCost` edges, bins are recomputed from scratch via
@@ -190,10 +194,14 @@ function remove_bundle_path!(
     path = current_solution.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
     bundle = instance.bundles[bundle_idx]
+    cache = instance.index_cache
 
     cost_delta = _foreach_path_edge(instance, bundle, path) do edge, arc, order
         assignment = current_solution.assignments[edge]
-        _remove_commodities_from_assignment!(assignment, arc, order.commodities)
+        sv = cache.tsg_code_to_spatial_code[edge[2]]
+        return _remove_commodities_from_assignment!(
+            assignment, arc, order.commodities, cache.spatial_code_to_node_cost, sv
+        )
     end
 
     current_solution.bundle_paths[bundle_idx] = Int[]
@@ -212,6 +220,7 @@ function Solution(
     mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {IDA,I}
     (; time_space_graph, bundles) = instance
+    cache = instance.index_cache
 
     C = LightCommodity{I}
     assignments = Dict{Tuple{Int,Int},Union{SingleAssignment{C},MultiAssignment{C}}}()
@@ -244,41 +253,18 @@ function Solution(
                 continue
             end
             arc = time_space_graph.graph[u_label, v_label]
-            _add_order_to_assignment!(assignments, edge, arc, new_comms, mode_selector)
+            sv = cache.tsg_code_to_spatial_code[edge[2]]
+            _add_order_to_assignment!(
+                assignments,
+                edge,
+                arc,
+                new_comms,
+                mode_selector,
+                cache.spatial_code_to_node_cost,
+                sv,
+            )
         end
     end
 
     return Solution{C}(cleaned_paths, assignments)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Total cost of `sol` including both arc costs (sum over assignments) and
-destination-node costs (sum over each bundle's path, charging
-`evaluate(dst.node_cost, comms_on_edge)` for each TSG edge in the path).
-
-Use this when comparing against external systems that include node costs in
-their total. For arc-only cost use `cost(sol)`.
-"""
-function cost_with_nodes(sol::Solution{C}, instance::Instance) where {C}
-    total = cost(sol)
-    tsg = instance.time_space_graph
-    for (i, path) in enumerate(sol.bundle_paths)
-        isempty(path) && continue
-        bundle = instance.bundles[i]
-        for order in bundle.orders
-            tsg_path = [
-                project_to_time_space_graph(node_code, order, instance) for
-                node_code in path
-            ]
-            for k in 1:(length(tsg_path) - 1)
-                v_tsg = tsg_path[k + 1]
-                v_label = MetaGraphsNext.label_for(tsg.graph, v_tsg)
-                dst_node = instance.network_graph.graph[v_label[1]]
-                total += evaluate(dst_node.node_cost, order.commodities)
-            end
-        end
-    end
-    return total
 end

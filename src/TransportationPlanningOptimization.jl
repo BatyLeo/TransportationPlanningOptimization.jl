@@ -91,8 +91,8 @@ export time_horizon
 export evaluate
 
 # Solution interface
-export is_feasible, cost, cost_with_nodes
-export commodities_of, bins_of, cost_of, total_size_of
+export is_feasible, cost, total_arc_cost, total_node_cost
+export commodities_of, bins_of, cost_of, arc_cost_of, node_cost_of, total_size_of
 export write_solution_csv, read_solution_csv
 
 # Algorithms

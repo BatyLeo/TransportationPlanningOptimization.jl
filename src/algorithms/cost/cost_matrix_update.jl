@@ -17,11 +17,15 @@ function compute_ttg_edge_incremental_cost(
     cache = instance.index_cache
 
     # Shortcut arc: same spatial node on both endpoints.
-    if cache.ttg_code_to_spatial_code[u_ttg_code] ==
-        cache.ttg_code_to_spatial_code[v_ttg_code]
-        return 0.0
-    end
-    total_incremental_cost = 0.0
+    su0 = cache.ttg_code_to_spatial_code[u_ttg_code]
+    sv0 = cache.ttg_code_to_spatial_code[v_ttg_code]
+    su0 == sv0 && return 0.0
+
+    # The TTG edge has a single spatial head node shared by every order's
+    # projection, so the node-cost function is looked up once here.
+    node_f = cache.spatial_code_to_node_cost[sv0]
+    arc_part = 0.0
+    node_part = 0.0
 
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders differ by less than the horizon and
@@ -43,7 +47,7 @@ function compute_ttg_edge_incremental_cost(
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
         new_total_size = order.total_size
-        total_incremental_cost += _edge_incremental_cost(
+        arc_part += _edge_incremental_cost(
             buffer,
             arc,
             existing_assignment,
@@ -52,22 +56,18 @@ function compute_ttg_edge_incremental_cost(
             packing=packing,
             new_total_size=new_total_size,
         )
-
-        # Destination-node cost via fast path when available.
-        node_cost = cache.spatial_code_to_node_cost[sv]
-        total_incremental_cost += incremental_cost_with_size(
-            node_cost, order.commodities, order.commodities, new_total_size
+        node_part += _node_incremental_cost(
+            node_f, existing_assignment, order.commodities, new_total_size
         )
     end
 
+    # Slope scaling is an arc-only relaxation heuristic, node costs are never scaled.
     if !isempty(instance.travel_time_graph.cost_scaling)
-        su = cache.ttg_code_to_spatial_code[u_ttg_code]
-        sv = cache.ttg_code_to_spatial_code[v_ttg_code]
-        factor = get(instance.travel_time_graph.cost_scaling, (su, sv), 1.0)
-        total_incremental_cost *= factor
+        factor = get(instance.travel_time_graph.cost_scaling, (su0, sv0), 1.0)
+        arc_part *= factor
     end
 
-    return total_incremental_cost
+    return arc_part + node_part
 end
 
 """
@@ -82,7 +82,7 @@ When the TTG edge is the bundle's direct arc (spatial labels equal to
 applied instead of the fractional formula.
 """
 function compute_ttg_edge_lower_bound_cost(
-    current_solution::Solution{C},
+    current_solution::Solution,
     instance::Instance,
     bundle::Bundle,
     u_ttg_code::Int,
@@ -90,7 +90,7 @@ function compute_ttg_edge_lower_bound_cost(
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
-) where {C}
+)
     # The lower-bound path is a fractional relaxation, not FFD bin packing, so
     # `packing` is accepted only to keep the `cost_fn` call signature uniform
     # with `compute_ttg_edge_incremental_cost`. It has no effect here.
@@ -132,19 +132,8 @@ function compute_ttg_edge_lower_bound_cost(
         existing = get(current_solution.assignments, edge, nothing)
         total += _edge_lower_bound_cost(arc, existing, order.commodities, mode_selector)
 
-        node_cost = cache.spatial_code_to_node_cost[sv]
-        existing_at_dst_node = if existing === nothing
-            C[]
-        elseif existing isa SingleAssignment
-            # Stored vector, read-only (no copy needed).
-            existing.commodities
-        else
-            # MultiAssignment commodities_of is a lazy flatten, so materialize it.
-            collect(commodities_of(existing))
-        end
-        total += lower_bound_incremental_cost(
-            node_cost, existing_at_dst_node, order.commodities
-        )
+        node_f = cache.spatial_code_to_node_cost[sv]
+        total += _node_lower_bound_incremental_cost(node_f, existing, order.commodities)
     end
     return total
 end
@@ -185,10 +174,8 @@ function _direct_arc_lb_cost(
 
         # Destination-node cost on the direct arc, charged once per order.
         # Per-order incremental: existing is empty (LB is against empty solution).
-        node_cost = cache.spatial_code_to_node_cost[sv]
-        total += lower_bound_incremental_cost(
-            node_cost, eltype(order.commodities)[], order.commodities
-        )
+        node_f = cache.spatial_code_to_node_cost[sv]
+        total += _node_lower_bound_incremental_cost(node_f, nothing, order.commodities)
     end
     return total
 end

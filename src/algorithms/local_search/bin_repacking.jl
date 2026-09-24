@@ -28,15 +28,15 @@ function _repack_slot!(slot::SingleAssignment, bp_cost::BinPackingArcCost)
         return 0.0
     end
 
-    before = slot.cost
+    before = slot.arc_cost
     slot.bins = if ffd_count <= bfd_count
         compute_bin_assignments(bp_cost, slot.commodities; presorted=ps)
     else
         compute_bin_assignments_bfd(bp_cost, slot.commodities; presorted=ps)
     end
-    slot.cost = bp_cost.cost_per_bin * length(slot.bins)
+    slot.arc_cost = bp_cost.cost_per_bin * length(slot.bins)
     slot.bins_dirty = false
-    return before - slot.cost
+    return before - slot.arc_cost
 end
 
 function _repack_assignment!(a::SingleAssignment, arc::NetworkArc)

@@ -6,7 +6,8 @@
 struct _SingleAssignmentSnapshot{C<:LightCommodity}
     commodities::Vector{C}
     bins::Vector{Bin{C}}
-    cost::Float64
+    arc_cost::Float64
+    node_cost::Float64
     sorted::Bool
     total_size::Float64
     bins_dirty::Bool
@@ -14,14 +15,21 @@ end
 
 function _snapshot_assignment(a::SingleAssignment{C}) where {C}
     return _SingleAssignmentSnapshot{C}(
-        copy(a.commodities), a.bins, a.cost, a.sorted, a.total_size, a.bins_dirty
+        copy(a.commodities),
+        a.bins,
+        a.arc_cost,
+        a.node_cost,
+        a.sorted,
+        a.total_size,
+        a.bins_dirty,
     )
 end
 
 function _restore_assignment!(a::SingleAssignment, snap::_SingleAssignmentSnapshot)
     a.commodities = snap.commodities
     a.bins = snap.bins
-    a.cost = snap.cost
+    a.arc_cost = snap.arc_cost
+    a.node_cost = snap.node_cost
     a.sorted = snap.sorted
     a.total_size = snap.total_size
     a.bins_dirty = snap.bins_dirty
@@ -30,16 +38,20 @@ end
 
 struct _MultiAssignmentSnapshot{C<:LightCommodity}
     per_mode::Vector{_SingleAssignmentSnapshot{C}}
+    node_cost::Float64
 end
 
 function _snapshot_assignment(a::MultiAssignment{C}) where {C}
-    return _MultiAssignmentSnapshot{C}([_snapshot_assignment(slot) for slot in a.per_mode])
+    return _MultiAssignmentSnapshot{C}(
+        [_snapshot_assignment(slot) for slot in a.per_mode], a.node_cost
+    )
 end
 
 function _restore_assignment!(a::MultiAssignment, snap::_MultiAssignmentSnapshot)
     for (slot, slot_snap) in zip(a.per_mode, snap.per_mode)
         _restore_assignment!(slot, slot_snap)
     end
+    a.node_cost = snap.node_cost
     return nothing
 end
 

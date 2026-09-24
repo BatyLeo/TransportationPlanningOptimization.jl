@@ -139,7 +139,11 @@ arc = Arc(;
 ## Node Cost Functions
 
 Node costs add per-node cost contributions on top of arc costs.
-They are evaluated at every node a bundle passes through, based on the commodities transiting that node.
+They are charged per incoming time-space arc, at that arc's head node, on the full load of that arc (across modes for a multi-modal edge).
+The origin of a bundle's path is never charged, and a node reached through several incoming arcs is charged once per arc.
+[`cost`](@ref) includes both arc and node costs.
+Use [`total_arc_cost`](@ref) and [`total_node_cost`](@ref) to read the two components separately.
+Slope scaling (the optional `slope_scaling_update!` callback passed as `cost_update!` to [`iterated_local_search!`](@ref)) only scales arc costs, never node costs.
 
 By default, nodes use [`NoNodeCost`](@ref) (zero cost).
 To add a node cost, pass a `node_cost` keyword to [`NetworkNode`](@ref):
@@ -170,12 +174,16 @@ end
 function TransportationPlanningOptimization.evaluate(
     c::HandlingCost, commodities::Vector{<:LightCommodity}
 )
-    return c.cost_per_unit * sum(comm.size for comm in commodities)
+    return c.cost_per_unit * sum(comm.size for comm in commodities; init=0.0)
 end
 ```
 
+`evaluate` must return `0.0` on an empty vector (`init=0.0` above).
+This is validated when the `Instance` is built.
+
 Optionally override `incremental_cost(c, existing, new)` for efficiency (the default computes `evaluate(c, existing + new) - evaluate(c, existing)`, which allocates a temporary vector).
 Override `lower_bound_incremental_cost` only when the lower-bound relaxation differs from the true incremental cost.
+Both overrides must stay consistent with `evaluate` (routing uses the incremental variants, path commits use `evaluate`).
 
 ---
 

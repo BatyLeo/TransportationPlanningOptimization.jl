@@ -5,9 +5,16 @@ Abstract type for per-node cost contributions. Mirrors [`AbstractArcCostFunction
 node costs participate in path scoring exactly like arc costs, so they expose the same
 `evaluate` / `incremental_cost` / `lower_bound_incremental_cost` interface.
 
+A node cost is charged once per incoming time-space arc, at that arc's head node, on
+the arc's full load (across modes for a multi-modal edge). The origin of a bundle's
+path is never charged, and a node reached through several incoming arcs is charged
+once per arc.
+
 Concrete subtypes **must** implement:
 - `evaluate(c::T, commodities) -> Float64`: total node cost for `commodities` passing
-through the node.
+  through the node. Must return `0.0` on an empty `commodities` vector (validated when
+  the `Instance` is built, since a fresh or emptied edge assignment starts at
+  `node_cost = 0.0`).
 
 Concrete subtypes **may** overload (defaults are provided):
 - `incremental_cost(c::T, existing, new) -> Float64`: marginal cost of adding `new` to a
@@ -46,32 +53,6 @@ Specialize this for node costs whose lower bound differs from their actual cost.
 """
 function lower_bound_incremental_cost(
     node_f::AbstractNodeCostFunction, existing::Vector{C}, new::Vector{C}
-) where {C<:LightCommodity}
-    return incremental_cost(node_f, existing, new)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Fast path when `new_total_size` is precomputed. Falls back to `incremental_cost`.
-"""
-function incremental_cost_with_size(
-    node_f::AbstractNodeCostFunction, existing::Vector{C}, new::Vector{C}, ::Float64
-) where {C<:LightCommodity}
-    return incremental_cost(node_f, existing, new)
-end
-
-"""
-$TYPEDSIGNATURES
-
-Generic fallback for node costs: ignores the buffer and forwards to `incremental_cost`.
-"""
-function incremental_cost!(
-    ::BinPackingBuffer,
-    node_f::AbstractNodeCostFunction,
-    existing::Vector{C},
-    new::Vector{C};
-    n_existing::Int=-1,
 ) where {C<:LightCommodity}
     return incremental_cost(node_f, existing, new)
 end
@@ -123,10 +104,4 @@ function incremental_cost(
     c::LinearNodeCost, _::Vector{C}, new::Vector{C}
 ) where {C<:LightCommodity}
     return evaluate(c, new)
-end
-
-function incremental_cost_with_size(
-    c::LinearNodeCost, ::Vector{C}, ::Vector{C}, new_total_size::Float64
-) where {C<:LightCommodity}
-    return c.cost_per_unit_size * new_total_size
 end

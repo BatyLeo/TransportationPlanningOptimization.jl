@@ -61,9 +61,12 @@ assignment = only(values(sol.assignments))
 # assignment isa MultiAssignment
 
 for (i, slot) in enumerate(assignment.per_mode)
-    println("mode $i: $(length(slot.commodities)) commodities, cost $(cost_of(slot))")
+    println("mode $i: $(length(slot.commodities)) commodities, cost $(arc_cost_of(slot))")
 end
 ```
+
+`arc_cost_of(slot)` is the per-mode arc cost.
+The edge's head-node cost is mode-independent (it depends on the union of the load across modes), so it lives on `assignment` itself: `node_cost_of(assignment)`.
 
 !!! note
     `FillThenSpillMode` only splits a bundle across modes that share the same transit time (and therefore the same `MultiModalArc` edge in the time-expanded graphs). Splitting across modes with different transit times is intentionally disallowed. The two modes occupy separate edges with independent per-edge capacities, and mixing would create an inconsistent capacity accounting. When transit times differ, mode selection still happens at the bundle level via Dijkstra: as the cheaper mode's incremental cost rises with utilization, later bundles route via the other mode.

@@ -91,71 +91,96 @@ end
 end
 
 function _update_single_assignment_cost!(
-    slot::SingleAssignment, arc_cost::AbstractArcCostFunction
+    slot::SingleAssignment, arc_f::AbstractArcCostFunction
 )
     _ensure_sorted!(slot)
-    slot.cost = _evaluate_with_total_size(
-        arc_cost, slot.commodities, slot.total_size; presorted=true
+    slot.arc_cost = _evaluate_with_total_size(
+        arc_f, slot.commodities, slot.total_size; presorted=true
     )
     return nothing
 end
 
 # Cost update helpers for `SingleAssignment` slots.
-function _update_single_assignment_cost!(
-    slot::SingleAssignment, arc_cost::BinPackingArcCost
-)
+function _update_single_assignment_cost!(slot::SingleAssignment, arc_f::BinPackingArcCost)
     _ensure_sorted!(slot)
-    slot.bins = compute_bin_assignments(arc_cost, slot.commodities; presorted=true)
-    slot.cost = arc_cost.cost_per_bin * length(slot.bins)
+    slot.bins = compute_bin_assignments(arc_f, slot.commodities; presorted=true)
+    slot.arc_cost = arc_f.cost_per_bin * length(slot.bins)
     slot.bins_dirty = false
     return nothing
 end
 
-function _update_single_assignment_cost!(slot::SingleAssignment, arc_cost::SumArcCost)
+function _update_single_assignment_cost!(slot::SingleAssignment, arc_f::SumArcCost)
     _ensure_sorted!(slot)
     # When SumArcCost wraps a BinPackingArcCost term, refresh slot.bins so the
     # cached bin count stays consistent with slot.commodities (read by
     # incremental_cost! to skip the FFD-on-existing pass).
-    bp = _try_find_bin_packing(arc_cost)
+    bp = _try_find_bin_packing(arc_f)
     if bp !== nothing
         slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
     end
-    slot.cost = _sum_evaluate_with_total_size(
-        arc_cost.terms, slot.commodities, slot.total_size
+    slot.arc_cost = _sum_evaluate_with_total_size(
+        arc_f.terms, slot.commodities, slot.total_size
     )
     slot.bins_dirty = false
     return nothing
 end
 
-# Removal-only cost update: recompute `slot.cost` without materializing bins.
+# Removal-only cost update: recompute `slot.arc_cost` without materializing bins.
 # Uses "does not refill bins" semantics: the `slot.bins` vector becomes stale,
 # and `bins_dirty` is set so downstream code can fall back to non-frozen cost
 # estimation. The next `_update_single_assignment_cost!` (on add) will recompute
 # bins and clear the flag.
-function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::AbstractArcCostFunction)
+function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::AbstractArcCostFunction)
     _ensure_sorted!(slot)
-    slot.cost = _evaluate_with_total_size(
-        arc_cost, slot.commodities, slot.total_size; presorted=true
+    slot.arc_cost = _evaluate_with_total_size(
+        arc_f, slot.commodities, slot.total_size; presorted=true
     )
     return nothing
 end
 
-function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::BinPackingArcCost)
+function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::BinPackingArcCost)
     _ensure_sorted!(slot)
-    slot.cost =
-        arc_cost.cost_per_bin *
-        tentative_bin_count(arc_cost, slot.commodities; presorted=true)
+    slot.arc_cost =
+        arc_f.cost_per_bin * tentative_bin_count(arc_f, slot.commodities; presorted=true)
     slot.bins_dirty = true
     return nothing
 end
 
-function _update_cost_skip_bins!(slot::SingleAssignment, arc_cost::SumArcCost)
+function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::SumArcCost)
     _ensure_sorted!(slot)
-    slot.cost = _sum_evaluate_with_total_size(
-        arc_cost.terms, slot.commodities, slot.total_size
+    slot.arc_cost = _sum_evaluate_with_total_size(
+        arc_f.terms, slot.commodities, slot.total_size
     )
     slot.bins_dirty = true
     return nothing
+end
+
+# --- Node cost -----------------------------------------------------------
+# Node costs are charged once per edge assignment (a `SingleAssignment` on a
+# single-mode edge, or the owning `MultiAssignment` as a whole on a multi-modal
+# edge, see `arc_assignment.jl`), on the edge's full load via `_node_load`.
+# `_refresh_node_cost!` recomputes it from scratch and returns the delta, so it
+# stays correct regardless of how many orders were merged into a single commit.
+
+@inline _node_load_cost(::NoNodeCost, ::AbstractArcAssignment) = 0.0
+@inline function _node_load_cost(f::LinearNodeCost, a::AbstractArcAssignment)
+    return f.cost_per_unit_size * total_size_of(a)
+end
+function _node_load_cost(f::AbstractNodeCostFunction, a::AbstractArcAssignment)
+    return evaluate(f, _node_load(a))
+end
+
+"""
+$TYPEDSIGNATURES
+
+Recompute the head-node cost stored on `a` (a `SingleAssignment` for a single-mode
+edge, or a `MultiAssignment` for a multi-modal edge) from its current load under
+`node_f`, and return the delta (`new - old`).
+"""
+function _refresh_node_cost!(a::AbstractArcAssignment, node_f::AbstractNodeCostFunction)
+    before = a.node_cost
+    a.node_cost = _node_load_cost(node_f, a)
+    return a.node_cost - before
 end
 
 """
@@ -165,19 +190,19 @@ Frozen-bin commit for a single-mode slot.  Instead of re-packing, this adds only
 `new_comms` to the cached `slot.bins` via first-fit, keeping the existing bins frozen.
 """
 function _frozen_commit_single_assignment!(
-    slot::SingleAssignment{C}, arc_cost::AbstractArcCostFunction, ::Vector{C}
+    slot::SingleAssignment{C}, arc_f::AbstractArcCostFunction, ::Vector{C}
 ) where {C}
-    return _update_single_assignment_cost!(slot, arc_cost)
+    return _update_single_assignment_cost!(slot, arc_f)
 end
 
 function _frozen_commit_single_assignment!(
-    slot::SingleAssignment{C}, arc_cost::BinPackingArcCost, new_comms::Vector{C}
+    slot::SingleAssignment{C}, arc_f::BinPackingArcCost, new_comms::Vector{C}
 ) where {C}
     if slot.bins_dirty
-        return _update_single_assignment_cost!(slot, arc_cost)
+        return _update_single_assignment_cost!(slot, arc_f)
     end
-    frozen_first_fit_add!(slot.bins, Float64(arc_cost.bin_capacity), new_comms)
-    slot.cost = arc_cost.cost_per_bin * length(slot.bins)
+    frozen_first_fit_add!(slot.bins, Float64(arc_f.bin_capacity), new_comms)
+    slot.arc_cost = arc_f.cost_per_bin * length(slot.bins)
     return nothing
 end
 
@@ -202,9 +227,9 @@ end
     _sum_frozen_commit!(slot, Base.tail(terms), new_comms)
 
 function _frozen_commit_single_assignment!(
-    slot::SingleAssignment{C}, arc_cost::SumArcCost, new_comms::Vector{C}
+    slot::SingleAssignment{C}, arc_f::SumArcCost, new_comms::Vector{C}
 ) where {C}
-    slot.cost = _sum_frozen_commit!(slot, arc_cost.terms, new_comms)
+    slot.arc_cost = _sum_frozen_commit!(slot, arc_f.terms, new_comms)
     return nothing
 end
 
@@ -292,12 +317,12 @@ function _fill_then_spill_assign!(
     for (i, placed) in enumerate(partition)
         isempty(placed) && continue
         slot = assignment.per_mode[i]
-        before = slot.cost
+        before = slot.arc_cost
         # `placed` is a subset of the order's commodities, which are sorted
         # desc at construction. The merge preserves slot.sorted=true.
         _merge_sorted_into_slot!(slot, placed)
         _update_single_assignment_cost!(slot, arc.modes[i].cost)
-        cost_delta += slot.cost - before
+        cost_delta += slot.arc_cost - before
     end
     return cost_delta
 end
@@ -313,32 +338,43 @@ skip its `_ensure_sorted!` sort.
 """
 function _commit_new_to_slot!(
     slot::SingleAssignment{C},
-    arc_cost::AbstractArcCostFunction,
+    arc_f::AbstractArcCostFunction,
     new_commodities::Vector{C},
     packing::Symbol,
 ) where {C<:LightCommodity}
-    before = slot.cost
+    before = slot.arc_cost
     _merge_sorted_into_slot!(slot, new_commodities)
     if packing === :frozen
-        _frozen_commit_single_assignment!(slot, arc_cost, new_commodities)
+        _frozen_commit_single_assignment!(slot, arc_f, new_commodities)
     else
-        _update_single_assignment_cost!(slot, arc_cost)
+        _update_single_assignment_cost!(slot, arc_f)
     end
-    return slot.cost - before
+    return slot.arc_cost - before
 end
 
+"""
+$TYPEDSIGNATURES
+
+Add `new_commodities` to the single-mode edge assignment for `edge`, and refresh the
+head-node cost charged at spatial node `node_costs[sv]`. Returns the total (arc + node)
+cost delta.
+"""
 function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
     arc::NetworkArc,
     new_commodities::Vector{C},
-    ::AbstractModeSelector;
+    ::AbstractModeSelector,
+    node_costs::Vector{<:AbstractNodeCostFunction},
+    sv::Int;
     packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
-        SingleAssignment{C}()
+        return SingleAssignment{C}()
     end::SingleAssignment{C}
-    return _commit_new_to_slot!(assignment, arc.cost, new_commodities, packing)
+    arc_delta = _commit_new_to_slot!(assignment, arc.cost, new_commodities, packing)
+    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    return arc_delta + node_delta
 end
 
 function _add_order_to_assignment!(
@@ -346,12 +382,16 @@ function _add_order_to_assignment!(
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
     new_commodities::Vector{C},
-    ::CheapestMode;
+    ::CheapestMode,
+    node_costs::Vector{<:AbstractNodeCostFunction},
+    sv::Int;
     packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
-        MultiAssignment{C}(length(arc.modes))
+        return MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
+    # Mode choice is arc-only: the head-node cost is charged once on the whole
+    # `MultiAssignment` load and does not depend on which mode absorbs the batch.
     mode_costs = [
         if _mode_has_capacity(
             arc.modes[i], assignment.per_mode[i].total_size, new_commodities
@@ -372,9 +412,11 @@ function _add_order_to_assignment!(
         )
     end
     slot = assignment.per_mode[best_mode_idx]
-    return _commit_new_to_slot!(
+    arc_delta = _commit_new_to_slot!(
         slot, arc.modes[best_mode_idx].cost, new_commodities, packing
     )
+    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    return arc_delta + node_delta
 end
 
 """
@@ -403,16 +445,20 @@ function _add_order_to_assignment!(
     edge::Tuple{Int,Int},
     arc::MultiModalArc,
     new_commodities::Vector{C},
-    ::FillThenSpillMode;
+    ::FillThenSpillMode,
+    node_costs::Vector{<:AbstractNodeCostFunction},
+    sv::Int;
     packing::Symbol=:frozen,
 ) where {C<:LightCommodity}
     # FillThenSpillMode always uses ffd_union semantics (re-packs each affected
     # mode), matching its `_edge_incremental_cost`. `packing` is accepted for
     # signature uniformity but does not switch to frozen here.
     assignment = get!(assignments, edge) do
-        MultiAssignment{C}(length(arc.modes))
+        return MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
-    return _fill_then_spill_assign!(edge, arc, assignment, new_commodities)
+    arc_delta = _fill_then_spill_assign!(edge, arc, assignment, new_commodities)
+    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    return arc_delta + node_delta
 end
 
 function _mode_has_capacity(
@@ -424,9 +470,13 @@ function _mode_has_capacity(
 end
 
 function _remove_commodities_from_assignment!(
-    assignment::SingleAssignment{C}, arc::NetworkArc, removed_comms::Vector{C}
+    assignment::SingleAssignment{C},
+    arc::NetworkArc,
+    removed_comms::Vector{C},
+    node_costs::Vector{<:AbstractNodeCostFunction},
+    sv::Int,
 ) where {C<:LightCommodity}
-    before = assignment.cost
+    before = assignment.arc_cost
     n_removed = _remove_all_from_pool!(assignment.commodities, removed_comms)
     if n_removed != length(removed_comms)
         n_missing = length(removed_comms) - n_removed
@@ -438,13 +488,19 @@ function _remove_commodities_from_assignment!(
     end
     assignment.total_size -= sum(c.size for c in removed_comms; init=0.0)
     _update_cost_skip_bins!(assignment, arc.cost)
-    return assignment.cost - before
+    arc_delta = assignment.arc_cost - before
+    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    return arc_delta + node_delta
 end
 
 function _remove_commodities_from_assignment!(
-    assignment::MultiAssignment{C}, arc::MultiModalArc, removed_comms::Vector{C}
+    assignment::MultiAssignment{C},
+    arc::MultiModalArc,
+    removed_comms::Vector{C},
+    node_costs::Vector{<:AbstractNodeCostFunction},
+    sv::Int,
 ) where {C<:LightCommodity}
-    before = sum(slot.cost for slot in assignment.per_mode; init=0.0)
+    before = arc_cost_of(assignment)
     remaining = copy(removed_comms)
     for (i, slot) in enumerate(assignment.per_mode)
         isempty(remaining) && break
@@ -461,8 +517,10 @@ function _remove_commodities_from_assignment!(
             ),
         )
     end
-    after = sum(slot.cost for slot in assignment.per_mode; init=0.0)
-    return after - before
+    after = arc_cost_of(assignment)
+    arc_delta = after - before
+    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    return arc_delta + node_delta
 end
 
 """

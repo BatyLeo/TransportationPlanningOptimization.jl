@@ -114,7 +114,7 @@ function parse_inbound_instance(
             :other
         end
 
-        NetworkNode(;
+        return NetworkNode(;
             id=string(row[NODE_ID]),
             node_type=node_type_symbol,
             capacity=Int(row[NODE_CAPACITY]),
@@ -177,7 +177,7 @@ function parse_inbound_instance(
     # arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
 
     commodities = map(eachrow(df_commodities)) do row
-        Commodity(;
+        return Commodity(;
             origin_id=string(row[COMMODITY_ORIGIN_ID]),
             destination_id=string(row[COMMODITY_DESTINATION_ID]),
             size=Float64(max(1, round(Int, row[COMMODITY_SIZE] * VOLUME_FACTOR))),

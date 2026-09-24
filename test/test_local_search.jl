@@ -102,7 +102,7 @@ end
     saved = TransportationPlanningOptimization._repack_assignment!(slot, net_arc)
     @test length(slot.bins) == bfd
     @test isapprox(saved, arc_f.cost_per_bin * (ffd - bfd); atol=1e-9)
-    @test isapprox(slot.cost, arc_f.cost_per_bin * bfd; atol=1e-9)
+    @test isapprox(slot.arc_cost, arc_f.cost_per_bin * bfd; atol=1e-9)
 end
 
 @testset "_repack_assignment! gates when no improvement is possible" begin

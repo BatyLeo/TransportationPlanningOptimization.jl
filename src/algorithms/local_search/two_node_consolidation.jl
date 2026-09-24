@@ -93,7 +93,7 @@ function splice_path(old_path::Vector{Int}, src::Int, dst::Int, new_sub_path::Ve
             return vcat(old_path[1:k], new_sub_path[2:(end - 1)], old_path[(k + 1):end])
         end
     end
-    throw(
+    return throw(
         ArgumentError(
             "splice_path: old_path does not contain consecutive ($src, $dst) pair"
         ),
@@ -175,7 +175,7 @@ function two_node_common_incremental!(
 
     # Track cost deltas from remove/add/refine to avoid calling cost(sol)
     # twice. _refresh_dirty_assignments! materializes bins but does not
-    # change slot.cost, so its delta is zero.
+    # change slot.arc_cost, so its delta is zero.
     cost_delta = 0.0
     for i in lifted_idxs
         cost_delta += remove_bundle_path!(sol, instance, i)
