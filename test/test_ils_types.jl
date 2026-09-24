@@ -5,8 +5,7 @@ using Random
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
+using TransportationPlanningOptimization.Problems.Inbound
 
 @testset "ILSConfig defaults" begin
     config = ILSConfig()

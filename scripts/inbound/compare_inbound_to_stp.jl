@@ -22,8 +22,7 @@ using ShipperTransportationPlanning
 const STP = ShipperTransportationPlanning
 using MetaGraphsNext: MetaGraphsNext
 
-include(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
-using .Inbound: parse_inbound_instance
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 # ---------------------------------------------------------------------------
 # Configuration

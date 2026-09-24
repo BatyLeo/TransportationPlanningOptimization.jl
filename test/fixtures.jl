@@ -7,23 +7,11 @@
 # own private instance. Tests that ASSERT on `cost_scaling` must call
 # `reset!()` first (see TestFixtures.reset!).
 
-# Ensure exactly one canonical `Main.Inbound` module exists, whether this file
-# is loaded standalone (nothing pre-loaded `Inbound` yet: include it into
-# Main here) or nested under `runtests.jl` (which already did
-# `include("Inbound.jl")`: reuse that one). This line runs in the scope
-# `fixtures.jl` is included into, which is always Main, so `TestFixtures`
-# below can reference the single `Main.Inbound` via `..Inbound`. Doing the
-# include from inside `module TestFixtures` instead would create a second,
-# distinct `Inbound` module, and parsed values carry Inbound-specific info
-# types (`InboundArcInfo`, `InboundCommodityInfo`, see test/Inbound.jl:253,
-# 283) whose identity would then differ from `Main.Inbound`'s.
-isdefined(Main, :Inbound) || include(joinpath(@__DIR__, "Inbound.jl"))
-
 module TestFixtures
 
 using TransportationPlanningOptimization
 using Dates
-using ..Inbound: parse_inbound_instance
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 const DATADIR = joinpath(@__DIR__, "public")
 

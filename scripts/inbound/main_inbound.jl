@@ -1,8 +1,7 @@
 using Dates
 using TransportationPlanningOptimization
 const TPO = TransportationPlanningOptimization
-includet(joinpath(@__DIR__, "..", "..", "test", "Inbound.jl"))
-using .Inbound
+using TransportationPlanningOptimization.Problems.Inbound
 
 instance_name = "small"
 datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")

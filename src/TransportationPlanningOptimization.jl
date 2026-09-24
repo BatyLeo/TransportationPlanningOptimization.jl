@@ -120,4 +120,8 @@ function gurobi_optimizer end
 
 export gurobi_optimizer
 
+include("problems/Problems.jl")
+
+public Problems
+
 end

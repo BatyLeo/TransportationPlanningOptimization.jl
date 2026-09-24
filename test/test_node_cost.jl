@@ -6,8 +6,7 @@ using Random
 
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound: parse_inbound_instance
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 const TPO = TransportationPlanningOptimization
 

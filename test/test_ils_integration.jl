@@ -5,8 +5,7 @@ using Random
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
+using TransportationPlanningOptimization.Problems.Inbound
 
 # Reuse the mock perturbation pattern from test_ils_loop.jl
 struct IntegrationReinsertPerturbation <: AbstractPerturbation end

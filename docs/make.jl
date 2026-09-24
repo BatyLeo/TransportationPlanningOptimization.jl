@@ -43,6 +43,7 @@ makedocs(;
             "Solution I/O" => "guides/solution_io.md",
             "Type Transformations" => "guides/type_transformations.md",
         ],
+        "Problems" => "problems.md",
         "API Reference" => "api.md",
     ],
 )
