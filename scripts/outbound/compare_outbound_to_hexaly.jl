@@ -47,10 +47,10 @@ function load_hexaly_solution(instance, data_dir::AbstractString)
         return nothing
     end
 
-    df = DataFrame(CSV.File(result_file; decimal=','))
+    df = DataFrame(CSV.File(result_file; decimal=(',')))
 
     # Parse routes: group by IDRoute, build path nodes + model + volume
-    routes = Dict{Int,@NamedTuple{nodes::Vector{String}, model::String, volume::Float64}}()
+    routes = Dict{Int,@NamedTuple{nodes::Vector{String},model::String,volume::Float64}}()
     for sub in groupby(df, :IDRoute)
         sorted = sort(sub, :LegOrder)
         path_nodes = String[sorted[1, :OrigineLeg]]

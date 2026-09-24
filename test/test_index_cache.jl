@@ -19,7 +19,7 @@ const TPO = TransportationPlanningOptimization
     @test all(
         cache.ttg_code_to_spatial_code[code] ==
         MetaGraphsNext.code_for(ng, first(MetaGraphsNext.label_for(ttg, code))) &&
-        cache.ttg_code_to_tau[code] == last(MetaGraphsNext.label_for(ttg, code)) for
+            cache.ttg_code_to_tau[code] == last(MetaGraphsNext.label_for(ttg, code)) for
         code in 1:Graphs.nv(ttg)
     )
     @test all(

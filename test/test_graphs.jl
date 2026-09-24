@@ -210,13 +210,11 @@ end
             NetworkNode(; id="O", node_type=:origin, capacity=10, info=nothing),
             NetworkNode(; id="D", node_type=:destination, capacity=10, info=nothing),
         ]
-        arcs = [
-            (
-                "O",
-                "D",
-                NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing),
-            ),
-        ]
+        arcs = [(
+            "O",
+            "D",
+            NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), info=nothing),
+        ),]
         network_graph = NetworkGraph(nodes, arcs)
         # Create a bundle with one order
         order = Order(;
