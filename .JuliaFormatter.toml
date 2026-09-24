@@ -1,1 +1,3 @@
 style = "blue"
+conditional_to_if = false
+pipe_to_function_call = false
