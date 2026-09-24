@@ -121,7 +121,7 @@ function parse_outbound_instance(
             :other
         end
 
-        NetworkNode(;
+        return NetworkNode(;
             id="$(row[NODE_ID])",
             node_type=node_type_symbol,
             info=OutboundNodeInfo(Symbol(row[NODE_TYPE]), bts_candidates),
@@ -138,7 +138,7 @@ function parse_outbound_instance(
             LinearArcCost(row[ARC_COST])
         end
 
-        Arc(;
+        return Arc(;
             origin_id="$(row[ARC_ORIGIN_ID])",
             destination_id="$(row[ARC_DESTINATION_ID])",
             cost=cost,
@@ -201,7 +201,7 @@ function parse_outbound_instance(
         #     end
         # end
 
-        Commodity(;
+        return Commodity(;
             origin_id="$(row[COMMODITY_ORIGIN_ID])",
             destination_id="$(row[COMMODITY_DESTINATION_ID])",
             quantity=Int(row[COMMODITY_QUANTITY]),
@@ -240,9 +240,9 @@ function parse_dataMVP_instance(
     legs_file = joinpath(data_dir, "input", "leg_input_algo.csv")
     volumes_file = joinpath(data_dir, "input", "volumes_input_algo.csv")
 
-    df_nodes = DataFrame(CSV.File(nodes_file; delim=';'))
-    df_legs = DataFrame(CSV.File(legs_file; delim=';'))
-    df_volumes = DataFrame(CSV.File(volumes_file; delim=';'))
+    df_nodes = DataFrame(CSV.File(nodes_file; delim=(';')))
+    df_legs = DataFrame(CSV.File(legs_file; delim=(';')))
+    df_volumes = DataFrame(CSV.File(volumes_file; delim=(';')))
 
     nodes = map(eachrow(df_nodes)) do row
         node_type_symbol = if row[MVP_NODE_TYPE] == "Plant Compound"
@@ -252,7 +252,7 @@ function parse_dataMVP_instance(
         else
             :other
         end
-        NetworkNode(;
+        return NetworkNode(;
             id=String(row[MVP_NODE_CODE]),
             node_type=node_type_symbol,
             info=OutboundNodeInfo(Symbol(row[MVP_NODE_TYPE]), Int[]),
@@ -270,7 +270,7 @@ function parse_dataMVP_instance(
         monday_week_1 = january_4 - Day(dayofweek(january_4) - 1)
         date = DateTime(monday_week_1 + Week(week - 1))
 
-        Commodity(;
+        return Commodity(;
             origin_id=String(row[MVP_VOL_ORIGIN]),
             destination_id=String(row[MVP_VOL_DEST]),
             quantity=Int(ceil(row[MVP_VOL_QTY])),
@@ -290,7 +290,7 @@ function parse_dataMVP_instance(
     if model_costs
         grouped = Dict{
             Tuple{String,String,Symbol},
-            @NamedTuple{capacity::Int, costs::Dict{String,Float64}}
+            @NamedTuple{capacity::Int,costs::Dict{String,Float64}}
         }()
         arc_order = Tuple{String,String,Symbol}[]
         for row in eachrow(df_legs)
@@ -308,7 +308,7 @@ function parse_dataMVP_instance(
         arcs = map(arc_order) do key
             (origin_id, destination_id, mode_sym) = key
             g = grouped[key]
-            Arc(;
+            return Arc(;
                 origin_id=origin_id,
                 destination_id=destination_id,
                 cost=ModelLinearArcCost(g.costs),
@@ -335,7 +335,7 @@ function parse_dataMVP_instance(
         else
             LinearArcCost(unit_cost)
         end
-        Arc(;
+        return Arc(;
             origin_id=String(row[MVP_LEG_ORIGIN]),
             destination_id=String(row[MVP_LEG_DEST]),
             cost=cost,

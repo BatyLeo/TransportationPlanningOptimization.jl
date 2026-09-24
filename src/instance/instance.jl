@@ -360,7 +360,11 @@ function _validate_node_costs_on_empty_load(
         v = try
             evaluate(node.node_cost, C[])
         catch e
-            throw(ArgumentError("$header threw while evaluating an empty load: $(e). $footer"))
+            throw(
+                ArgumentError(
+                    "$header threw while evaluating an empty load: $(e). $footer"
+                ),
+            )
         end
         if v != 0.0
             throw(

@@ -192,7 +192,7 @@ end
     ab_edge_c = only(
         (u, v) for (u, v) in ttg.bundle_arcs[idx_c] if
         MetaGraphsNext.label_for(ttg.graph, u)[1] == "A" &&
-        MetaGraphsNext.label_for(ttg.graph, v)[1] == "B"
+            MetaGraphsNext.label_for(ttg.graph, v)[1] == "B"
     )
 
     sol = Solution(instance)
@@ -333,7 +333,7 @@ end
     ah_edge = only(
         (u, v) for
         (u, v) in ttg.bundle_arcs[1] if MetaGraphsNext.label_for(ttg.graph, u)[1] == "A" &&
-        MetaGraphsNext.label_for(ttg.graph, v)[1] == "H"
+            MetaGraphsNext.label_for(ttg.graph, v)[1] == "H"
     )
     inc = TPO.compute_ttg_edge_incremental_cost(
         sol, instance, instance.bundles[1], ah_edge...

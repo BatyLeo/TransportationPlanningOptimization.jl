@@ -100,8 +100,8 @@ function local_search!(
 
     if can_reintro || can_consolidate
         while (time() - t_start < time_limit) &&
-                  (iter < max_iter) &&
-                  (no_improv < max_no_improv)
+              (iter < max_iter) &&
+              (no_improv < max_no_improv)
             take_reintro = if can_reintro && can_consolidate
                 rand(rng) < 0.5
             else
