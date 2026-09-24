@@ -27,7 +27,7 @@ using Pkg
 Pkg.add("https://github.com/BatyLeo/TransportationPlanningOptimization.jl")
 ```
 
-Requires Julia 1.11+.
+Requires Julia 1.12+.
 
 ## Quick Start
 
