@@ -23,5 +23,5 @@ TransportationPlanningOptimization = {path = ".."}
 Aqua = "0.8"
 CSV = "0.10"
 JET = "0.12"
-JuliaFormatter = "=2.14.0"
+JuliaFormatter = "2"
 ProgressMeter = "1"
