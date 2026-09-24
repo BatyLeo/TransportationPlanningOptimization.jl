@@ -122,8 +122,6 @@ export gurobi_optimizer
 
 include("problems/Problems.jl")
 
-#! format: off
 public Problems
-#! format: on
 
 end
