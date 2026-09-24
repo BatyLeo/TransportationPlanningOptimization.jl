@@ -4,9 +4,6 @@ using TransportationPlanningOptimization
 
 const TPO = TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
-
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
 

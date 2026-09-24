@@ -3,10 +3,7 @@ using Dates
 using TransportationPlanningOptimization
 const TPO = TransportationPlanningOptimization
 
-# Already in Main from runtests.jl, but be defensive in case the file is loaded
-# standalone via include from the REPL.
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound: parse_inbound_instance
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 # Frozen bin packing is the default. FFD-union remains a valid opt-in. Both
 # must produce feasible solutions and finite costs that agree to within a few

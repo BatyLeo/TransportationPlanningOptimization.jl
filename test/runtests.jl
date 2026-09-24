@@ -1,8 +1,5 @@
 using Test
 
-include("Inbound.jl")
-using .Inbound
-
 include("fixtures.jl")
 using .TestFixtures
 

@@ -3,6 +3,7 @@ Tests for the tiny inbound logistics instance.
 """
 
 using TransportationPlanningOptimization
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 using Graphs
 using Test
 

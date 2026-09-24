@@ -1,8 +1,7 @@
 using Test
 using TransportationPlanningOptimization
 
-isdefined(Main, :Inbound) || include("Inbound.jl")
-using .Inbound
+using TransportationPlanningOptimization.Problems.Inbound
 
 const TPO = TransportationPlanningOptimization
 

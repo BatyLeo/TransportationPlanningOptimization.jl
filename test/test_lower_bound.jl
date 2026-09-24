@@ -1,5 +1,6 @@
 using Test
 using TransportationPlanningOptimization
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 using Dates
 
 isdefined(Main, :TestFixtures) || include("fixtures.jl")

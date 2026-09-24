@@ -1,203 +1,15 @@
-"""
-    Inbound
-
-Test helper module for reading and parsing inbound instances from CSV files.
-Contains constants for column mappings and functions for loading test data.
-"""
-module Inbound
-
-using CSV
-using DataFrames
-using Dates
-using TransportationPlanningOptimization
-
-const TPO = TransportationPlanningOptimization
-
-# Node CSV column mappings
-const NODE_ID = :point_account
-const NODE_COST = :point_m3_cost
-const NODE_CAPACITY = :point_m3_capacity
-const NODE_TYPE = :point_type
-
-# Arc CSV column mappings
-const ALLOWED_ARC_TYPES = [:direct, :outsource, :cross_plat, :delivery, :oversea, :shortcut]
-const ARC_ORIGIN_ID = :src_account
-const ARC_DESTINATION_ID = :dst_account
-const ARC_SHIPMENT_COST = :shipment_cost
-const ARC_CAPACITY = :capacity
-const ARC_TYPE = :leg_type
-const ARC_ORIGIN_TYPE = :src_type
-const ARC_DESTINATION_TYPE = :dst_type
-const ARC_DISTANCE = :distance
-const ARC_TRAVEL_TIME = :travel_time
-const ARC_CARBON_COST = :carbon_cost
-
-# Commodity CSV column mappings
-const COMMODITY_ORIGIN_ID = :supplier_account
-const COMMODITY_DESTINATION_ID = :customer_account
-const COMMODITY_SIZE = :size
-const COMMODITY_ARRIVAL_DATE = :delivery_date
-const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
-const COMMODITY_QUANTITY = :quantity
-const COMMODITY_LEAD_TIME_COST = :lead_time_cost
-
-# Integer scaling factor for commodity sizes and arc capacities
-const VOLUME_FACTOR = 100
-
-"""
-    InboundArcInfo
-
-Test data structure for arc metadata in inbound instances.
-"""
-struct InboundArcInfo
-    arc_type::Symbol
-end
-
-"""
-    InboundCommodityInfo
-
-Per-commodity Inbound info. Carries the stock cost read from the
-`lead_time_cost` column of the commodities CSV. Stored on `Commodity.info` and
-read by `StockArcCost.evaluate`.
-"""
-struct InboundCommodityInfo
-    stock_cost::Float64
-end
-
-"""
-    StockArcCost(distance)
-
-Stock cost on an arc, computed as `distance * sum(stockCost)` over orders.
-The arc's distance (km) comes from the leg CSV and per-commodity stock cost
-is read from `commodity.info.stock_cost`.
-
-Requires `Commodity.info` to be an `InboundCommodityInfo` (or any struct
-exposing `stock_cost`). Calling `evaluate` on commodities without that field
-errors at the property access.
-"""
-struct StockArcCost <: TPO.AbstractArcCostFunction
-    distance::Float64
-end
-
-function TPO.evaluate(
-    c::StockArcCost, comms::Vector{<:TPO.LightCommodity}; presorted::Bool=false
-)
-    return c.distance * sum(x.info.stock_cost for x in comms; init=0.0)
-end
-
-"""
-    parse_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
-
-Read an inbound instance from three CSV files: nodes, legs, and commodities.
-
-Returns a named tuple `(; nodes, arcs, commodities)` containing:
-- `nodes::Vector{NetworkNode}` - Network nodes parsed from node_file
-- `arcs::Vector{NetworkArc}` - Network arcs parsed from leg_file
-- `commodities::Vector{Commodity}` - Commodities parsed from commodity_file
-
-The function performs deduplication of arcs (keeps only the first arc for each 
-origin-destination pair) and handles heterogeneous cost function types.
-"""
-function parse_inbound_instance(
-    node_file::String, leg_file::String, commmodity_file::String
-)
-    df_nodes = DataFrame(CSV.File(node_file; stringtype=String))
-    df_legs = DataFrame(CSV.File(leg_file; stringtype=String))
-    df_commodities = DataFrame(CSV.File(commmodity_file; stringtype=String))
-
-    nodes = map(eachrow(df_nodes)) do row
-        node_type_symbol = if row[NODE_TYPE] == "supplier"
-            :origin
-        elseif row[NODE_TYPE] == "plant"
-            :destination
-        else
-            :other
-        end
-
-        return NetworkNode(;
-            id=string(row[NODE_ID]),
-            node_type=node_type_symbol,
-            capacity=Int(row[NODE_CAPACITY]),
-            node_cost=LinearNodeCost(Float64(row[NODE_COST]) / VOLUME_FACTOR),
-        )
-    end
-
-    leg_fields_to_check = [
-        ARC_ORIGIN_ID,
-        ARC_DESTINATION_ID,
-        ARC_SHIPMENT_COST,
-        ARC_CAPACITY,
-        ARC_TYPE,
-        ARC_ORIGIN_TYPE,
-        ARC_DESTINATION_TYPE,
-        ARC_DISTANCE,
-        ARC_TRAVEL_TIME,
-        ARC_CARBON_COST,
-    ]
-    filter!(row -> all(col -> !ismissing(row[col]), leg_fields_to_check), df_legs)
-
-    raw_arcs = map(eachrow(df_legs)) do row
-        shipment_cost = Float64(row[ARC_SHIPMENT_COST])
-        capacity = round(Int, row[ARC_CAPACITY] * VOLUME_FACTOR)
-        carbon_cost = Float64(row[ARC_CARBON_COST])
-        distance = Float64(row[ARC_DISTANCE])
-        base_cost = if row.is_linear
-            LinearArcCost(shipment_cost / capacity)
-        else
-            BinPackingArcCost(shipment_cost, capacity)
-        end
-        cost_tuple = (
-            base_cost, LinearArcCost(carbon_cost / capacity), StockArcCost(distance)
-        )
-        return Arc(;
-            origin_id=string(row[ARC_ORIGIN_ID]),
-            destination_id=string(row[ARC_DESTINATION_ID]),
-            travel_time=Week(row[ARC_TRAVEL_TIME]),
-            cost=cost_tuple,
-            info=InboundArcInfo(Symbol(row[ARC_TYPE])),
-        )
-    end
-    # keep only the first arc for each (origin_id, destination_id) pair
-    seen = Set{Tuple{String,String}}()
-    nb_duplicates = 0
-    raw_arcs = filter(arc -> begin
-        pair = (arc.origin_id, arc.destination_id)
-        if pair in seen
-            nb_duplicates += 1
-            false
-        else
-            push!(seen, pair)
-            true
-        end
-    end, raw_arcs)
-    if nb_duplicates > 0
-        @warn "$nb_duplicates duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept."
-    end
-    # filter!(arc -> arc.info.arc_type in ALLOWED_ARC_TYPES, raw_arcs)
-    # arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
-
-    commodities = map(eachrow(df_commodities)) do row
-        return Commodity(;
-            origin_id=string(row[COMMODITY_ORIGIN_ID]),
-            destination_id=string(row[COMMODITY_DESTINATION_ID]),
-            size=Float64(max(1, round(Int, row[COMMODITY_SIZE] * VOLUME_FACTOR))),
-            quantity=Int(row[COMMODITY_QUANTITY]),
-            arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),
-            max_delivery_time=Week(row[COMMODITY_MAX_DELIVERY_TIME]),
-            info=InboundCommodityInfo(Float64(row[COMMODITY_LEAD_TIME_COST])),
-        )
-    end
-
-    return (; nodes, arcs=raw_arcs, commodities)
-end
-
-# ---- ILS code below could be moved to another file
+# Inbound-specific perturbations kept as experimental script code, not part of
+# the package. Meant to be `include`d from scripts run with `julia --project=scripts`.
 
 using Random
 using SparseArrays
 using JuMP
 using HiGHS
 using MetaGraphsNext: MetaGraphsNext
+using TransportationPlanningOptimization
+using TransportationPlanningOptimization.Problems.Inbound
+
+const TPO = TransportationPlanningOptimization
 
 # ─── Perturbation types ───
 
@@ -326,7 +138,7 @@ end
 # ── Helpers for identifying arc cost types ──
 
 _bp_cost_of(cost::TPO.BinPackingArcCost) = cost
-_bp_cost_of(cost::TPO.SumArcCost) = TPO._find_bin_packing(cost)
+_bp_cost_of(cost::TPO.SumArcCost) = TPO._try_find_bin_packing(cost)
 _bp_cost_of(::TPO.AbstractArcCostFunction) = nothing
 _bp_cost_of(::TPO.ShortcutArcCost) = nothing
 
@@ -341,7 +153,7 @@ end
 _non_bp_cost(cost::TPO.BinPackingArcCost, comms) = 0.0
 _non_bp_cost(cost::TPO.LinearArcCost, comms) = TPO.evaluate(cost, comms)
 _non_bp_cost(cost::TPO.ShortcutArcCost, comms) = 0.0
-_non_bp_cost(cost::StockArcCost, comms) = TPO.evaluate(cost, comms)
+_non_bp_cost(cost::Inbound.StockArcCost, comms) = TPO.evaluate(cost, comms)
 _non_bp_cost(cost::TPO.AbstractArcCostFunction, comms) = TPO.evaluate(cost, comms)
 function _non_bp_cost(cost::TPO.SumArcCost, comms)
     total = 0.0
@@ -843,29 +655,3 @@ function TPO.perturbate!(
     verbose && @info "MILP perturbation accepted" improvement n_changed
     return (improvement, n_changed)
 end
-
-export InboundArcInfo,
-    InboundCommodityInfo,
-    StockArcCost,
-    parse_inbound_instance,
-    PlantPerturbation,
-    SupplierPerturbation,
-    MILPPlantPerturbation,
-    NODE_ID,
-    NODE_COST,
-    NODE_CAPACITY,
-    NODE_TYPE,
-    ARC_ORIGIN_ID,
-    ARC_DESTINATION_ID,
-    ARC_SHIPMENT_COST,
-    ARC_CAPACITY,
-    ARC_TYPE,
-    COMMODITY_ORIGIN_ID,
-    COMMODITY_DESTINATION_ID,
-    COMMODITY_SIZE,
-    COMMODITY_ARRIVAL_DATE,
-    COMMODITY_MAX_DELIVERY_TIME,
-    COMMODITY_QUANTITY,
-    COMMODITY_LEAD_TIME_COST
-
-end  # module Inbound
