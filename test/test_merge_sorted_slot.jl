@@ -8,7 +8,7 @@ const LC = typeof(_mk(1.0))
 
 function _slot(comms::Vector{LC}; sorted::Bool=true)
     ts = sum(c.size for c in comms; init=0.0)
-    return TPO.SingleAssignment{LC}(comms, TPO.Bin{LC}[], 0.0, sorted, ts, false)
+    return TPO.SingleAssignment{LC}(comms, TPO.Bin{LC}[], 0.0, 0.0, sorted, ts, false)
 end
 
 # Sizes of `slot.commodities` in descending order means: sorted_desc(slot) ↔ all neighbors satisfy >=.

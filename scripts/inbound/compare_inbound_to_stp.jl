@@ -166,16 +166,14 @@ function _run_tpo(instance, ls_limit::Real)
     end
 
     function full_cost(sub_sol)
-        return TPO.cost_with_nodes(
-            TPO.merge_solutions(filtering_sol, sub_sol, instance, sub), instance
-        )
+        return TPO.cost(TPO.merge_solutions(filtering_sol, sub_sol, instance, sub))
     end
     greedy_cost = full_cost(candidates.greedy)
     lb_cost = full_cost(candidates.lower_bound)
     mixed_cost = full_cost(candidates.mixed)
 
     init_full = TPO.merge_solutions(filtering_sol, chosen, instance, sub)
-    init_cost = TPO.cost_with_nodes(init_full, instance)
+    init_cost = TPO.cost(init_full)
     init_feasible = TPO.is_feasible(init_full, instance)
 
     ls_iters = 0
@@ -189,7 +187,7 @@ function _run_tpo(instance, ls_limit::Real)
     end
 
     ls_full = TPO.merge_solutions(filtering_sol, chosen, instance, sub)
-    ls_cost = TPO.cost_with_nodes(ls_full, instance)
+    ls_cost = TPO.cost(ls_full)
     ls_feasible = TPO.is_feasible(ls_full, instance)
 
     return (;
@@ -270,7 +268,7 @@ function _run_stp(instance, ls_limit::Real; ils_limit::Real=0)
         inner_ls = round(Int, min(2700.0, ils_limit))
         mktemp() do path, io
             redirect_stdout(io) do
-                STP.ILS!(
+                return STP.ILS!(
                     chosen,
                     sub;
                     timeLimit=Int(ils_limit),
@@ -313,7 +311,7 @@ function _cross_validate(tpo_full_sol, tpo_instance, stp_instance)
     tpo_in_stp = _build_stp_from_translated(translated, stp_instance)
     feasible = STP.is_feasible(stp_instance, tpo_in_stp)
     recomputed_cost = STP.compute_cost(stp_instance, tpo_in_stp)
-    tpo_cost = TPO.cost_with_nodes(tpo_full_sol, tpo_instance)
+    tpo_cost = TPO.cost(tpo_full_sol)
     cost_ratio = tpo_cost == 0 ? NaN : recomputed_cost / tpo_cost
     return (; n_translated, n_total, feasible, cost_ratio)
 end

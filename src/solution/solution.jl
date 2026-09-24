@@ -39,8 +39,29 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the cost of the solution by summing individual arc costs.
+Compute the total cost of the solution: the sum, over every edge assignment, of the
+arc cost plus the head node's cost (see [`cost_of`](@ref)).
 """
 function cost(sol::Solution)
     return sum(cost_of(a) for a in values(sol.assignments); init=0.0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Sum of the arc-only cost component across every edge assignment of `sol` (see
+[`arc_cost_of`](@ref)). Excludes head-node costs, unlike [`cost`](@ref).
+"""
+function total_arc_cost(sol::Solution)
+    return sum(arc_cost_of(a) for a in values(sol.assignments); init=0.0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Sum of the head-node cost component across every edge assignment of `sol` (see
+[`node_cost_of`](@ref)). Excludes arc costs, unlike [`cost`](@ref).
+"""
+function total_node_cost(sol::Solution)
+    return sum(node_cost_of(a) for a in values(sol.assignments); init=0.0)
 end

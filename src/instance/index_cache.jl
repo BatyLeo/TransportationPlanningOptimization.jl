@@ -63,7 +63,13 @@ function build_index_cache(
         (u, v) in MetaGraphsNext.edge_labels(ng)
     )
 
-    spatial_code_to_node_cost = [
+    # Union of the concrete `node_cost` types actually present, narrower than `AbstractNodeCostFunction` for mixed instances, regardless of how `ng` was built.
+    NC = if n_net == 0
+        AbstractNodeCostFunction
+    else
+        Union{(typeof(ng[l].node_cost) for l in MetaGraphsNext.labels(ng))...}
+    end
+    spatial_code_to_node_cost = NC[
         ng[MetaGraphsNext.label_for(ng, c)].node_cost for c in 1:n_net
     ]
 

@@ -27,6 +27,7 @@ res = local_search!(sub_sol, sub_instance; time_limit=30);
 
 full_solution = TPO.merge_solutions(filtering_sol, sub_sol, instance, sub_instance);
 is_feasible(full_solution, instance; verbose=true)
-cost_with_nodes(full_solution, instance)
 cost(full_solution)
+total_arc_cost(full_solution)
+total_node_cost(full_solution)
 full_solution

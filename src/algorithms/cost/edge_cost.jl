@@ -323,3 +323,55 @@ function _edge_lower_bound_cost(
         ) for i in eachindex(arc.modes)
     )
 end
+
+# ============================================================================
+# Node-cost incremental helpers
+#
+# Shared by `compute_ttg_edge_incremental_cost` and
+# `compute_ttg_edge_lower_bound_cost`. `existing` is the (possibly absent) edge
+# assignment already at the head node, the node cost is evaluated on its full
+# load (see `_node_load`), never on a single mode's slot.
+# ============================================================================
+
+@inline function _node_incremental_cost(
+    ::NoNodeCost, _, ::Vector{<:LightCommodity}, ::Float64
+)
+    return 0.0
+end
+@inline function _node_incremental_cost(
+    f::LinearNodeCost, _, ::Vector{<:LightCommodity}, s::Float64
+)
+    return f.cost_per_unit_size * s
+end
+"""
+$TYPEDSIGNATURES
+
+Marginal head-node cost of routing `new` (with precomputed total size `s`) onto an
+edge already carrying `existing`. Explicit `NoNodeCost`/`LinearNodeCost`
+specializations avoid the `evaluate` allocation on the hot routing path, other node
+costs fall back to `incremental_cost`.
+"""
+function _node_incremental_cost(
+    f::AbstractNodeCostFunction, existing, new::Vector{C}, ::Float64
+) where {C<:LightCommodity}
+    load = existing === nothing ? C[] : _node_load(existing)
+    return incremental_cost(f, load, new)
+end
+
+@inline function _node_lower_bound_incremental_cost(
+    ::NoNodeCost, _, ::Vector{<:LightCommodity}
+)
+    return 0.0
+end
+"""
+$TYPEDSIGNATURES
+
+Lower-bound counterpart of [`_node_incremental_cost`](@ref): the relaxed marginal
+head-node cost of routing `new` onto an edge already carrying `existing`.
+"""
+function _node_lower_bound_incremental_cost(
+    f::AbstractNodeCostFunction, existing, new::Vector{C}
+) where {C<:LightCommodity}
+    load = existing === nothing ? C[] : _node_load(existing)
+    return lower_bound_incremental_cost(f, load, new)
+end

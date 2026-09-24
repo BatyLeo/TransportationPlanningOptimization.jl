@@ -36,7 +36,7 @@ const _GREEDY = Dict{Tuple{String,Bool},Any}()
 
 function _parsed(name::String)
     return get!(_PARSED, name) do
-        parse_inbound_instance(
+        return parse_inbound_instance(
             joinpath(DATADIR, "$(name)_nodes.csv"),
             joinpath(DATADIR, "$(name)_legs.csv"),
             joinpath(DATADIR, "$(name)_commodities.csv"),
@@ -47,13 +47,13 @@ end
 function _instance(name::String, wrap_time::Bool)
     return get!(_INSTANCE, (name, wrap_time)) do
         (; nodes, arcs, commodities) = _parsed(name)
-        Instance(nodes, arcs, commodities, Week(1); wrap_time=wrap_time)
+        return Instance(nodes, arcs, commodities, Week(1); wrap_time=wrap_time)
     end
 end
 
 function _greedy(name::String, wrap_time::Bool)
     sol = get!(_GREEDY, (name, wrap_time)) do
-        greedy_heuristic(_instance(name, wrap_time))
+        return greedy_heuristic(_instance(name, wrap_time))
     end
     return deepcopy(sol)
 end

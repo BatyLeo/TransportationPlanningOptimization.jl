@@ -347,6 +347,35 @@ end
 """
 $TYPEDSIGNATURES
 
+Check that every node's cost function evaluates to `0.0` on an empty load (a required
+invariant, see `SingleAssignment`/`MultiAssignment`'s `node_cost` field), throwing an
+`ArgumentError` naming the offending node otherwise.
+"""
+function _validate_node_costs_on_empty_load(
+    nodes::Vector{<:NetworkNode}, ::Type{C}
+) where {C<:LightCommodity}
+    for node in nodes
+        header = "Node cost function $(typeof(node.node_cost)) on node \"$(node.id)\""
+        footer = "`evaluate` must return 0.0 on an empty load, e.g. use sum(...; init=0.0)."
+        v = try
+            evaluate(node.node_cost, C[])
+        catch e
+            throw(ArgumentError("$header threw while evaluating an empty load: $(e). $footer"))
+        end
+        if v != 0.0
+            throw(
+                ArgumentError(
+                    "$header evaluates to $(v) on an empty load, expected 0.0. $footer"
+                ),
+            )
+        end
+    end
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
 Internal builder behind the public [`Instance`](@ref) constructor. Expects `nodes` and
 `arcs` already narrowed to `NetworkGraph` form (`arcs` are `(origin_id, destination_id,
 NetworkArc)` tuples).
@@ -367,6 +396,7 @@ function build_instance(
     allow_multimodal::Bool=false,
 ) where {is_date_arrival,ID,I,NA<:NetworkArc}
     narrowed_nodes = collect_nodes(infer_node_cost_types(nodes), nodes; validate=false)
+    _validate_node_costs_on_empty_load(narrowed_nodes, LightCommodity{I})
     network_graph = NetworkGraph(narrowed_nodes, arcs; allow_multimodal)
     order_dict, time_horizon_length, start_date = _expand_commodities(
         commodities, time_step, group_by, wrap_time
