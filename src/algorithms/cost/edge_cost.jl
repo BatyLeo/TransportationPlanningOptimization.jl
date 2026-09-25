@@ -46,6 +46,7 @@ function _edge_incremental_cost(
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
+    _mode_has_capacity(arc, 0.0, new_comms) || return Inf
     return incremental_cost!(buffer, arc.cost, nothing, new_comms)
 end
 
@@ -66,6 +67,7 @@ function _edge_incremental_cost(
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
+    _mode_has_capacity(arc, existing.total_size, new_comms) || return Inf
     if packing === :frozen
         return _frozen_edge_incremental_cost(
             buffer, arc.cost, existing, new_comms, new_total_size

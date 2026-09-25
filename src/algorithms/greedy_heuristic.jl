@@ -58,8 +58,9 @@ so bundles with the hardest-to-pack items go first.
   committed costs agree.
 
 # Errors
-Throws `ArgumentError` if no feasible path exists for a bundle. With
-[`CheapestMode`](@ref), this can happen when no single mode on a required edge
+Throws `ArgumentError` if no feasible path exists for a bundle. This can happen
+when a required `NetworkArc` does not have enough remaining capacity, or, with
+[`CheapestMode`](@ref), when no single mode on a required `MultiModalArc` edge
 has enough remaining capacity. With [`FillThenSpillMode`](@ref), it happens when
 the combined capacity across all modes on a required edge is below the load.
 """

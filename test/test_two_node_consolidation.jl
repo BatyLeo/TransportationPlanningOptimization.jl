@@ -1,7 +1,8 @@
 using Test
 using TransportationPlanningOptimization
 using Dates
-using MetaGraphsNext: label_for
+using Graphs
+using MetaGraphsNext: label_for, code_for
 using Random: MersenneTwister
 
 const TPO = TransportationPlanningOptimization
@@ -38,9 +39,10 @@ end
     lifted_idxs = [1, 2]
     virtual, virtual_arcs = TPO.merge_bundles(instance, lifted_idxs)
 
-    expected_order_count =
-        length(instance.bundles[1].orders) + length(instance.bundles[2].orders)
+    all_lifted_orders = vcat(instance.bundles[1].orders, instance.bundles[2].orders)
+    expected_order_count = length(Set(o.time_step for o in all_lifted_orders))
     @test length(virtual.orders) == expected_order_count
+    @test allunique(o.time_step for o in virtual.orders)
 
     expected_forbidden_nodes = union(
         instance.bundles[1].forbidden_nodes, instance.bundles[2].forbidden_nodes
@@ -62,6 +64,31 @@ end
     @test virtual_arcs === instance.travel_time_graph.bundle_arcs[lifted_idxs[donor_local]]
 
     @test_throws ArgumentError TPO.merge_bundles(instance, Int[])
+end
+
+@testset "merge_bundles merges orders sharing a time step" begin
+    instance = TestFixtures.small_instance()
+    lifted_idxs = [1, 2]
+    virtual, _ = TPO.merge_bundles(instance, lifted_idxs)
+
+    all_orders_flat = vcat(instance.bundles[1].orders, instance.bundles[2].orders)
+    distinct_steps = Set(o.time_step for o in all_orders_flat)
+    @test length(distinct_steps) < length(all_orders_flat)
+    @test issorted(o.time_step for o in virtual.orders)
+
+    # Total size and total commodity count are preserved across the merge.
+    @test sum(total_size(o) for o in virtual.orders) ≈
+        sum(total_size(o) for o in all_orders_flat)
+    @test sum(length(o.commodities) for o in virtual.orders) ==
+        sum(length(o.commodities) for o in all_orders_flat)
+
+    # The merged order at the colliding time step keeps the tighter transit budget.
+    collision_step = first(
+        t for t in distinct_steps if count(o -> o.time_step == t, all_orders_flat) > 1
+    )
+    merged_order = only(filter(o -> o.time_step == collision_step, virtual.orders))
+    sources = filter(o -> o.time_step == collision_step, all_orders_flat)
+    @test merged_order.max_transit_steps == minimum(o.max_transit_steps for o in sources)
 end
 
 @testset "splice_path replaces (src, dst) sub-segment" begin
@@ -133,6 +160,85 @@ end
     @test is_feasible(sol, instance; verbose=true)
     @test saved >= -1e-6
     @test cost(sol) <= cost_before + 1e-6
+end
+
+@testset "TPO.two_node_common_incremental! respects capacity with same-time-step orders" begin
+    # Regression for the merge_bundles capacity bug: bundles B and D deliver on
+    # the same date and both start on the direct, uncapacitated H->C arc. A
+    # cheaper detour H->Z->C has capacity 2, below their combined size (3.0)
+    # but above either order alone (1.5), so pre-fix pricing (one order at a
+    # time) wrongly accepts the detour and overflows H->Z.
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="H", node_type=:other),
+        NetworkNode(; id="Z", node_type=:other),
+        NetworkNode(; id="C", node_type=:other),
+        NetworkNode(; id="B", node_type=:destination),
+        NetworkNode(; id="D", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="H", cost=LinearArcCost(0.0), travel_time=Day(0)
+        ),
+        Arc(;
+            origin_id="H",
+            destination_id="Z",
+            cost=LinearArcCost(0.5),
+            travel_time=Day(0),
+            capacity=2,
+        ),
+        Arc(;
+            origin_id="Z", destination_id="C", cost=LinearArcCost(0.5), travel_time=Day(0)
+        ),
+        Arc(;
+            origin_id="H", destination_id="C", cost=LinearArcCost(10.0), travel_time=Day(0)
+        ),
+        Arc(;
+            origin_id="C", destination_id="B", cost=LinearArcCost(0.0), travel_time=Day(0)
+        ),
+        Arc(;
+            origin_id="C", destination_id="D", cost=LinearArcCost(0.0), travel_time=Day(0)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(0),
+            size=1.5,
+        ),
+        Commodity(;
+            origin_id="A",
+            destination_id="D",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(0),
+            size=1.5,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    ttg = instance.travel_time_graph
+    idx_b = findfirst(b -> b.destination_id == "B", instance.bundles)
+    idx_d = findfirst(b -> b.destination_id == "D", instance.bundles)
+
+    # Build both bundles directly on the direct A->H->C->{B,D} route.
+    code(id) = code_for(ttg.graph, (id, 0))
+    bundle_paths = Vector{Vector{Int}}(undef, 2)
+    bundle_paths[idx_b] = [code("A"), code("H"), code("C"), code("B")]
+    bundle_paths[idx_d] = [code("A"), code("H"), code("C"), code("D")]
+    sol = Solution(bundle_paths, instance)
+    @test is_feasible(sol, instance; verbose=true)
+
+    src, dst = code("H"), code("C")
+    @test TPO.bundles_through_arc(sol, src, dst) == sort([idx_b, idx_d])
+
+    old_paths = deepcopy(sol.bundle_paths)
+    saved = TPO.two_node_common_incremental!(sol, instance, src, dst; refine=false)
+    @test saved == 0.0
+    @test sol.bundle_paths == old_paths
+    @test is_feasible(sol, instance; verbose=true)
 end
 
 @testset "TPO.loop_two_nodes! smoke test on small" begin
