@@ -26,7 +26,9 @@ Dijkstra. Returns `(virtual_bundle, virtual_bundle_arcs)`.
 
 The donor (bundle with the longest delivery window) provides origin/destination
 and the reachable-arc set. Forbidden nodes/arcs are the union over all lifted
-bundles.
+bundles. Orders sharing a `time_step` (across lifted bundles) are merged into
+one `Order` (keeping the tighter `max_transit_steps`) so their combined load
+is priced and capacity-checked together.
 """
 function merge_bundles(instance::Instance, lifted_idxs::Vector{Int})
     isempty(lifted_idxs) &&
@@ -40,7 +42,33 @@ function merge_bundles(instance::Instance, lifted_idxs::Vector{Int})
     donor_idx = lifted_idxs[donor_local_idx]
     donor = lifted[donor_local_idx]
 
-    all_orders = vcat([b.orders for b in lifted]...)
+    # Orders in different lifted bundles can share a delivery date (the normal
+    # case in static instances), pricing one order at a time against the arc
+    # would under-count their combined load. Sort by time_step and merge
+    # consecutive equal-time_step runs into one Order.
+    O = eltype(donor.orders)
+    all_lifted_orders = reduce(vcat, [b.orders for b in lifted])
+    sort!(all_lifted_orders; by=o -> o.time_step)
+
+    all_orders = O[]
+    i = 1
+    n = length(all_lifted_orders)
+    while i <= n
+        j = i
+        t = all_lifted_orders[i].time_step
+        while j < n && all_lifted_orders[j + 1].time_step == t
+            j += 1
+        end
+        if j == i
+            push!(all_orders, all_lifted_orders[i])
+        else
+            run = @view all_lifted_orders[i:j]
+            commodities = reduce(vcat, [o.commodities for o in run])
+            max_transit = minimum(o.max_transit_steps for o in run)
+            push!(all_orders, O(commodities, t, max_transit))
+        end
+        i = j + 1
+    end
 
     forbidden_nodes = Set{String}()
     forbidden_arcs = Set{Tuple{String,String}}()
