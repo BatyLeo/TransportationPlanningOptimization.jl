@@ -33,6 +33,23 @@ is_feasible(solution, instance; verbose=true)
 cost(solution)
 ```
 
+## Multicommodity flow
+
+The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances of the multicommodity capacitated fixed-charge network design problem.
+Instances are downloaded on demand from the CommaLab (University of Pisa) collection via [DataDeps.jl](https://github.com/oxinabox/DataDeps.jl).
+The code block below is illustrative only and is not run when building the docs, since it would trigger a download.
+
+```julia
+using TransportationPlanningOptimization.Problems.MultiCommodityFlow
+
+list_instances(CanadC())
+dataset_dir(CanadC())
+```
+
 ```@autodocs
-Modules = [TransportationPlanningOptimization.Problems, TransportationPlanningOptimization.Problems.Inbound]
+Modules = [
+    TransportationPlanningOptimization.Problems,
+    TransportationPlanningOptimization.Problems.Inbound,
+    TransportationPlanningOptimization.Problems.MultiCommodityFlow,
+]
 ```
