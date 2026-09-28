@@ -265,19 +265,26 @@ end
 #
 # The optimistic counterpart of `_edge_incremental_cost`: each mode's increment
 # comes from `lower_bound_incremental_cost` (fractional bin counts, no capacity
-# ceiling), so there is no `:frozen`/`:ffd_union` split and no feasibility gate.
-# `NetworkArc` forwards to its single mode; `MultiModalArc` + `CheapestMode`
-# takes the minimum over modes. Used by the lower-bound and filtering strategies.
+# ceiling), so there is no `:frozen`/`:ffd_union` split. The only feasibility
+# gate is on the batch's own size: an order's commodities always travel
+# together on one edge, so a batch that alone exceeds a mode's capacity is
+# infeasible in every solution and is priced `Inf` (existing load on the mode
+# is otherwise ignored, keeping the bound order-independent and a valid
+# relaxation). `NetworkArc` forwards to its single mode; `MultiModalArc` +
+# `CheapestMode` takes the minimum over modes. Used by the lower-bound and
+# filtering strategies.
 # ============================================================================
 
 """
 $TYPEDSIGNATURES
 
-Empty `NetworkArc` lower bound: relaxed increment of the batch against no load.
+Empty `NetworkArc` lower bound: relaxed increment of the batch against no load,
+gated on the batch alone fitting the arc.
 """
 function _edge_lower_bound_cost(
     arc::NetworkArc, ::Nothing, new_comms::Vector{C}, ::AbstractModeSelector
 ) where {C<:LightCommodity}
+    _mode_has_capacity(arc, 0.0, new_comms) || return Inf
     return lower_bound_incremental_cost(arc.cost, C[], new_comms)
 end
 
@@ -285,7 +292,7 @@ end
 $TYPEDSIGNATURES
 
 Loaded `NetworkArc` lower bound: relaxed increment against the existing
-commodities.
+commodities, gated on the batch alone (ignoring existing load) fitting the arc.
 """
 function _edge_lower_bound_cost(
     arc::NetworkArc,
@@ -293,6 +300,7 @@ function _edge_lower_bound_cost(
     new_comms::Vector{C},
     ::AbstractModeSelector,
 ) where {C<:LightCommodity}
+    _mode_has_capacity(arc, 0.0, new_comms) || return Inf
     return lower_bound_incremental_cost(arc.cost, existing.commodities, new_comms)
 end
 
@@ -300,13 +308,18 @@ end
 $TYPEDSIGNATURES
 
 Empty `MultiModalArc` lower bound under `CheapestMode`: minimum relaxed
-increment over modes, each against no load.
+increment over modes, each against no load and gated on the batch alone
+fitting that mode.
 """
 function _edge_lower_bound_cost(
     arc::MultiModalArc, ::Nothing, new_comms::Vector{C}, ::CheapestMode
 ) where {C<:LightCommodity}
     return minimum(
-        lower_bound_incremental_cost(mode.cost, C[], new_comms) for mode in arc.modes
+        if _mode_has_capacity(mode, 0.0, new_comms)
+            lower_bound_incremental_cost(mode.cost, C[], new_comms)
+        else
+            Inf
+        end for mode in arc.modes
     )
 end
 
@@ -314,15 +327,20 @@ end
 $TYPEDSIGNATURES
 
 Loaded `MultiModalArc` lower bound under `CheapestMode`: minimum relaxed
-increment over modes, each against that mode's existing commodities.
+increment over modes, each against that mode's existing commodities and gated
+on the batch alone (ignoring existing load) fitting that mode.
 """
 function _edge_lower_bound_cost(
     arc::MultiModalArc, existing::MultiAssignment{C}, new_comms::Vector{C}, ::CheapestMode
 ) where {C<:LightCommodity}
     return minimum(
-        lower_bound_incremental_cost(
-            arc.modes[i].cost, existing.per_mode[i].commodities, new_comms
-        ) for i in eachindex(arc.modes)
+        if _mode_has_capacity(arc.modes[i], 0.0, new_comms)
+            lower_bound_incremental_cost(
+                arc.modes[i].cost, existing.per_mode[i].commodities, new_comms
+            )
+        else
+            Inf
+        end for i in eachindex(arc.modes)
     )
 end
 

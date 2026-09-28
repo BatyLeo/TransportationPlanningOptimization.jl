@@ -50,8 +50,11 @@ $TYPEDSIGNATURES
 
 For each bundle, find the cheapest path under the relaxed lower-bound cost
 (fractional bin counts on `BinPackingArcCost` arcs) and insert it into a fresh
-`Solution`. Bundles are processed in input order, but every bundle's cost matrix
-is computed against the *empty* solution, so paths are independent of one another.
+`Solution`. Bundles are processed in decreasing order of `max_pack_size`, but
+every bundle's cost matrix is computed against the *empty* solution, so paths
+are independent of one another. Each order is still gated against every arc's
+hard capacity on its own (see `_edge_lower_bound_cost`), but orders from
+different bundles are priced independently and may jointly overload an arc.
 The result is a valid lower bound when costs are linear in total volume per bundle,
 and a near-tight bound otherwise.
 """
