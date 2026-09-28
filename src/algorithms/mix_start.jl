@@ -103,7 +103,11 @@ function mix_greedy_and_lower_bound(
         for (u, v) in bundle_arcs
             lb_cost = ttg.cost_matrix[u, v]
             greedy_cost = greedy_snapshot[(u, v)]
-            ttg.cost_matrix[u, v] = w_greedy * greedy_cost + w_lb * lb_cost
+            ttg.cost_matrix[u, v] = if isinf(greedy_cost) || isinf(lb_cost)
+                Inf
+            else
+                w_greedy * greedy_cost + w_lb * lb_cost
+            end
         end
         mix_parents, _ = bundle_dijkstra(
             ttg.graph, origin, ttg.cost_matrix; dst=destination

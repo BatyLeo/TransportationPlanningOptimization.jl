@@ -144,7 +144,7 @@ $TYPEDSIGNATURES
 Lower-bound cost for the bundle's direct arc, summed per order. Mirrors
 Renault's `get_lb_transport_units` for `:direct` arcs: each order contributes
 `ceil(order_size / bin_capacity) * cost_per_bin` on bin-packing arcs (or
-`cost_per_unit_size * order_size` on linear arcs).Used internally by
+`cost_per_unit_size * order_size` on linear arcs). Used internally by
 `compute_ttg_edge_lower_bound_cost` when the TTG edge is identified as the
 bundle's direct arc.
 """
@@ -186,6 +186,8 @@ function _direct_arc_order_lb_cost(
     commodities::Vector{<:LightCommodity},
     ::AbstractModeSelector,
 )
+    # Batch-only capacity gate: see the "Relaxed lower-bound cost" rationale in edge_cost.jl.
+    _mode_has_capacity(arc, 0.0, commodities) || return Inf
     return _direct_arc_order_lb_cost(arc.cost, order_size, commodities)
 end
 
@@ -234,10 +236,17 @@ function _direct_arc_order_lb_cost(
     arc::MultiModalArc,
     order_size::Real,
     commodities::Vector{<:LightCommodity},
-    ::AbstractModeSelector,
+    ::CheapestMode,
 )
+    # Batch-only capacity gate: see the "Relaxed lower-bound cost" rationale in edge_cost.jl.
+    # Valid only when one mode carries the whole batch (CheapestMode), not when
+    # FillThenSpillMode may split it across modes.
     return minimum(
-        _direct_arc_order_lb_cost(mode.cost, order_size, commodities) for mode in arc.modes
+        if _mode_has_capacity(mode, 0.0, commodities)
+            _direct_arc_order_lb_cost(mode.cost, order_size, commodities)
+        else
+            Inf
+        end for mode in arc.modes
     )
 end
 
