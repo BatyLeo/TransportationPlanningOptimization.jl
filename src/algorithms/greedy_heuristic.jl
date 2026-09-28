@@ -1,9 +1,11 @@
 """
 $TYPEDSIGNATURES
 
-Find the cheapest path for a bundle in the TravelTimeGraph and add it to the current solution.
+Find the cheapest path for a bundle in the TravelTimeGraph and add it to the current
+solution. Returns `false` without modifying `current_solution` if Dijkstra finds no
+feasible path, `true` otherwise.
 """
-function insert_bundle!(
+function _try_insert_bundle!(
     current_solution::Solution,
     instance::Instance,
     bundle_idx::Int,
@@ -27,11 +29,30 @@ function insert_bundle!(
     parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=destination)
     path = trace_path(parents, origin, destination)
 
-    if isempty(path)
-        throw(ArgumentError("No feasible path found for bundle $bundle_idx, ($path)"))
-    end
+    isempty(path) && return false
 
     add_bundle_path!(current_solution, instance, bundle_idx, path; mode_selector, packing)
+    return true
+end
+
+"""
+$TYPEDSIGNATURES
+
+Find the cheapest path for a bundle in the TravelTimeGraph and add it to the current
+solution. Throws `ArgumentError` when no feasible path exists: see
+[`_try_insert_bundle!`](@ref) for a non-throwing variant that returns `false` instead.
+"""
+function insert_bundle!(
+    current_solution::Solution,
+    instance::Instance,
+    bundle_idx::Int,
+    mode_selector::AbstractModeSelector=CheapestMode();
+    buffer::BinPackingBuffer=BinPackingBuffer(),
+    packing::Symbol=:frozen,
+)
+    _try_insert_bundle!(
+        current_solution, instance, bundle_idx, mode_selector; buffer, packing
+    ) || throw(ArgumentError("No feasible path found for bundle $bundle_idx"))
     return nothing
 end
 

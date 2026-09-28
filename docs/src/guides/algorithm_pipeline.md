@@ -13,16 +13,19 @@ lower_bound_filtering
 extract_filtered_instance
         │
         ▼
-mix_greedy_and_lower_bound   (on the sub-instance)
+preload_filtered_bundles     (reserve filtered bundles' capacity on the sub-instance)
+        │
+        ▼
+mix_greedy_and_lower_bound   (on the sub-instance, seeded with the pre-load)
         │
         ▼
     local_search!            (on the sub-instance)
         │
         ▼
-  merge_solutions            (stitch back onto full instance)
+  merge_solutions            (stitch back onto full instance, checks feasibility)
 ```
 
-The function [`solve_filtered`](@ref) wraps the first three steps.
+The function [`solve_filtered`](@ref) wraps everything up to (but not including) local search.
 For simple cases you can skip filtering entirely and use [`greedy_heuristic`](@ref) directly.
 
 ## Construction Heuristics
@@ -69,15 +72,23 @@ The filtering pipeline pre-routes those trivial bundles so the heavier algorithm
 1. [`lower_bound_filtering`](@ref) routes every bundle using a hybrid cost that favors direct arcs.
    Bundles whose resulting path has exactly two nodes (origin -> destination) are considered "trivial".
 2. [`extract_filtered_instance`](@ref TransportationPlanningOptimization.extract_filtered_instance) builds a sub-instance containing only the non-trivial bundles.
-3. The construction heuristic runs on the sub-instance.
-4. [`merge_solutions`](@ref TransportationPlanningOptimization.merge_solutions) stitches the sub-instance solution back onto the full-instance filtering solution.
+3. [`preload_filtered_bundles`](@ref TransportationPlanningOptimization.preload_filtered_bundles) builds a `start` solution on the sub-instance that reserves the capacity and cost already claimed by the filtered-out bundles on arcs the sub-instance still contains.
+   This is required because a filtered-out bundle can share an arc with a kept bundle, and the construction heuristic must not oversubscribe that arc.
+4. The construction heuristic runs on the sub-instance, seeded with that `start` solution.
+5. [`merge_solutions`](@ref TransportationPlanningOptimization.merge_solutions) stitches the sub-instance solution back onto the full-instance filtering solution.
+   It always checks `is_feasible` on the merged result and throws `ArgumentError` if it fails.
 
-[`solve_filtered`](@ref) wraps steps 1-3:
+[`solve_filtered`](@ref) wraps steps 1-4:
 
 ```julia
 result = solve_filtered(instance)
 # result.solution lives on result.sub_instance
 ```
+
+`cost(result.solution)` already includes the reserved load of filtered
+bundles whose direct arc is still in `result.sub_instance`, so it is neither
+the sub-instance cost nor the full-instance cost.
+The full-instance cost is `cost(merge_solutions(filtering_sol, result.solution, instance, result.sub_instance))`.
 
 ## Local Search
 
@@ -114,13 +125,13 @@ println("Cost: ", cost(solution))
 For large instances, use the filtering pipeline:
 
 ```julia
-# Steps 1-3: filter, build sub-instance, construct initial solution
+# Steps 1-4: filter, build sub-instance, pre-load, construct initial solution
 result = solve_filtered(instance)
 
-# Step 4: local search on the sub-instance
+# Step 5: local search on the sub-instance
 stats = local_search!(result.solution, result.sub_instance; time_limit=300.0)
 
-# Step 5: stitch back onto the full instance
+# Step 6: stitch back onto the full instance
 filtering_sol = lower_bound_filtering(instance)
 final_solution = merge_solutions(filtering_sol, result.solution, instance, result.sub_instance)
 
