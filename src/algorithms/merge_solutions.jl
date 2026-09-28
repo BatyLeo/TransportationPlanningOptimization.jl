@@ -28,6 +28,10 @@ supports instances built with a non-default `Instance(...; group_by=...)`, as
 long as no two bundles in the same instance collide on that full triple.
 Throws `ArgumentError` if either instance has two bundles with identical
 `(origin_id, destination_id, group)`.
+
+Always checks `is_feasible(merged, full_instance)` before returning and
+throws `ArgumentError` if it fails (the verbose feasibility report is logged
+automatically).
 """
 function merge_solutions(
     full_solution::Solution,
@@ -84,5 +88,16 @@ function merge_solutions(
         end
     end
 
-    return Solution(fused_paths, full_instance)
+    merged = Solution(fused_paths, full_instance)
+    is_feasible(merged, full_instance; verbose=true) || throw(
+        ArgumentError(
+            "merge_solutions: merged solution is infeasible on full_instance " *
+            "(see the feasibility report above for the violating arcs). This " *
+            "typically happens when a filtered-out bundle's arc is also used " *
+            "by a kept bundle's route: build the sub-solution from the `start` " *
+            "returned by `preload_filtered_bundles` before local search, as " *
+            "`solve_filtered` does.",
+        ),
+    )
+    return merged
 end

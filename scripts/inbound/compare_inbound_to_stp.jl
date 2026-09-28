@@ -158,7 +158,8 @@ function _run_tpo(instance, ls_limit::Real)
 
     local candidates, chosen
     init_time = @elapsed begin
-        candidates = TPO.mix_greedy_and_lower_bound(sub)
+        start = TPO.preload_filtered_bundles(filtering_sol, instance, sub)
+        candidates = TPO.mix_greedy_and_lower_bound(sub; start)
         chosen = TPO.choose_best_feasible(
             [candidates.mixed, candidates.greedy, candidates.lower_bound], sub
         )

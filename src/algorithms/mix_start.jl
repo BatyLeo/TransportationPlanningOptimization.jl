@@ -15,19 +15,24 @@ mix_cost = (i / B) * greedy_cost + (1 - i / B) * lb_cost
 where `i` is the 1-indexed iteration and `B` is the total bundle count. This
 is a convex blend: the first bundles are placed almost purely on lower-bound
 costs, and the greedy share grows linearly to dominate the last bundles.
+
+`start` seeds all three candidates via `deepcopy` (default `Solution(instance)`,
+i.e. empty), so a caller can pre-load a capacity and cost floor (see
+[`preload_filtered_bundles`](@ref)) that every candidate then builds on top of.
 """
 function mix_greedy_and_lower_bound(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
+    start::Solution=Solution(instance),
 )
     ttg = instance.travel_time_graph
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     B = length(instance.bundles)
 
-    greedy_sol = Solution(instance)
-    lb_sol = Solution(instance)
-    mixed_sol = Solution(instance)
+    greedy_sol = deepcopy(start)
+    lb_sol = deepcopy(start)
+    mixed_sol = deepcopy(start)
 
     # One bin-packing scratch buffer reused across every bundle and arc.
     buffer = BinPackingBuffer()
@@ -137,13 +142,16 @@ end
 """
 $TYPEDSIGNATURES
 
-Mix greedy heuristic.
+Run [`mix_greedy_and_lower_bound`](@ref) and return the best of its three
+candidates via [`choose_best_feasible`](@ref). `start` is forwarded to
+[`mix_greedy_and_lower_bound`](@ref) as the seed solution for all candidates.
 """
 function mix_greedy_heuristic(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
+    start::Solution=Solution(instance),
 )
-    candidates = mix_greedy_and_lower_bound(instance; mode_selector, packing)
+    candidates = mix_greedy_and_lower_bound(instance; mode_selector, packing, start)
     return choose_best_feasible(collect(values(candidates)), instance)
 end
