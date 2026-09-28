@@ -13,6 +13,11 @@ Returns the total cost improvement.
 When `is_forbidden` is `Returns(false)` (the default), no bundle uses a
 forbidden arc, so steps 1-3 are a no-op and this is equivalent to plain
 `local_search!`.
+
+Steps 1-3 are applied atomically: if any bundle in the batch cannot be
+reinserted, every bundle in the batch is rolled back to its pre-removal path
+and step 3 is skipped, instead of throwing or leaving `sol` half-routed.
+Step 4 always runs.
 """
 function large_local_search!(
     sol::Solution,
@@ -39,19 +44,39 @@ function large_local_search!(
     end
 
     if !isempty(forbidden_bundles)
+        old_paths = [copy(sol.bundle_paths[b]) for b in forbidden_bundles]
+        snapshots = _snapshot_multi_bundle_assignments(sol, instance, forbidden_bundles)
+
         for b in forbidden_bundles
             remove_bundle_path!(sol, instance, b)
         end
 
         # Step 2: Reinsert with the forbidden arcs excluded from the cost matrix
+        processed = Int[]
+        all_ok = true
         for b in Random.shuffle(rng, forbidden_bundles)
-            _reinsert_with_filter!(sol, instance, b, is_forbidden, mode_selector)
+            if _reinsert_with_filter!(sol, instance, b, is_forbidden, mode_selector)
+                push!(processed, b)
+            else
+                all_ok = false
+                break
+            end
         end
 
-        # Step 3: Two-node consolidation pass on the common network
-        remaining = time_limit - (time() - t_start)
-        if remaining > 0
-            loop_two_nodes!(sol, instance, mode_selector; time_limit=remaining * 0.3, rng)
+        if all_ok
+            # Step 3: Two-node consolidation pass on the common network
+            remaining = time_limit - (time() - t_start)
+            if remaining > 0
+                loop_two_nodes!(
+                    sol, instance, mode_selector; time_limit=remaining * 0.3, rng
+                )
+            end
+        else
+            # Roll back the whole batch (see docstring).
+            for b in processed
+                remove_bundle_path!(sol, instance, b)
+            end
+            _restore_multi_bundle_assignments!(sol, forbidden_bundles, old_paths, snapshots)
         end
     end
 
@@ -72,7 +97,8 @@ TravelTimeGraph, with every arc `(u, v)` for which `is_forbidden(instance, u,
 v)` set to `Inf` in the cost matrix. `is_forbidden` is a soft preference, not
 a hard routing constraint: if the forbidden arcs disconnect the bundle's
 origin from its destination, the bundle falls back to an unrestricted
-reinsertion (via [`insert_bundle!`](@ref)) so the solution stays feasible.
+reinsertion (via [`_try_insert_bundle!`](@ref)). Returns `false`, without
+modifying `sol`, if no feasible path exists at all (forbidden or not).
 """
 function _reinsert_with_filter!(
     sol::Solution,
@@ -98,10 +124,9 @@ function _reinsert_with_filter!(
 
     if !isempty(path)
         add_bundle_path!(sol, instance, bundle_idx, path; mode_selector)
-    else
-        # No feasible path avoiding the forbidden arcs: fall back to an
-        # unrestricted reinsertion so every bundle stays routed.
-        insert_bundle!(sol, instance, bundle_idx, mode_selector)
+        return true
     end
-    return nothing
+    # No feasible path avoiding the forbidden arcs: fall back to an
+    # unrestricted reinsertion.
+    return _try_insert_bundle!(sol, instance, bundle_idx, mode_selector)
 end

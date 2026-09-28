@@ -2,6 +2,7 @@ using Test
 using TransportationPlanningOptimization
 using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 using Dates
+using MetaGraphsNext
 
 const TPO = TransportationPlanningOptimization
 
@@ -153,6 +154,90 @@ end
 
     # Duplicate in full_instance triggers the error too.
     @test_throws ArgumentError TPO.merge_solutions(sol, sub_sol, dup_instance, instance)
+end
+
+"""
+Topology: F (A->B, size 3, filtered out, direct path) and K (A->D2 via B,
+size 4, kept) share arc A->B (capacity 5).
+"""
+function fb_shared_arc_instance()
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:other),
+        NetworkNode(; id="D2", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=5,
+        ),
+        Arc(;
+            origin_id="B", destination_id="D2", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=3.0,
+        ),
+        Commodity(;
+            origin_id="A",
+            destination_id="D2",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(2),
+            size=4.0,
+        ),
+    ]
+    return Instance(nodes, arcs, commodities, Day(1))
+end
+
+@testset "TPO.preload_filtered_bundles reserves a filtered bundle's capacity before any routing" begin
+    # Unit test for the pre-load helper in isolation: build `sub_instance` and a
+    # plain `Solution(sub_instance)`, call the helper, and check the shared
+    # arc's assignment already carries the filtered bundle's size, before any
+    # bundle of `sub_instance` is routed.
+    instance = fb_shared_arc_instance()
+
+    filt = lower_bound_filtering(instance)
+    sub = TPO.extract_filtered_instance(instance, filt)
+    @test bundle_count(sub) == 1  # only K is kept, F is filtered out
+
+    sol = TPO.preload_filtered_bundles(filt, instance, sub)
+    @test all(isempty, sol.bundle_paths)  # preload must not touch bundle_paths
+
+    # The sub-instance's A->B edge (at F's departure time step, t=1) must
+    # already carry F's 3.0 units, reserved before K is ever routed.
+    cache = sub.index_cache
+    sa = MetaGraphsNext.code_for(sub.network_graph.graph, "A")
+    sb = MetaGraphsNext.code_for(sub.network_graph.graph, "B")
+    u_tsg = cache.spatial_code_and_time_to_tsg_code[sa, 1]
+    v_tsg = cache.spatial_code_and_time_to_tsg_code[sb, 2]
+    @test total_size_of(sol.assignments[(u_tsg, v_tsg)]) == 3.0
+end
+
+@testset "TPO.merge_solutions throws ArgumentError on a capacity-infeasible merge" begin
+    # Hand-build an infeasible pair: skip the pre-load fix entirely (route K
+    # via `greedy_heuristic` from a bare empty solution, bypassing
+    # `preload_filtered_bundles`) so K's real solve doesn't know about F's
+    # reservation, and their combined load overflows the shared arc A->B
+    # (capacity 5, F=3, K=4).
+    instance = fb_shared_arc_instance()
+
+    filt = lower_bound_filtering(instance)
+    sub = TPO.extract_filtered_instance(instance, filt)
+    # No pre-load: K is routed from a bare empty starting solution, blind to
+    # F's already-committed capacity.
+    sub_sol = greedy_heuristic(sub)
+
+    @test_throws ArgumentError TPO.merge_solutions(filt, sub_sol, instance, sub)
 end
 
 struct MergeGroupInfo

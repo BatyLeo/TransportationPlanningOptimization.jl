@@ -45,7 +45,12 @@ println(
     "time=$(round(t_filter; digits=2))s",
 )
 
-t_sub = @elapsed sub_sol = greedy_heuristic(sub_instance)
+t_sub = @elapsed begin
+    start = TPO.preload_filtered_bundles(filtering_sol, instance, sub_instance)
+    # `greedy_heuristic` has no `start` kwarg: `mix_greedy_and_lower_bound`'s
+    # `greedy` candidate is the pre-loaded equivalent.
+    sub_sol = TPO.mix_greedy_and_lower_bound(sub_instance; start).greedy
+end
 t_merge = @elapsed full_solution = TPO.merge_solutions(
     filtering_sol, sub_sol, instance, sub_instance
 )

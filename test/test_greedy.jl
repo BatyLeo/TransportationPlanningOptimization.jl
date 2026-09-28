@@ -147,4 +147,9 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
     @test_throws ArgumentError greedy_heuristic(instance)
+
+    # The non-throwing helper reports failure instead, without touching the solution.
+    sol = Solution(instance)
+    @test TransportationPlanningOptimization._try_insert_bundle!(sol, instance, 1) == false
+    @test isempty(sol.bundle_paths[1])
 end

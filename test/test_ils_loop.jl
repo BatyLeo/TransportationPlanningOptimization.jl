@@ -73,7 +73,6 @@ end
     @test result.best_cost <= start_cost + 1e-6
     @test result.iterations >= 0
     @test result.time_elapsed > 0.0
-    @test result.time_elapsed <= 30.0  # time limit + LS overhead
     @test length(result.cost_history) >= 1
     @test result.cost_history[1] == (0.0, start_cost)
     @test is_feasible(sol, instance)

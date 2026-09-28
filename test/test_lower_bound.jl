@@ -40,6 +40,53 @@ end
     @test any(length(p) > 2 for p in filt.bundle_paths)
 end
 
+@testset "lower_bound_filtering can overflow capacity under a custom group_by" begin
+    # Two same-OD commodities, distinguished only by a custom `group_by`, so
+    # they become two separate bundles sharing one arc. `_shortest_path_assign!`
+    # prices each bundle's cost matrix against a permanently empty baseline, so
+    # it never sees the other bundle's commitment within the same
+    # `lower_bound_filtering` call, and both get routed onto the same
+    # capacity-5 arc for a combined 6.0.
+    # Fix deferred: not addressed by `preload_filtered_bundles`, which only
+    # protects the sub-instance solve after filtering.
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=5,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=3.0,
+            info="p1",
+        ),
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=3.0,
+            info="p2",
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.info)
+
+    @test_broken is_feasible(lower_bound_filtering(instance), instance)
+end
+
 @testset "lower_bound error message format" begin
     # The empty-path branch in `lower_bound` / `lower_bound_filtering` is hard
     # to provoke in practice: `Instance` construction already runs a BFS-based

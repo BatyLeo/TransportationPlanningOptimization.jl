@@ -19,8 +19,9 @@ instance
 
 filtering_sol = lower_bound_filtering(instance);
 sub_instance = TPO.extract_filtered_instance(instance, filtering_sol)
+start = TPO.preload_filtered_bundles(filtering_sol, instance, sub_instance)
 
-sub_sol = mix_greedy_heuristic(sub_instance)
+sub_sol = mix_greedy_heuristic(sub_instance; start)
 
 res = local_search!(sub_sol, sub_instance; time_limit=30);
 
