@@ -87,6 +87,159 @@ end
     @test_broken is_feasible(lower_bound_filtering(instance), instance)
 end
 
+@testset "lower_bound and lower_bound_filtering skip a batch that overflows a bin-packed arc" begin
+    # Bundle A->D has two candidate routes: the cheap A->B->D detour, whose
+    # B->D leg has a capacity (and bin capacity) smaller than the single
+    # commodity's size, and the pricier but feasible A->C->D route. B->D is
+    # not the bundle's direct origin/destination arc, so pricing it goes
+    # through `_edge_lower_bound_cost`, which must return `Inf` for the
+    # overflowing batch instead of letting Dijkstra route the bundle onto it:
+    # FFD bin packing would otherwise throw `DomainError` when the cheaper
+    # path is committed.
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:other),
+        NetworkNode(; id="C", node_type=:other),
+        NetworkNode(; id="D", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="B",
+            destination_id="D",
+            cost=(LinearArcCost(1.0), BinPackingArcCost(10.0, 4)),
+            travel_time=Day(1),
+            capacity=4,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="C",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+        Arc(;
+            origin_id="C",
+            destination_id="D",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="D",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(3),
+            size=7.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+
+    lb_sol = lower_bound(instance)
+    @test is_feasible(lb_sol, instance)
+    @test length(only(lb_sol.bundle_paths)) == 3
+
+    filt_sol = lower_bound_filtering(instance)
+    @test is_feasible(filt_sol, instance)
+    @test length(only(filt_sol.bundle_paths)) == 3
+end
+
+@testset "lower_bound and lower_bound_filtering skip a batch that overflows the direct arc" begin
+    # Bundle A->B's own direct arc is cheap but its capacity (and bin
+    # capacity) is smaller than the single commodity's size. `lower_bound`
+    # prices the direct arc through `_direct_arc_lb_cost` /
+    # `_direct_arc_order_lb_cost`, which must also gate on the batch alone
+    # fitting the arc, or Dijkstra would pick the direct arc and FFD bin
+    # packing would throw `DomainError` when the path is committed.
+    # `lower_bound_filtering` prices the direct arc through the already gated
+    # `compute_ttg_edge_incremental_cost`, so its assertions here are a
+    # regression guard rather than a reproduction of the bug. A->C->B is
+    # pricier but has enough capacity, so it is the only feasible route.
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+        NetworkNode(; id="C", node_type=:other),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=(LinearArcCost(1.0), BinPackingArcCost(10.0, 4)),
+            travel_time=Day(1),
+            capacity=4,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="C",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+        Arc(;
+            origin_id="C",
+            destination_id="B",
+            cost=LinearArcCost(5.0),
+            travel_time=Day(1),
+            capacity=10,
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(2),
+            size=7.0,
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+
+    lb_sol = lower_bound(instance)
+    @test is_feasible(lb_sol, instance)
+    @test length(only(lb_sol.bundle_paths)) == 3
+
+    filt_sol = lower_bound_filtering(instance)
+    @test is_feasible(filt_sol, instance)
+    @test length(only(filt_sol.bundle_paths)) == 3
+end
+
+@testset "_edge_lower_bound_cost and _direct_arc_order_lb_cost gate MultiModalArc per mode" begin
+    # Two-mode arc: a cheap mode too small for the batch and a pricier mode
+    # large enough. Both helpers must skip the too-small mode instead of
+    # picking its (invalid) relaxed cost, and return `Inf` when neither mode
+    # fits.
+    cheap_small = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), capacity=4)
+    pricier_large = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(5.0), capacity=10)
+    arc = MultiModalArc([cheap_small, pricier_large])
+    comms = [LightCommodity(; origin_id="A", destination_id="B", size=7.0, info=nothing)]
+    order_size = sum(c.size for c in comms)
+    expected = 5.0 * order_size
+
+    @test TransportationPlanningOptimization._edge_lower_bound_cost(
+        arc, nothing, comms, CheapestMode()
+    ) == expected
+    @test TransportationPlanningOptimization._direct_arc_order_lb_cost(
+        arc, order_size, comms, CheapestMode()
+    ) == expected
+
+    too_small_both = MultiModalArc([
+        NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0), capacity=4),
+        NetworkArc(; travel_time_steps=1, cost=LinearArcCost(5.0), capacity=4),
+    ])
+    @test TransportationPlanningOptimization._edge_lower_bound_cost(
+        too_small_both, nothing, comms, CheapestMode()
+    ) == Inf
+    @test TransportationPlanningOptimization._direct_arc_order_lb_cost(
+        too_small_both, order_size, comms, CheapestMode()
+    ) == Inf
+end
+
 @testset "lower_bound error message format" begin
     # The empty-path branch in `lower_bound` / `lower_bound_filtering` is hard
     # to provoke in practice: `Instance` construction already runs a BFS-based
