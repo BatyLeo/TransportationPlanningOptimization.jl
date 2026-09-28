@@ -14,18 +14,17 @@ The first data line gives `n_nodes n_arcs n_commodities`, each arc line gives
 `tail head var_cost capacity fixed_cost` (2 trailing columns are ignored), and each
 commodity line gives `origin destination demand`.
 Nodes are `1:n_nodes`.
-With `fixed_costs=true` (default), each arc gets a `LinearArcCost(var_cost)` for the
-routed volume plus a `BinPackingArcCost(fixed_cost, capacity)` that charges
-`fixed_cost` once per used arc (the hard `capacity` keeps a single bin from ever
-overflowing).
-This is the fixed-charge multicommodity capacitated network design (MCND) instance.
-With `fixed_costs=false`, each arc only gets `LinearArcCost(var_cost)` while keeping
-the same `capacity`.
-This is the unsplittable multicommodity flow (UMCF) instance.
+By default (`network_design=false`), each arc only gets a `LinearArcCost(var_cost)`
+for the routed volume, keeping the hard `capacity`.
+This is the Unsplittable Multicommodity Flow Problem (UMCF) instance.
+With `network_design=true`, each arc additionally gets a
+`BinPackingArcCost(fixed_cost, capacity)` that charges `fixed_cost` once per used arc
+(the hard `capacity` keeps a single bin from ever overflowing).
+This is the Multicommodity Flow Network Design Problem (MCFND) instance.
 Each commodity is an unsplittable demand of `size=demand` and `quantity=1`, sharing
 one fixed `arrival_date` since the instances carry no time dimension.
 """
-function parse_canad_instance(io::IO; fixed_costs::Bool=true)
+function parse_canad_instance(io::IO; network_design::Bool=false)
     readline(io) # skip "MULTIGEN.DAT:" label line
     n_nodes, n_arcs, n_commodities = parse.(Int, split(readline(io)))
 
@@ -33,7 +32,7 @@ function parse_canad_instance(io::IO; fixed_costs::Bool=true)
 
     arcs = map(1:n_arcs) do _
         tail, head, var_cost, capacity, fixed_cost = parse.(Int, split(readline(io)))
-        cost = if fixed_costs
+        cost = if network_design
             (LinearArcCost(var_cost), BinPackingArcCost(fixed_cost, capacity))
         else
             LinearArcCost(var_cost)
@@ -67,8 +66,8 @@ $TYPEDSIGNATURES
 
 Parse a Canad C `.dow` instance from the file at `path`.
 """
-function parse_canad_instance(path::AbstractString; fixed_costs::Bool=true)
-    return open(io -> parse_canad_instance(io; fixed_costs), path)
+function parse_canad_instance(path::AbstractString; network_design::Bool=false)
+    return open(io -> parse_canad_instance(io; network_design), path)
 end
 
 """
@@ -76,10 +75,10 @@ $TYPEDSIGNATURES
 
 Load instance `name` (without extension) from dataset `c`, downloading it on first
 use.
-`fixed_costs` selects the problem variant: the fixed-charge multicommodity capacitated
-network design (MCND) instance by default, or the unsplittable multicommodity flow
-(UMCF) instance with `fixed_costs=false`, see [`parse_canad_instance`](@ref).
+`network_design` selects the problem variant: the Unsplittable Multicommodity Flow
+Problem (UMCF) instance by default, or the Multicommodity Flow Network Design Problem
+(MCFND) instance with `network_design=true`, see [`parse_canad_instance`](@ref).
 """
-function load_instance(c::CanadC, name::AbstractString; fixed_costs::Bool=true)
-    return parse_canad_instance(joinpath(dataset_dir(c), name * ".dow"); fixed_costs)
+function load_instance(c::CanadC, name::AbstractString; network_design::Bool=false)
+    return parse_canad_instance(joinpath(dataset_dir(c), name * ".dow"); network_design)
 end

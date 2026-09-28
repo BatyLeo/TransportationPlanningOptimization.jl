@@ -1,9 +1,9 @@
 """
 `MultiCommodityFlow` gives access to public benchmark instances for multicommodity flow
-problems, currently the Canad C instances of the fixed-charge multicommodity
-capacitated network design (MCND) problem.
-Passing `fixed_costs=false` gives the unsplittable multicommodity flow (UMCF) version
-of the same data.
+problems, currently the Canad C instances, which carry, for each arc, a variable
+cost, a capacity and a fixed cost.
+They are loaded as the Unsplittable Multicommodity Flow Problem (UMCF) by default, or
+as the Multicommodity Flow Network Design Problem (MCFND) with `network_design=true`.
 Instances are downloaded and parsed on demand from the CommaLab collection via
 DataDeps.jl.
 """

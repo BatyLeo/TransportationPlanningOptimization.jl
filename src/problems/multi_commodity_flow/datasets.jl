@@ -1,9 +1,11 @@
 """
 $TYPEDEF
 
-31 Canad "C" instances of the fixed-charge multicommodity capacitated network design
-(MCND) problem, with arc variable cost, capacity and fixed cost, stored one `.dow`
-file per instance.
+31 Canad "C" multicommodity network instances, stored one `.dow` file per instance.
+Each instance carries, for each arc, a variable cost, a capacity and a fixed cost,
+and is loaded as the Unsplittable Multicommodity Flow Problem (UMCF) by default, or
+as the Multicommodity Flow Network Design Problem (MCFND) with `network_design=true`,
+see [`load_instance`](@ref).
 """
 struct CanadC <: AbstractDataset end
 
@@ -34,7 +36,7 @@ end
 
 const COMMALAB_PAGE = "https://commalab.di.unipi.it/datasets/mmcf/"
 
-const CANADC_MESSAGE = "CanadC: 31 Canad \"C\" instances of the multicommodity capacitated fixed-charge network design problem. Source: $COMMALAB_PAGE. Please cite: T.G. Crainic, A. Frangioni, B. Gendron, \"Bundle-based relaxation methods for multicommodity capacitated fixed charge network design\", Discrete Applied Mathematics 112, 2001."
+const CANADC_MESSAGE = "CanadC: 31 Canad \"C\" multicommodity network instances (arc variable cost, capacity and fixed cost). Source: $COMMALAB_PAGE. Please cite: T.G. Crainic, A. Frangioni, B. Gendron, \"Bundle-based relaxation methods for multicommodity capacitated fixed charge network design\", Discrete Applied Mathematics 112, 2001."
 
 function __init__()
     register(

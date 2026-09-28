@@ -39,10 +39,11 @@ cost(solution)
 
 ## Multicommodity flow
 
-The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances of the fixed-charge multicommodity capacitated network design (MCND) problem.
+The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances, which carry, for each arc, a variable cost, a capacity and a fixed cost.
 Instances are downloaded on demand from the CommaLab (University of Pisa) collection via [DataDeps.jl](https://github.com/oxinabox/DataDeps.jl).
-By default (`fixed_costs=true`), each arc is encoded as a [`LinearArcCost`](@ref) on the routed demand plus a [`BinPackingArcCost`](@ref) whose bin capacity equals the arc's capacity, matching the fixed-charge network design objective (since at most one bin can ever be used, the fixed cost is paid exactly once per used arc).
-With `fixed_costs=false`, each arc only gets the [`LinearArcCost`](@ref) while keeping the same capacity, giving the unsplittable multicommodity flow (UMCF) version of the same data.
+By default (`network_design=false`), each arc only gets a [`LinearArcCost`](@ref) on the routed demand while keeping the arc's capacity, giving the Unsplittable Multicommodity Flow Problem (UMCF) version of the data.
+With `network_design=true`, each arc additionally gets a [`BinPackingArcCost`](@ref) whose bin capacity equals the arc's capacity, matching the Multicommodity Flow Network Design Problem (MCFND) objective (since at most one bin can ever be used, the fixed cost is paid exactly once per used arc).
+The published reference values for these instances (arXiv 2512.25018, Table F.10) refer to the MCFND version, which that paper calls the unsplittable multicommodity capacitated network design problem (MCND).
 
 ```julia
 using TransportationPlanningOptimization.Problems.MultiCommodityFlow

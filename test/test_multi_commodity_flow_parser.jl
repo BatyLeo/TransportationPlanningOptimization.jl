@@ -8,7 +8,7 @@ using Test
 # capacity 5 < demand, so it cannot carry the unsplittable commodity: the
 # detour 1->2->3 must be used instead.
 # Commodity 2 (2 -> 3, demand 5): shares arc 2->3 with the detour of commodity 1,
-# so the fixed cost of that arc must be paid only once.
+# so the fixed cost of that arc must be paid only once (network design version).
 dow = """
 MULTIGEN.DAT:
    3   3   2
@@ -19,8 +19,8 @@ MULTIGEN.DAT:
    2   3   5
 """
 
-@testset "Tiny hand-written instance" begin
-    instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow))
+@testset "Tiny hand-written instance (network design)" begin
+    instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow); network_design=true)
 
     @test bundle_count(instance) == 2
     @test commodity_count(instance) == 2
@@ -33,8 +33,8 @@ MULTIGEN.DAT:
     @test cost(sol) == 95.0
 end
 
-@testset "Tiny hand-written instance (flow version)" begin
-    instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow); fixed_costs=false)
+@testset "Tiny hand-written instance (UMCF)" begin
+    instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow))
 
     sol = greedy_heuristic(instance)
     @test is_feasible(sol, instance; verbose=true)
@@ -47,7 +47,7 @@ end
 
 @testset "Canad C c33" begin
     withenv("DATADEPS_ALWAYS_ACCEPT" => "true") do
-        instance = load_instance(CanadC(), "c33")
+        instance = load_instance(CanadC(), "c33"; network_design=true)
 
         @test Graphs.nv(instance.network_graph.graph) == 20
         @test Graphs.ne(instance.network_graph.graph) == 228
@@ -56,5 +56,10 @@ end
         sol = greedy_heuristic(instance)
         @test is_feasible(sol, instance; verbose=true)
         @test cost(sol) >= 423_933
+
+        umcf_instance = load_instance(CanadC(), "c33")
+        umcf_sol = greedy_heuristic(umcf_instance)
+        @test is_feasible(umcf_sol, umcf_instance)
+        @test cost(umcf_sol) >= cost(lower_bound(umcf_instance))
     end
 end

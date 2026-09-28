@@ -40,7 +40,7 @@ makedocs(;
         "Getting Started" => "getting_started.md",
         "Tutorials" => [
             "Basic Example" => "tutorials/basic_example.md",
-            "Multicommodity Network Design (Canad C)" => "tutorials/canad_c.md",
+            "Unsplittable Multicommodity Flow and Network Design (Canad C)" => "tutorials/canad_c.md",
         ],
         "Guides" => [
             "Algorithm Pipeline" => "guides/algorithm_pipeline.md",
