@@ -2,6 +2,10 @@ using TransportationPlanningOptimization
 using Documenter
 using Literate
 
+# The Canad C tutorial downloads its benchmark data at build time via DataDeps.jl,
+# so we accept the download prompt non-interactively.
+ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
+
 # Generate tutorials from Literate.jl source files
 tutorials_src_dir = joinpath(@__DIR__, "src", "tutorials")
 tutorials_build_dir = joinpath(@__DIR__, "src", "tutorials")
@@ -34,7 +38,10 @@ makedocs(;
     pages=[
         "Home" => "index.md",
         "Getting Started" => "getting_started.md",
-        "Tutorials" => ["Basic Example" => "tutorials/basic_example.md"],
+        "Tutorials" => [
+            "Basic Example" => "tutorials/basic_example.md",
+            "Multicommodity Network Design (Canad C)" => "tutorials/canad_c.md",
+        ],
         "Guides" => [
             "Algorithm Pipeline" => "guides/algorithm_pipeline.md",
             "Cost Functions" => "guides/cost_functions.md",

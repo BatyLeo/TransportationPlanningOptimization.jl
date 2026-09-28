@@ -1,25 +1,32 @@
 """
 $TYPEDEF
 
-31 Canad "C" instances of the multicommodity capacitated fixed-charge network design
-problem, with arc variable cost, capacity and fixed cost, stored one `.dow` file per
-instance.
+31 Canad "C" instances of the fixed-charge multicommodity capacitated network design
+(MCND) problem, with arc variable cost, capacity and fixed cost, stored one `.dow`
+file per instance.
 """
-struct CanadC end
+struct CanadC <: AbstractDataset end
 
 datadep_name(::CanadC) = "CommaLab_C"
 
 """
 $TYPEDSIGNATURES
 
-Return the local folder of collection `c`, downloading the archive on first call.
+Return the datasets of the `MultiCommodityFlow` problem.
+"""
+datasets() = [CanadC()]
+
+"""
+$TYPEDSIGNATURES
+
+Return the local folder of dataset `c`, downloading the archive on first call.
 """
 dataset_dir(c::CanadC) = @datadep_str(datadep_name(c))
 
 """
 $TYPEDSIGNATURES
 
-Sorted instance names (without extension) available in collection `c`.
+Sorted instance names (without extension) available in dataset `c`.
 """
 function list_instances(c::CanadC)
     return [first(splitext(f)) for f in readdir(dataset_dir(c)) if endswith(f, ".dow")]

@@ -8,6 +8,10 @@ CurrentModule = TransportationPlanningOptimization
 Each problem is a submodule that relies only on the package's public API.
 Load a problem submodule explicitly, for example `using TransportationPlanningOptimization.Problems.Inbound`.
 
+Benchmark datasets share a common interface, [`Problems.AbstractDataset`](@ref).
+A dataset `ds` implements [`Problems.list_instances`](@ref) to enumerate its instance names, [`Problems.dataset_dir`](@ref) to locate its files locally, and [`Problems.load_instance`](@ref) to build an `Instance`, with dataset-specific keywords selecting problem variants.
+Each problem module also provides a public, non-exported `datasets()` listing its datasets, so callers can sweep over every instance with `for ds in SomeProblem.datasets(), name in list_instances(ds)`.
+
 ## Inbound
 
 The inbound problem models the delivery of supplier commodities to plants through a network of intermediate points (cross-docks, warehouses).
@@ -35,16 +39,20 @@ cost(solution)
 
 ## Multicommodity flow
 
-The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances of the multicommodity capacitated fixed-charge network design problem.
+The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances of the fixed-charge multicommodity capacitated network design (MCND) problem.
 Instances are downloaded on demand from the CommaLab (University of Pisa) collection via [DataDeps.jl](https://github.com/oxinabox/DataDeps.jl).
-The code block below is illustrative only and is not run when building the docs, since it would trigger a download.
+By default (`fixed_costs=true`), each arc is encoded as a [`LinearArcCost`](@ref) on the routed demand plus a [`BinPackingArcCost`](@ref) whose bin capacity equals the arc's capacity, matching the fixed-charge network design objective (since at most one bin can ever be used, the fixed cost is paid exactly once per used arc).
+With `fixed_costs=false`, each arc only gets the [`LinearArcCost`](@ref) while keeping the same capacity, giving the unsplittable multicommodity flow (UMCF) version of the same data.
 
 ```julia
 using TransportationPlanningOptimization.Problems.MultiCommodityFlow
 
 list_instances(CanadC())
-dataset_dir(CanadC())
+MultiCommodityFlow.dataset_dir(CanadC())
+instance = load_instance(CanadC(), "c33")
 ```
+
+See the [Canad C tutorial](tutorials/canad_c.md) for a full walkthrough with the greedy heuristic and local search.
 
 ```@autodocs
 Modules = [
