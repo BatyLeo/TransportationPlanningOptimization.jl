@@ -5,8 +5,13 @@ CurrentModule = TransportationPlanningOptimization
 # Problems
 
 `Problems` gathers representative transportation planning problems built on top of the package.
-Each problem is a submodule that relies only on the package's public API.
 Load a problem submodule explicitly, for example `using TransportationPlanningOptimization.Problems.Inbound`.
+
+Benchmark datasets share a common interface, [`Problems.AbstractDataset`](@ref).
+A dataset `ds` implements [`Problems.load_instance`](@ref) to load one of its instances as an `Instance`.
+It also implements [`Problems.list_instances`](@ref) to enumerate its instance names and [`Problems.dataset_dir`](@ref) to locate its files locally.
+Each problem module also provides a public, non-exported `datasets()` listing its datasets, so callers can sweep over every instance with `for ds in SomeProblem.datasets(), name in list_instances(ds)`.
+Problems with a reference solver also implement [`Problems.benchmark_solve`](@ref).
 
 ## Inbound
 
@@ -33,6 +38,37 @@ is_feasible(solution, instance; verbose=true)
 cost(solution)
 ```
 
+## Multicommodity flow
+
+The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances, which carry, for each arc, a variable cost, a capacity and a fixed cost.
+Instances are downloaded on demand from the CommaLab (University of Pisa) collection via [DataDeps.jl](https://github.com/oxinabox/DataDeps.jl).
+By default (`network_design=false`), each arc only gets a [`LinearArcCost`](@ref) on the routed demand while keeping the arc's capacity, giving the Unsplittable Multicommodity Flow Problem (UMCF) version of the data.
+With `network_design=true`, each arc additionally gets a [`BinPackingArcCost`](@ref) whose bin capacity equals the arc's capacity, matching the Multicommodity Flow Network Design Problem (MCFND) objective (since at most one bin can ever be used, the fixed cost is paid exactly once per used arc).
+The published reference values for these instances (arXiv 2512.25018, Table F.10) refer to the MCFND version, which that paper calls the unsplittable multicommodity capacitated network design problem (MCND).
+
+[`Problems.MultiCommodityFlow.benchmark_solve`](@ref) solves the exact MIP for either variant with JuMP, using HiGHS by default (pass any JuMP-compatible optimizer factory through the `optimizer` keyword, for instance `gurobi_optimizer` once `Gurobi.jl` is loaded).
+It returns the solved `Instance` and a `Solution` of it.
+`objective_value` equals `cost(res.solution)`, so it compares directly with heuristic solutions of `res.instance` (via [`greedy_heuristic`](@ref) or [`local_search!`](@ref)).
+
+```julia
+using TransportationPlanningOptimization
+using TransportationPlanningOptimization.Problems.MultiCommodityFlow
+
+list_instances(CanadC())
+MultiCommodityFlow.dataset_dir(CanadC())
+res = benchmark_solve(CanadC(), "c33")
+is_feasible(res.solution, res.instance; verbose=true)
+
+sol = greedy_heuristic(res.instance)
+cost(sol), res.objective_value
+```
+
+See the [Canad C tutorial](tutorials/canad_c.md) for a full walkthrough with the greedy heuristic and local search.
+
 ```@autodocs
-Modules = [TransportationPlanningOptimization.Problems, TransportationPlanningOptimization.Problems.Inbound]
+Modules = [
+    TransportationPlanningOptimization.Problems,
+    TransportationPlanningOptimization.Problems.Inbound,
+    TransportationPlanningOptimization.Problems.MultiCommodityFlow,
+]
 ```

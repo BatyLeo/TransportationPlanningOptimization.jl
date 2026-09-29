@@ -12,5 +12,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 
 [sources]
-ShipperTransportationPlanning = {path = "../../ShipperTransportationPlanning.jl"}
+ShipperTransportationPlanning = {path = "../../../ShipperTransportationPlanning.jl"}
 TransportationPlanningOptimization = {path = ".."}
