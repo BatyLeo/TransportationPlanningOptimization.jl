@@ -38,6 +38,19 @@ is_feasible(solution, instance; verbose=true)
 cost(solution)
 ```
 
+The [`Problems.Inbound.RenaultInbound`](@ref) dataset gives access to nine Renault instances, from the regional `small` to the worldwide `world5`, with weekly time steps.
+They are downloaded on demand from Zenodo ([DOI 10.5281/zenodo.17234091](https://doi.org/10.5281/zenodo.17234091), CC-BY-4.0) via [DataDeps.jl](https://github.com/oxinabox/DataDeps.jl).
+They come from the paper "Optimizing a Worldwide-scale Shipper Transportation Planning in a Carmaker Supply Chain" ([arXiv 2509.07576](https://arxiv.org/abs/2509.07576)), which should be cited when using them.
+
+```julia
+using TransportationPlanningOptimization
+using TransportationPlanningOptimization.Problems.Inbound
+
+list_instances(RenaultInbound())
+instance = load_instance(RenaultInbound(), "small")
+solution = greedy_heuristic(instance)
+```
+
 ## Multicommodity flow
 
 The `MultiCommodityFlow` module gives access to public benchmark instances for multicommodity flow problems, currently the Canad C instances, which carry, for each arc, a variable cost, a capacity and a fixed cost.
