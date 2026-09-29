@@ -148,6 +148,10 @@ using .TestFixtures
         include("test_multi_commodity_flow_parser.jl")
     end
 
+    @testset "Multicommodity flow MIP" begin
+        include("test_multi_commodity_flow_mip.jl")
+    end
+
     @testset "Quick start" begin
         include("test_greedy.jl")
     end

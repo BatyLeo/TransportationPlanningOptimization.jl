@@ -1,6 +1,9 @@
 """
 `Problems` gathers the representative transportation planning problems.
-Each problem module relies only on the package public API.
+
+Each problem module builds on the package public API.
+Dataset-backed modules implement the [`AbstractDataset`](@ref) interface, and modules with
+a reference solver also implement [`benchmark_solve`](@ref).
 """
 module Problems
 
@@ -39,10 +42,22 @@ Dataset-specific keywords select problem variants.
 """
 function load_instance end
 
+"""
+    benchmark_solve(ds, name; kwargs...)
+
+Solve instance `name` of dataset `ds` with the problem's reference solver.
+
+Returns a `NamedTuple` with fields:
+- `solution`: a `Solution` of `instance`, or `nothing` if no solution was found
+- `instance`: the `Instance` the solution belongs to
+- `objective_value`, `objective_bound`, `relative_gap`, `termination_status`, `solve_time`
+"""
+function benchmark_solve end
+
 include("inbound/Inbound.jl")
 include("multi_commodity_flow/MultiCommodityFlow.jl")
 
-public AbstractDataset, list_instances, dataset_dir, load_instance
+public AbstractDataset, list_instances, dataset_dir, load_instance, benchmark_solve
 public Inbound, MultiCommodityFlow
 
 end

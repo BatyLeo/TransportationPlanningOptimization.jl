@@ -1,3 +1,7 @@
+# ```@meta
+# CurrentModule = TransportationPlanningOptimization
+# ```
+
 # # Unsplittable Multicommodity Flow and Network Design (Canad C)
 #
 # This tutorial solves a public benchmark for the Unsplittable Multicommodity Flow
@@ -42,12 +46,10 @@ list_instances(CanadC())
 
 # ## Unsplittable Multicommodity Flow
 #
-# We load the `c33` instance (nominal size `20-230-40`) with the default
+# We load the `c33` data (nominal size `20-230-40`) with the default
 # `network_design=false`, giving the UMCF version of the data: each arc only carries a
 # [`LinearArcCost`](@ref) on the routed volume, with a hard capacity.
-# Each Canad C commodity has a single origin, destination, and delivery date, and no
-# two commodities of an instance share the same origin-destination pair, so each
-# commodity maps to exactly one bundle.
+# Each commodity forms its own bundle.
 # The instance is generated randomly, so its realized size (20 nodes, 228 arcs, 39
 # commodities) differs slightly from the nominal name.
 
@@ -72,17 +74,19 @@ local_search!(solution, instance; ls_kwargs..., rng=MersenneTwister(0))
 is_feasible(solution, instance; verbose=true)
 ls_cost = cost(solution)
 
-# Arc costs are linear, so bundles do not interact through costs.
-# [`lower_bound`](@ref) routes each bundle on its cheapest path while ignoring arc
-# capacities, so it solves a relaxation of the UMCF and its cost is a valid lower
-# bound on the optimum.
-# The gaps below therefore overestimate the true optimality gaps.
+# [`Problems.MultiCommodityFlow.benchmark_solve`](@ref) solves the exact UMCF MIP with
+# JuMP (HiGHS by default), giving the optimal value (up to the solver MIP gap) as the
+# gap reference.
+# It returns the solved `Instance` and a `Solution` of it, which we check for
+# feasibility:
 
-lb_solution = lower_bound(instance)
-lb_cost = cost(lb_solution)
+umcf_result = benchmark_solve(CanadC(), "c33")
+umcf_result.termination_status
+is_feasible(umcf_result.solution, umcf_result.instance; verbose=true)
+umcf_optimum = umcf_result.objective_value
 
-greedy_gap = (greedy_cost - lb_cost) / lb_cost * 100
-ls_gap = (ls_cost - lb_cost) / lb_cost * 100
+greedy_gap = (greedy_cost - umcf_optimum) / umcf_optimum * 100
+ls_gap = (ls_cost - umcf_optimum) / umcf_optimum * 100
 
 (greedy_gap_pct=round(greedy_gap; digits=2), ls_gap_pct=round(ls_gap; digits=2))
 
