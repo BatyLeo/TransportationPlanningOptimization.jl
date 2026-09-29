@@ -26,6 +26,12 @@ function compute_ttg_edge_incremental_cost(
     node_f = cache.spatial_code_to_node_cost[sv0]
     arc_part = 0.0
     node_part = 0.0
+    edge_key = ttg_edge_key(cache, u_ttg_code, v_ttg_code)
+    arc = get(cache.edge_group_to_arc, edge_key, nothing)
+    if arc === nothing
+        @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
+        return Inf # Infeasible for this bundle
+    end
 
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders differ by less than the horizon and
@@ -36,13 +42,6 @@ function compute_ttg_edge_incremental_cost(
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_code_to_spatial_code[u_tsg]
-        sv = cache.tsg_code_to_spatial_code[v_tsg]
-        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
-        if arc === nothing
-            @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
-            return Inf # Infeasible for this bundle
-        end
 
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
@@ -63,7 +62,7 @@ function compute_ttg_edge_incremental_cost(
 
     # Slope scaling is an arc-only relaxation heuristic, node costs are never scaled.
     if !isempty(instance.travel_time_graph.cost_scaling)
-        factor = get(instance.travel_time_graph.cost_scaling, (su0, sv0), 1.0)
+        factor = get(instance.travel_time_graph.cost_scaling, edge_key, 1.0)
         arc_part *= factor
     end
 
@@ -113,6 +112,11 @@ function compute_ttg_edge_lower_bound_cost(
     if u_id == bundle.origin_id && v_id == bundle.destination_id
         return _direct_arc_lb_cost(bundle, instance, u_ttg_code, v_ttg_code, mode_selector)
     end
+    arc = ttg_edge_arc(cache, u_ttg_code, v_ttg_code)
+    if arc === nothing
+        @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
+        return Inf
+    end
     total = 0.0
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders cannot alias modulo the horizon and
@@ -121,13 +125,6 @@ function compute_ttg_edge_lower_bound_cost(
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_code_to_spatial_code[u_tsg]
-        sv = cache.tsg_code_to_spatial_code[v_tsg]
-        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
-        if arc === nothing
-            @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
-            return Inf
-        end
         edge = (u_tsg, v_tsg)
         existing = get(current_solution.assignments, edge, nothing)
         total += _edge_lower_bound_cost(arc, existing, order.commodities, mode_selector)
@@ -156,17 +153,14 @@ function _direct_arc_lb_cost(
     mode_selector::AbstractModeSelector,
 )
     cache = instance.index_cache
+    arc = ttg_edge_arc(cache, u_ttg_code, v_ttg_code)
+    if arc === nothing
+        @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
+        return Inf
+    end
+    node_f = cache.spatial_code_to_node_cost[cache.ttg_code_to_spatial_code[v_ttg_code]]
     total = 0.0
     for order in bundle.orders
-        u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
-        v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
-        su = cache.tsg_code_to_spatial_code[u_tsg]
-        sv = cache.tsg_code_to_spatial_code[v_tsg]
-        arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
-        if arc === nothing
-            @warn "TSG edge ($(MetaGraphsNext.label_for(instance.time_space_graph.graph, u_tsg)) -> $(MetaGraphsNext.label_for(instance.time_space_graph.graph, v_tsg))) does not exist!"
-            return Inf
-        end
         order_size = order.total_size
         total += _direct_arc_order_lb_cost(
             arc, order_size, order.commodities, mode_selector
@@ -174,7 +168,6 @@ function _direct_arc_lb_cost(
 
         # Destination-node cost on the direct arc, charged once per order.
         # Per-order incremental: existing is empty (LB is against empty solution).
-        node_f = cache.spatial_code_to_node_cost[sv]
         total += _node_lower_bound_incremental_cost(node_f, nothing, order.commodities)
     end
     return total

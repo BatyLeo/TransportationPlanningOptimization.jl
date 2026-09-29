@@ -90,17 +90,10 @@ function _add_network_arc!(
     destination::NetworkNode,
     arc::MultiModalArc,
 )
-    T = eltype(arc.modes)
-    groups = Dict{Int,Vector{T}}()
-    for mode in arc.modes
-        push!(get!(groups, mode.travel_time_steps, T[]), mode)
-    end
-
-    for (transit_time, group_modes) in groups
-        if length(group_modes) == 1
-            _add_network_arc!(time_space_graph, origin, destination, only(group_modes))
+    for (transit_time, edge_arc) in _mode_groups(arc)
+        if edge_arc isa NetworkArc
+            _add_network_arc!(time_space_graph, origin, destination, edge_arc)
         else
-            sub_arc = MultiModalArc(group_modes)
             (; time_horizon_length, wrap_time) = time_space_graph
             for t in time_horizon(time_space_graph)
                 u_t = (origin.id, t)
@@ -113,7 +106,7 @@ function _add_network_arc!(
                     end
                 end
                 v_t = (destination.id, destination_time)
-                was_added = Graphs.add_edge!(time_space_graph.graph, u_t, v_t, sub_arc)
+                was_added = Graphs.add_edge!(time_space_graph.graph, u_t, v_t, edge_arc)
                 if !was_added
                     throw(
                         ErrorException(

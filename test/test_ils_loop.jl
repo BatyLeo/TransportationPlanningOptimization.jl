@@ -8,37 +8,6 @@ const TPO = TransportationPlanningOptimization
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
 
-# A mock perturbation that removes and reinserts a random bundle
-struct RandomReinsertPerturbation <: AbstractPerturbation end
-
-function TransportationPlanningOptimization.perturbate!(
-    sol::Solution,
-    instance::Instance,
-    p::RandomReinsertPerturbation;
-    rng::Random.AbstractRNG=Random.default_rng(),
-    verbose::Bool=false,
-)
-    isempty(instance.bundles) && return (0.0, 0)
-    idx = rand(rng, 1:length(instance.bundles))
-    isempty(sol.bundle_paths[idx]) && return (0.0, 0)
-
-    before = cost(sol)
-    TPO.remove_bundle_path!(sol, instance, idx)
-
-    ttg = instance.travel_time_graph
-    TPO.update_bundle_cost_matrix!(sol, instance, idx)
-    origin = ttg.origin_codes[idx]
-    destination = ttg.destination_codes[idx]
-    parents, _ = TPO.bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=destination)
-    path = TPO.trace_path(parents, origin, destination)
-    if !isempty(path)
-        TPO.add_bundle_path!(sol, instance, idx, path)
-    end
-
-    after = cost(sol)
-    return (before - after, 1)
-end
-
 # A perturbation that never changes anything (used to exercise the
 # no_change / max_no_change convergence path)
 struct DegradingPerturbation <: AbstractPerturbation end
@@ -62,7 +31,7 @@ end
     result = iterated_local_search!(
         sol,
         instance,
-        [RandomReinsertPerturbation()];
+        [TestFixtures.ReinsertPerturbation()];
         config=ILSConfig(; time_limit=4, perturbation_time_limit=2, ls_time_limit=1),
         rng=Random.MersenneTwister(42),
         verbose=false,
@@ -91,7 +60,7 @@ end
     result = iterated_local_search!(
         sol,
         instance,
-        [RandomReinsertPerturbation()];
+        [TestFixtures.ReinsertPerturbation()];
         config=ILSConfig(; time_limit=4, perturbation_time_limit=2, ls_time_limit=1),
         (cost_update!)=counting_update!,
         rng=Random.MersenneTwister(42),
@@ -115,7 +84,7 @@ end
     result = iterated_local_search!(
         sol,
         instance,
-        [RandomReinsertPerturbation()];
+        [TestFixtures.ReinsertPerturbation()];
         config=ILSConfig(; time_limit=4, perturbation_time_limit=2, ls_time_limit=1),
         on_improvement=track_improvement!,
         rng=Random.MersenneTwister(42),

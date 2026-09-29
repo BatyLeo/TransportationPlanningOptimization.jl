@@ -11,6 +11,7 @@ module TestFixtures
 
 using TransportationPlanningOptimization
 using Dates
+using Random
 using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 const DATADIR = joinpath(@__DIR__, "public")
@@ -44,6 +45,37 @@ function _greedy(name::String, wrap_time::Bool)
         return greedy_heuristic(_instance(name, wrap_time))
     end
     return deepcopy(sol)
+end
+
+# Mock perturbation that removes and reinserts a random bundle along its cheapest path.
+struct ReinsertPerturbation <: AbstractPerturbation end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::Solution,
+    instance::Instance,
+    ::ReinsertPerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+)
+    isempty(instance.bundles) && return (0.0, 0)
+    idx = rand(rng, 1:length(instance.bundles))
+    isempty(sol.bundle_paths[idx]) && return (0.0, 0)
+
+    before = cost(sol)
+    TransportationPlanningOptimization.remove_bundle_path!(sol, instance, idx)
+
+    ttg = instance.travel_time_graph
+    TransportationPlanningOptimization.update_bundle_cost_matrix!(sol, instance, idx)
+    origin = ttg.origin_codes[idx]
+    destination = ttg.destination_codes[idx]
+    parents, _ = TransportationPlanningOptimization.bundle_dijkstra(
+        ttg.graph, origin, ttg.cost_matrix; dst=destination
+    )
+    path = TransportationPlanningOptimization.trace_path(parents, origin, destination)
+    if !isempty(path)
+        TransportationPlanningOptimization.add_bundle_path!(sol, instance, idx, path)
+    end
+    return (before - cost(sol), 1)
 end
 
 tiny_parsed() = _parsed("tiny")

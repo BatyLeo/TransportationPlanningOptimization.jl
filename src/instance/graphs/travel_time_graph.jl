@@ -29,8 +29,8 @@ struct TravelTimeGraph{is_date_arrival,G<:MetaGraph}
     destination_codes::Vector{Int}
     "arcs usable for each bundle to ease looping through them"
     bundle_arcs::Vector{Vector{Tuple{Int,Int}}}
-    "Per spatial-arc cost scaling factors for ILS slope scaling. Empty by default."
-    cost_scaling::Dict{Tuple{Int,Int},Float64}
+    "Per edge-group (spatial u, spatial v, transit key) cost scaling factors for ILS slope scaling. Empty by default."
+    cost_scaling::Dict{Tuple{Int,Int,Int},Float64}
 end
 
 function Base.show(io::IO, g::TravelTimeGraph{is_date_arrival}) where {is_date_arrival}
@@ -205,25 +205,18 @@ function _add_network_arc_to_travel_time_graph!(
     max_time_steps::Int,
     is_date_arrival::Bool,
 )
-    T = eltype(arc.modes)
-    groups = Dict{Int,Vector{T}}()
-    for mode in arc.modes
-        push!(get!(groups, mode.travel_time_steps, T[]), mode)
-    end
-
-    for (transit_time, group_modes) in groups
-        if length(group_modes) == 1
+    for (transit_time, edge_arc) in _mode_groups(arc)
+        if edge_arc isa NetworkArc
             _add_network_arc_to_travel_time_graph!(
-                g, origin, destination, only(group_modes), max_time_steps, is_date_arrival
+                g, origin, destination, edge_arc, max_time_steps, is_date_arrival
             )
         else
-            sub_arc = MultiModalArc(group_modes)
             for τ_u in 0:max_time_steps
                 u = (origin.id, τ_u)
                 τ_v = is_date_arrival ? τ_u - transit_time : τ_u + transit_time
                 v = (destination.id, τ_v)
                 if haskey(g, u) && haskey(g, v)
-                    Graphs.add_edge!(g, u, v, sub_arc)
+                    Graphs.add_edge!(g, u, v, edge_arc)
                 end
             end
         end
@@ -429,6 +422,6 @@ function TravelTimeGraph(
         origin_codes,
         destination_codes,
         bundle_arcs,
-        Dict{Tuple{Int,Int},Float64}(),
+        Dict{Tuple{Int,Int,Int},Float64}(),
     )
 end

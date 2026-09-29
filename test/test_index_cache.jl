@@ -31,8 +31,17 @@ const TPO = TransportationPlanningOptimization
         end for code in 1:Graphs.nv(tsg)
     )
     @test all(
-        cache.spatial_pair_to_arc[(
-            MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)
+        cache.tsg_code_to_time[code] == last(MetaGraphsNext.label_for(tsg, code)) for
+        code in 1:Graphs.nv(tsg)
+    )
+    # Single-mode legs: the one edge group is the leg itself.
+    @test all(
+        cache.edge_group_to_arc[(
+            MetaGraphsNext.code_for(ng, u),
+            MetaGraphsNext.code_for(ng, v),
+            TPO._transit_key(
+                TPO.travel_time_steps(ng[u, v]), cache.time_horizon_length, cache.wrap_time
+            ),
         )] === ng[u, v] for (u, v) in MetaGraphsNext.edge_labels(ng)
     )
     @test all(
@@ -76,5 +85,79 @@ end
                 @test TPO.project_to_time_space_graph(code, order, instance) == ref
             end
         end
+    end
+end
+
+# Both graphs store the arc of every edge, the cache must resolve each one from the codes.
+_same_arc(a::MultiModalArc, b) = b isa MultiModalArc && a.modes == b.modes
+_same_arc(a, b) = a === b
+
+function _cache_matches_graphs(instance)
+    cache = instance.index_cache
+    ok = true
+    for (graph, edge_arc) in (
+        (instance.time_space_graph.graph, TPO.tsg_edge_arc),
+        (instance.travel_time_graph.graph, TPO.ttg_edge_arc),
+    )
+        for (u, v) in MetaGraphsNext.edge_labels(graph)
+            first(u) == first(v) && continue # shortcut
+            arc = edge_arc(
+                cache, MetaGraphsNext.code_for(graph, u), MetaGraphsNext.code_for(graph, v)
+            )
+            ok &= arc !== nothing && _same_arc(graph[u, v], arc)
+        end
+    end
+    return ok
+end
+
+@testset "tsg_edge_arc and ttg_edge_arc match the graph edges (tiny)" begin
+    @test _cache_matches_graphs(TestFixtures.tiny_instance())
+end
+
+for date_kw in (:departure_date, :arrival_date)
+    @testset "tsg_edge_arc and ttg_edge_arc match the graph edges (mixed transit, wrap, $date_kw)" begin
+        nodes = [
+            NetworkNode(; id="A", node_type=:origin),
+            NetworkNode(; id="B", node_type=:destination),
+        ]
+        # One singleton group (1 day) and one group of two modes (2 days).
+        arcs = [
+            Arc(;
+                origin_id="A",
+                destination_id="B",
+                cost=LinearArcCost(10.0),
+                travel_time=Day(1),
+            ),
+            Arc(;
+                origin_id="A",
+                destination_id="B",
+                cost=LinearArcCost(5.0),
+                travel_time=Day(2),
+            ),
+            Arc(;
+                origin_id="A",
+                destination_id="B",
+                cost=LinearArcCost(6.0),
+                travel_time=Day(2),
+            ),
+        ]
+        # Two departure dates spread over the horizon, so that it exceeds every transit time.
+        commodities = [
+            Commodity(;
+                origin_id="A",
+                destination_id="B",
+                quantity=1,
+                date_kw => DateTime(2024, 1, d),
+                max_delivery_time=Day(3),
+                size=1.0,
+            ) for d in (1, 6)
+        ]
+        instance = Instance(
+            nodes, arcs, commodities, Day(1); allow_multimodal=true, wrap_time=true
+        )
+        tsg = instance.time_space_graph.graph
+        @test any(e -> tsg[e...] isa MultiModalArc, MetaGraphsNext.edge_labels(tsg))
+        @test any(e -> tsg[e...] isa NetworkArc, MetaGraphsNext.edge_labels(tsg))
+        @test _cache_matches_graphs(instance)
     end
 end
