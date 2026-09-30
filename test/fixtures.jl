@@ -42,7 +42,7 @@ end
 
 function _greedy(name::String, wrap_time::Bool)
     sol = get!(_GREEDY, (name, wrap_time)) do
-        return greedy_heuristic(_instance(name, wrap_time))
+        return greedy_heuristic(_instance(name, wrap_time); show_progress=false)
     end
     return deepcopy(sol)
 end

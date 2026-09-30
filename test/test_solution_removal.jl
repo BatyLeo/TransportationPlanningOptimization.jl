@@ -32,7 +32,7 @@ end
     # order), so re-adding bundles in a different order than the greedy built
     # them would legitimately change the bin counts. This test pins the
     # invariant for the FFD-union mode that the remove machinery relies on.
-    sol = greedy_heuristic(instance; packing=:ffd_union)
+    sol = greedy_heuristic(instance; packing=:ffd_union, show_progress=false)
     c_before = cost(sol)
     saved_paths = [copy(p) for p in sol.bundle_paths]
 
@@ -83,7 +83,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
     @test is_feasible(sol, instance)
 
     c_before = cost(sol)

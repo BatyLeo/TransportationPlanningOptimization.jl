@@ -25,7 +25,7 @@ MULTIGEN.DAT:
     @test bundle_count(instance) == 2
     @test commodity_count(instance) == 2
 
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance; verbose=true)
     # Commodity 1 detour: 10 * (3 + 3) variable + (10 + 10) fixed = 80.
     # Commodity 2 direct on 2->3 (already open): 5 * 3 variable = 15.
@@ -36,7 +36,7 @@ end
 @testset "Tiny hand-written instance (UMCF)" begin
     instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow))
 
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance; verbose=true)
     # No fixed cost: commodity 1 still needs the detour (capacity 5 < demand 10 on the
     # direct arc), commodity 2 stays direct.
@@ -53,13 +53,13 @@ end
         @test Graphs.ne(instance.network_graph.graph) == 228
         @test commodity_count(instance) == 39
 
-        sol = greedy_heuristic(instance)
+        sol = greedy_heuristic(instance; show_progress=false)
         @test is_feasible(sol, instance; verbose=true)
         @test cost(sol) >= 423_933
 
         umcf_instance = load_instance(CanadC(), "c33")
-        umcf_sol = greedy_heuristic(umcf_instance)
+        umcf_sol = greedy_heuristic(umcf_instance; show_progress=false)
         @test is_feasible(umcf_sol, umcf_instance)
-        @test cost(umcf_sol) >= cost(lower_bound(umcf_instance))
+        @test cost(umcf_sol) >= cost(lower_bound(umcf_instance; show_progress=false))
     end
 end

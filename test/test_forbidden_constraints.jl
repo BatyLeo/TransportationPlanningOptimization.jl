@@ -179,7 +179,7 @@ end
     ]
 
     instance = Instance(nodes, arcs, commodities, time_step)
-    solution = greedy_heuristic(instance)
+    solution = greedy_heuristic(instance; show_progress=false)
 
     # Solution should exist and be feasible
     @test solution !== nothing

@@ -41,7 +41,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
-    @test_throws DomainError greedy_heuristic(instance)
+    @test_throws DomainError greedy_heuristic(instance; show_progress=false)
 end
 
 @testset "is_feasible detects oversized bins" begin

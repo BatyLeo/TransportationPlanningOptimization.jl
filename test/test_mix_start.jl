@@ -25,7 +25,7 @@ end
 @testset "mix_greedy_and_lower_bound returns three feasible solutions" begin
     instance = TestFixtures.tiny_instance()
 
-    result = TPO.mix_greedy_and_lower_bound(instance)
+    result = TPO.mix_greedy_and_lower_bound(instance; show_progress=false)
 
     @test result isa NamedTuple
     @test haskey(result, :mixed)
@@ -48,9 +48,9 @@ end
 @testset "mix_greedy_and_lower_bound reproduces standalone greedy and lower_bound" begin
     instance = TestFixtures.tiny_instance()
 
-    result = TPO.mix_greedy_and_lower_bound(instance)
+    result = TPO.mix_greedy_and_lower_bound(instance; show_progress=false)
     standalone_greedy = TestFixtures.tiny_greedy()
-    standalone_lb = TPO.lower_bound(instance)
+    standalone_lb = TPO.lower_bound(instance; show_progress=false)
 
     @test TPO.cost(result.greedy) ≈ TPO.cost(standalone_greedy) atol = 1e-6
     @test TPO.cost(result.lower_bound) ≈ TPO.cost(standalone_lb) atol = 1e-6
@@ -59,7 +59,7 @@ end
 @testset "choose_best_feasible returns the min-cost feasible solution" begin
     instance = TestFixtures.tiny_instance()
 
-    result = TPO.mix_greedy_and_lower_bound(instance)
+    result = TPO.mix_greedy_and_lower_bound(instance; show_progress=false)
     candidates = [result.mixed, result.greedy, result.lower_bound]
     chosen = TPO.choose_best_feasible(candidates, instance)
 

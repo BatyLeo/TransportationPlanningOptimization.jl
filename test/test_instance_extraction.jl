@@ -14,7 +14,7 @@ using .TestFixtures
     # multi-hop bundles, which `tiny` already provides (verified: all 4
     # bundles keep a multi-hop path here).
     instance = TestFixtures.tiny_instance()
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
 
     expected_kept = count(p -> length(p) > 2, filt.bundle_paths)
@@ -34,7 +34,7 @@ end
 @testset "TPO.extract_filtered_instance preserves graph consistency" begin
     # Structural check: graph-field propagation doesn't depend on scale.
     instance = TestFixtures.tiny_instance()
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
 
     # The sub-instance shares the same time horizon and step.
@@ -87,9 +87,9 @@ end
         joinpath(datadir, "small_commodities.csv"),
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
-    sub_sol = greedy_heuristic(sub)
+    sub_sol = greedy_heuristic(sub; show_progress=false)
 
     merged = TPO.merge_solutions(filt, sub_sol, instance, sub)
 
@@ -100,11 +100,11 @@ end
     # Explicit cost comparison: needs scale, kept on `small`.
     instance = TestFixtures.small_instance()
 
-    greedy_cost = cost(greedy_heuristic(instance))
+    greedy_cost = cost(greedy_heuristic(instance; show_progress=false))
 
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
-    sub_sol = greedy_heuristic(sub)
+    sub_sol = greedy_heuristic(sub; show_progress=false)
     merged = TPO.merge_solutions(filt, sub_sol, instance, sub)
 
     @test is_feasible(merged, instance)
@@ -150,8 +150,8 @@ end
         index_cache=instance.index_cache,
     )
 
-    sol = greedy_heuristic(instance)
-    sub_sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
+    sub_sol = greedy_heuristic(instance; show_progress=false)
 
     # Duplicate in sub_instance triggers the error.
     @test_throws ArgumentError TPO.merge_solutions(sol, sub_sol, instance, dup_instance)
@@ -210,7 +210,7 @@ end
     # bundle of `sub_instance` is routed.
     instance = fb_shared_arc_instance()
 
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
     @test bundle_count(sub) == 1  # only K is kept, F is filtered out
 
@@ -235,11 +235,11 @@ end
     # (capacity 5, F=3, K=4).
     instance = fb_shared_arc_instance()
 
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
     # No pre-load: K is routed from a bare empty starting solution, blind to
     # F's already-committed capacity.
-    sub_sol = greedy_heuristic(sub)
+    sub_sol = greedy_heuristic(sub; show_progress=false)
 
     @test_throws ArgumentError TPO.merge_solutions(filt, sub_sol, instance, sub)
 end
@@ -292,7 +292,7 @@ end
     @test bundle_count(instance) == 2
     @test Set(b.group for b in instance.bundles) == Set(["X", "Y"])
 
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     # Merging the solution against itself must not throw on the OD collision and
     # must reproduce a feasible full solution.
     merged = TPO.merge_solutions(sol, sol, instance, instance)

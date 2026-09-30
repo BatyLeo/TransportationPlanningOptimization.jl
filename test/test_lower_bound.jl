@@ -21,7 +21,7 @@ using .TestFixtures
         joinpath(datadir, "tiny_commodities.csv"),
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    lb_sol = lower_bound(instance)
+    lb_sol = lower_bound(instance; show_progress=false)
 
     @test is_feasible(lb_sol, instance)
     @test all(!isempty, lb_sol.bundle_paths)
@@ -33,7 +33,7 @@ end
     # 4 bundles keep a path with length > 2), so the assertion below still
     # holds without needing `small`'s scale.
     instance = TestFixtures.tiny_instance()
-    filt = lower_bound_filtering(instance)
+    filt = lower_bound_filtering(instance; show_progress=false)
 
     @test all(!isempty, filt.bundle_paths)
     # On tiny, at least some bundle should choose a multi-hop path
@@ -84,7 +84,7 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.info)
 
-    @test_broken is_feasible(lower_bound_filtering(instance), instance)
+    @test_broken is_feasible(lower_bound_filtering(instance; show_progress=false), instance)
 end
 
 @testset "lower_bound and lower_bound_filtering skip a batch that overflows a bin-packed arc" begin
@@ -140,11 +140,11 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
 
-    lb_sol = lower_bound(instance)
+    lb_sol = lower_bound(instance; show_progress=false)
     @test is_feasible(lb_sol, instance)
     @test length(only(lb_sol.bundle_paths)) == 3
 
-    filt_sol = lower_bound_filtering(instance)
+    filt_sol = lower_bound_filtering(instance; show_progress=false)
     @test is_feasible(filt_sol, instance)
     @test length(only(filt_sol.bundle_paths)) == 3
 end
@@ -200,11 +200,11 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
 
-    lb_sol = lower_bound(instance)
+    lb_sol = lower_bound(instance; show_progress=false)
     @test is_feasible(lb_sol, instance)
     @test length(only(lb_sol.bundle_paths)) == 3
 
-    filt_sol = lower_bound_filtering(instance)
+    filt_sol = lower_bound_filtering(instance; show_progress=false)
     @test is_feasible(filt_sol, instance)
     @test length(only(filt_sol.bundle_paths)) == 3
 end
