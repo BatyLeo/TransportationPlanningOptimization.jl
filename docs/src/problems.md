@@ -43,7 +43,7 @@ using Dates: Week
 instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 ```
 
-See the [Inbound tutorial](tutorials/inbound.md) for a full walkthrough with the greedy heuristic and local search.
+See the [Inbound tutorial](tutorials/inbound.md) for a full walkthrough with `solve`.
 
 ## Unsplittable Multicommodity Flow
 
@@ -55,17 +55,17 @@ The published reference values for these instances (arXiv 2512.25018, Table F.10
 
 [`Problems.MultiCommodityFlow.benchmark_solve`](@ref) solves the exact MIP for either variant with JuMP, using HiGHS by default (pass any JuMP-compatible optimizer factory through the `optimizer` keyword, for instance `gurobi_optimizer` once `Gurobi.jl` is loaded).
 It returns the solved `Instance` and a `Solution` of it.
-`objective_value` equals `cost(res.solution)`, so it compares directly with heuristic solutions of `res.instance` (via [`greedy_heuristic`](@ref) or [`local_search!`](@ref)).
+`objective_value` equals `cost(res.solution)`, so it compares directly with heuristic solutions of `res.instance` (for instance via [`solve`](@ref)).
 
 ```julia
 using TransportationPlanningOptimization
 using TransportationPlanningOptimization.Problems.MultiCommodityFlow
 
 res = benchmark_solve(CanadC(), "c33")
-cost(greedy_heuristic(res.instance)), res.objective_value
+cost(solve(res.instance)), res.objective_value
 ```
 
-See the [Canad C tutorial](tutorials/canad_c.md) for a full walkthrough with the greedy heuristic and local search.
+See the [Canad C tutorial](tutorials/canad_c.md) for a full walkthrough with `solve`.
 
 ## API
 

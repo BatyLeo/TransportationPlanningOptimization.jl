@@ -107,8 +107,10 @@ After creating an `Instance`, use it to:
 
 1. **Solve** the optimization problem:
    ```julia
-   solution = greedy_heuristic(instance)
+   solution = solve(instance)
    ```
+   [`solve`](@ref) filters out trivial bundles, builds an initial solution and improves it with local search.
+   Calling [`greedy_heuristic`](@ref) directly on a large instance is much slower.
 
 2. **Validate** the solution:
    ```julia

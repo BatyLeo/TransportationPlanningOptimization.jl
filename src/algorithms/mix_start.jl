@@ -134,7 +134,7 @@ $TYPEDSIGNATURES
 
 Return the minimum-`cost` solution among `candidates` that satisfies
 `is_feasible(sol, instance)`. Throws `ArgumentError` if none are feasible.
-Used by `solve_filtered` to pick among the three solutions returned by
+Used by [`mix_greedy_heuristic`](@ref) to pick among the three solutions returned by
 `mix_greedy_and_lower_bound`.
 """
 function choose_best_feasible(candidates::AbstractVector{<:Solution}, instance::Instance)

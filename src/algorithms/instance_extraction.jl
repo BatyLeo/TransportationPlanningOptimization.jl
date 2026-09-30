@@ -11,14 +11,14 @@ subgraph so the sub-instance is self-consistent.
 The returned `Instance` shares the original bundle and commodity objects (no
 deep copy). Only the `bundles` vector and the three graph layers are new.
 
-If no bundles survive filtering, a warning is emitted and the returned instance
+If no bundles survive filtering, an info message is logged and the returned instance
 has an empty `bundles` vector.
 """
 function extract_filtered_instance(instance::Instance, filtering_solution::Solution)
     keep_idxs = findall(p -> length(p) > 2, filtering_solution.bundle_paths)
 
     if isempty(keep_idxs)
-        @warn "extract_filtered_instance: no bundles remain in the sub-instance"
+        @info "All bundles are fixed by filtering, the sub-instance is empty"
         return Instance(;
             bundles=eltype(instance.bundles)[],
             network_graph=instance.network_graph,

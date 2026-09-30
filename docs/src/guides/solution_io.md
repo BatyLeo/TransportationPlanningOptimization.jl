@@ -46,7 +46,7 @@ using Dates
 
 # Build instance and solve
 instance = Instance(nodes, arcs, commodities, Day(1))
-solution = greedy_heuristic(instance)
+solution = solve(instance)
 
 # Save
 write_solution_csv("my_solution.csv", solution, instance)

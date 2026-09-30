@@ -55,12 +55,9 @@ commodities = [
     ),
 ]
 
-# Create instance and solve
+# Create instance and solve (construction heuristic followed by local search)
 instance = Instance(nodes, arcs, commodities, Day(1))
-solution = greedy_heuristic(instance)
-
-# Improve with local search
-local_search!(solution, instance; time_limit=60.0)
+solution = solve(instance)
 
 # Validate and evaluate
 is_feasible(solution, instance; verbose=true)

@@ -8,16 +8,14 @@ Stitch `sub_solution` (defined on `sub_instance`) back onto `full_solution`
 For each bundle of `full_instance`:
 
 - If a matching bundle exists in `sub_instance` (matched by
-  `(origin_id, destination_id)`), the path stored in `sub_solution` is
+  `(origin_id, destination_id, group)`, see below), the path stored in `sub_solution` is
   projected back into the full TTG via spatial labels and used as that
   bundle's path in the merged solution.
 - Otherwise, `full_solution`'s path for that bundle is reused.
 
 The merged solution is then built in one batched pass via the
 `Solution(bundle_paths, instance)` constructor, so each arc's commodities
-are packed exactly once with their final commodity set. This avoids the
-quadratic-in-arc-load FFD-repack cost of the previous bundle-by-bundle
-`remove_bundle_path!` / `add_bundle_path!` loop.
+are packed exactly once with their final commodity set.
 
 The caller is expected to have run `lower_bound_filtering` (or similar) on
 `full_solution` first, so every bundle of `full_instance` already has a path.
@@ -96,7 +94,7 @@ function merge_solutions(
             "typically happens when a filtered-out bundle's arc is also used " *
             "by a kept bundle's route: build the sub-solution from the `start` " *
             "returned by `preload_filtered_bundles` before local search, as " *
-            "`solve_filtered` does.",
+            "`solve_filtered` (and therefore `solve`) does.",
         ),
     )
     return merged

@@ -97,7 +97,7 @@ commodity_avoid_b = Commodity(;
 )
 
 instance = Instance(nodes, arcs, [commodity_avoid_b], Day(1))
-solution = greedy_heuristic(instance)
+solution = solve(instance)
 
 # The solution will route through C, not B
 println("Cost: ", cost(solution))  # Will use cheaper A→C→D path
