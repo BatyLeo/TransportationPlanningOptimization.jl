@@ -164,60 +164,25 @@ end
 """
 $TYPEDSIGNATURES
 
-Add arcs corresponding to a network arc to the travel-time graph.
+Project an arc into the travel-time graph, once per mode group from `_mode_groups`.
+A single-mode arc is one group. Modes of a `MultiModalArc` sharing a transit time collapse
+into one `MultiModalArc` edge, the others emit plain `NetworkArc` edges.
 """
 function _add_network_arc_to_travel_time_graph!(
     g::MetaGraph,
     origin::NetworkNode,
     destination::NetworkNode,
-    arc::NetworkArc,
-    max_time_steps::Int,
-    is_date_arrival::Bool,
-)
-    for τ_u in 0:max_time_steps
-        u = (origin.id, τ_u)
-        d = travel_time_steps(arc)
-        if is_date_arrival
-            τ_v = τ_u - d
-        else
-            τ_v = τ_u + d
-        end
-        v = (destination.id, τ_v)
-        if haskey(g, u) && haskey(g, v)
-            Graphs.add_edge!(g, u, v, arc)
-        end
-    end
-    return nothing
-end
-
-"""
-$TYPEDSIGNATURES
-
-Project a `MultiModalArc` into the travel-time graph. Modes are grouped by
-`travel_time_steps`. Each singleton group emits a plain `NetworkArc` edge.
-Groups of two or more modes with the same transit time emit a single `MultiModalArc`.
-"""
-function _add_network_arc_to_travel_time_graph!(
-    g::MetaGraph,
-    origin::NetworkNode,
-    destination::NetworkNode,
-    arc::MultiModalArc,
+    arc::AbstractNetworkArc,
     max_time_steps::Int,
     is_date_arrival::Bool,
 )
     for (transit_time, edge_arc) in _mode_groups(arc)
-        if edge_arc isa NetworkArc
-            _add_network_arc_to_travel_time_graph!(
-                g, origin, destination, edge_arc, max_time_steps, is_date_arrival
-            )
-        else
-            for τ_u in 0:max_time_steps
-                u = (origin.id, τ_u)
-                τ_v = is_date_arrival ? τ_u - transit_time : τ_u + transit_time
-                v = (destination.id, τ_v)
-                if haskey(g, u) && haskey(g, v)
-                    Graphs.add_edge!(g, u, v, edge_arc)
-                end
+        for τ_u in 0:max_time_steps
+            u = (origin.id, τ_u)
+            τ_v = is_date_arrival ? τ_u - transit_time : τ_u + transit_time
+            v = (destination.id, τ_v)
+            if haskey(g, u) && haskey(g, v)
+                Graphs.add_edge!(g, u, v, edge_arc)
             end
         end
     end
