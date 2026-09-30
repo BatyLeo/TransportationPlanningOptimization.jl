@@ -7,12 +7,10 @@ improves on the current bin count. Returns the total cost improvement
 (non-negative).
 """
 function bin_packing_improvement!(sol::Solution, instance::Instance)
-    tsg = instance.time_space_graph
+    cache = instance.index_cache
     saved = 0.0
     for (edge, assignment) in sol.assignments
-        u_label = MetaGraphsNext.label_for(tsg.graph, edge[1])
-        v_label = MetaGraphsNext.label_for(tsg.graph, edge[2])
-        arc = tsg.graph[u_label, v_label]
+        arc = tsg_edge_arc(cache, edge[1], edge[2])
         saved += _repack_assignment!(assignment, arc)
     end
     return saved

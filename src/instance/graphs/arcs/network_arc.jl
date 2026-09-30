@@ -94,3 +94,30 @@ end
 function Base.show(io::IO, arc::MultiModalArc)
     return print(io, "MultiModalArc(", length(arc.modes), " modes)")
 end
+
+"""
+$TYPEDSIGNATURES
+
+Return the `transit_time => edge_arc` pairs of a leg, sorted by transit time.
+A `NetworkArc` is its own single group.
+"""
+_mode_groups(arc::NetworkArc) = [arc.travel_time_steps => arc]
+
+"""
+$TYPEDSIGNATURES
+
+Group the modes of a `MultiModalArc` by `travel_time_steps`, preserving mode order within a
+group. A singleton group is the plain `NetworkArc`, a group of two or more modes is a
+sub-`MultiModalArc`. The result is sorted by transit time.
+"""
+function _mode_groups(arc::MultiModalArc)
+    T = eltype(arc.modes)
+    groups = Dict{Int,Vector{T}}()
+    for mode in arc.modes
+        push!(get!(groups, mode.travel_time_steps, T[]), mode)
+    end
+    return [
+        d => (length(modes) == 1 ? only(modes) : MultiModalArc(modes)) for
+        (d, modes) in sort!(collect(groups); by=first)
+    ]
+end

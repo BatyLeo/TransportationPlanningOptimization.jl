@@ -17,9 +17,9 @@ are left out of the dict, keeping `cost_matrix_update`'s hot-path lookup cheap.
 `instance.travel_time_graph.cost_scaling` is cleared before being repopulated, so calling
 this on an empty `sol` leaves it empty.
 
-Multi-modal edges (`MultiAssignment`) are skipped: `cost_scaling` is keyed per spatial arc,
-not per mode, so a single scaling factor cannot represent modes with distinct bin
-capacities. Left as a future extension.
+Multi-modal edges (`MultiAssignment`) are skipped: `cost_scaling` is keyed per edge group
+(spatial pair and transit time), not per mode, so a single scaling factor cannot represent
+modes with distinct bin capacities. Left as a future extension.
 
 This is the slope scaling callback for [`iterated_local_search!`](@ref).
 Pass as `cost_update! = slope_scaling_update!`.
@@ -42,9 +42,7 @@ function _slope_scaling_update_edge!(
     v_tsg::Int,
     assignment::SingleAssignment,
 )
-    su = cache.tsg_code_to_spatial_code[u_tsg]
-    sv = cache.tsg_code_to_spatial_code[v_tsg]
-    arc = get(cache.spatial_pair_to_arc, (su, sv), nothing)
+    arc = tsg_edge_arc(cache, u_tsg, v_tsg)
     arc === nothing && return nothing
 
     bp_cost = _bin_packing_cost_of(arc.cost)
@@ -66,7 +64,7 @@ function _slope_scaling_update_edge!(
     factor = clamp(n_bins / n_bins_continuous, 0.0, 2.0)
     isapprox(factor, 1.0; atol=1e-9) && return nothing
 
-    ttg.cost_scaling[(su, sv)] = factor
+    ttg.cost_scaling[tsg_edge_key(cache, u_tsg, v_tsg)] = factor
     return nothing
 end
 

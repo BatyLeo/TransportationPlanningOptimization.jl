@@ -66,7 +66,11 @@ end
             instance.travel_time_graph.destination_codes[i],
         ] for i in eachindex(instance.bundles)
     ]
-    fake_filt = Solution(direct_paths, instance)
+    # The origin -> destination edges are not real arcs: the `Solution(bundle_paths, instance)`
+    # constructor rejects them, so the paths are set directly.
+    @test_throws ArgumentError Solution(direct_paths, instance)
+    fake_filt = Solution(instance)
+    fake_filt.bundle_paths .= direct_paths
 
     @test_logs (:warn,) match_mode = :any TPO.extract_filtered_instance(instance, fake_filt)
     sub = (@test_logs (:warn,) match_mode = :any TPO.extract_filtered_instance(

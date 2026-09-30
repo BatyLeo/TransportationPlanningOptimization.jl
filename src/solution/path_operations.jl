@@ -105,11 +105,12 @@ function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{
     delta = 0.0
     for order in bundle.orders
         for k in 1:(length(path) - 1)
+            arc = ttg_edge_arc(cache, path[k], path[k + 1])
+            isnothing(arc) && throw(
+                ArgumentError("TTG edge ($(path[k]), $(path[k + 1])) has no network arc"),
+            )
             u_tsg = project_to_time_space_graph(path[k], order, instance)
             v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
-            su = cache.tsg_code_to_spatial_code[u_tsg]
-            sv = cache.tsg_code_to_spatial_code[v_tsg]
-            arc = cache.spatial_pair_to_arc[(su, sv)]
             delta += f((u_tsg, v_tsg), arc, order)
         end
     end
@@ -213,6 +214,7 @@ end
 
 Construct a `Solution` from bundle paths and an instance.
 This constructor precomputes commodity distributions on arcs, bin-packing results, and total cost.
+Throws an `ArgumentError` if a path uses an edge that has no network arc.
 """
 function Solution(
     bundle_paths::Vector{Vector{Int}},
@@ -246,13 +248,15 @@ function Solution(
         end
 
         for (edge, new_comms) in tsg_edge_to_new_commodities
-            u_label = MetaGraphsNext.label_for(time_space_graph.graph, edge[1])
-            v_label = MetaGraphsNext.label_for(time_space_graph.graph, edge[2])
-            if !MetaGraphsNext.haskey(time_space_graph.graph, u_label, v_label)
-                @warn "Arc ($u_label, $v_label) not found in TimeSpaceGraph"
-                continue
+            arc = tsg_edge_arc(cache, edge...)
+            if isnothing(arc)
+                tsg = time_space_graph.graph
+                throw(
+                    ArgumentError(
+                        "Bundle $bundle_idx path uses TSG edge ($(MetaGraphsNext.label_for(tsg, edge[1])) -> $(MetaGraphsNext.label_for(tsg, edge[2]))) which has no network arc",
+                    ),
+                )
             end
-            arc = time_space_graph.graph[u_label, v_label]
             sv = cache.tsg_code_to_spatial_code[edge[2]]
             _add_order_to_assignment!(
                 assignments,
