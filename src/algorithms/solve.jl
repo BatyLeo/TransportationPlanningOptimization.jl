@@ -22,12 +22,14 @@ bundle whose direct arc is still in `sub_instance`, `cost(result.solution)`
 is neither the sub-instance cost nor the full-instance cost: it is the
 sub-instance cost plus that partial reservation. The full-instance cost is
 `cost(merge_solutions(filtering_sol, result.solution, instance, sub_instance))`.
+
+Set `show_progress=false` to hide the progress bars.
 """
-function solve_filtered(instance::Instance)
-    filtering_sol = lower_bound_filtering(instance)
+function solve_filtered(instance::Instance; show_progress::Bool=true)
+    filtering_sol = lower_bound_filtering(instance; show_progress)
     sub_instance = extract_filtered_instance(instance, filtering_sol)
     start = preload_filtered_bundles(filtering_sol, instance, sub_instance)
-    candidates_tuple = mix_greedy_and_lower_bound(sub_instance; start)
+    candidates_tuple = mix_greedy_and_lower_bound(sub_instance; start, show_progress)
     candidates = [
         candidates_tuple.mixed, candidates_tuple.greedy, candidates_tuple.lower_bound
     ]

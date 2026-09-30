@@ -38,7 +38,7 @@ using Test
     ]
 
     instance = Instance(nodes, arcs, commodities, Day(1))
-    solution = greedy_heuristic(instance)
+    solution = greedy_heuristic(instance; show_progress=false)
 
     @test is_feasible(solution, instance)
     @test cost(solution) > 0
@@ -97,7 +97,7 @@ end
     instance = hub_capacity_instance(
         LinearArcCost(0.5), LinearArcCost(10.0), LinearArcCost(0.5)
     )
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance; verbose=true)
     # First bundle fits the cheap hub path (0.5 + 0.5 = 1.0), filling the
     # A->H capacity. The second bundle must take its expensive direct arc.
@@ -110,7 +110,7 @@ end
         LinearArcCost(20.0),
         LinearArcCost(0.0),
     )
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance; verbose=true)
     # Fixed charge (bin cost 5.0) is paid exactly once, on the first bundle
     # that fits the capacitated hub arc. The second bundle overflows it and
@@ -146,10 +146,24 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
-    @test_throws ArgumentError greedy_heuristic(instance)
+    @test_throws ArgumentError greedy_heuristic(instance; show_progress=false)
 
     # The non-throwing helper reports failure instead, without touching the solution.
     sol = Solution(instance)
     @test TransportationPlanningOptimization._try_insert_bundle!(sol, instance, 1) == false
     @test isempty(sol.bundle_paths[1])
+end
+
+@testset "show_progress=false leaves results unchanged" begin
+    instance = hub_capacity_instance(
+        LinearArcCost(0.5), LinearArcCost(10.0), LinearArcCost(0.5)
+    )
+    sol = greedy_heuristic(instance; show_progress=false)
+    @test is_feasible(sol, instance)
+    @test cost(sol) ≈ cost(greedy_heuristic(instance; show_progress=false))
+    @test cost(lower_bound(instance; show_progress=false)) ≈
+        cost(lower_bound(instance; show_progress=false))
+    @test is_feasible(mix_greedy_heuristic(instance; show_progress=false), instance)
+    res = solve_filtered(instance; show_progress=false)
+    @test is_feasible(res.solution, res.sub_instance)
 end

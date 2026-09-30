@@ -77,6 +77,7 @@ so bundles with the hardest-to-pack items go first.
   gives bin counts within a fraction of a percent of `:ffd_union`. Both the cost
   matrix and the committed solution use the same semantics, so predicted and
   committed costs agree.
+- `show_progress::Bool = true`: display a progress bar over the inserted bundles.
 
 # Errors
 Throws `ArgumentError` if no feasible path exists for a bundle. This can happen
@@ -89,6 +90,7 @@ function greedy_heuristic(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
+    show_progress::Bool=true,
 )
     solution = Solution(instance)
     # Sort bundles by decreasing max single-order pack size.
@@ -96,7 +98,7 @@ function greedy_heuristic(
     # One bin-packing scratch buffer reused across every bundle and arc.
     buffer = BinPackingBuffer()
     # Then, insert them one by one into the solution
-    @showprogress for i in sorted_indices
+    @showprogress enabled = show_progress for i in sorted_indices
         insert_bundle!(solution, instance, i, mode_selector; buffer=buffer, packing=packing)
     end
     return solution

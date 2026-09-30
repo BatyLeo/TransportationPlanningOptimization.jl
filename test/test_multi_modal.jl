@@ -133,7 +133,7 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
 
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance)
     # Cheaper mode (5.0/unit) wins: 1 unit × 5.0 = 5.0
     @test cost(sol) == 5.0
@@ -171,7 +171,7 @@ end
         ),
     ]
     instance_c1 = Instance(nodes_c1, arcs_c1, commodities_c1, Day(1); allow_multimodal=true)
-    sol_c1 = greedy_heuristic(instance_c1)
+    sol_c1 = greedy_heuristic(instance_c1; show_progress=false)
     @test is_feasible(sol_c1, instance_c1)
     @test cost(sol_c1) == 5.0
 
@@ -212,7 +212,7 @@ end
     instance_het = Instance(
         nodes_het, arcs_het, commodities_het, Day(1); allow_multimodal=true
     )
-    sol_het = greedy_heuristic(instance_het)
+    sol_het = greedy_heuristic(instance_het; show_progress=false)
     @test is_feasible(sol_het, instance_het)
     @test cost(sol_het) == 10.0
 end
@@ -252,7 +252,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
 
     @test is_feasible(sol, instance)
     # Cheap mode infeasible (cap=1, need=2): expensive mode wins => 2 × 10.0
@@ -300,7 +300,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    @test_throws ArgumentError greedy_heuristic(instance)
+    @test_throws ArgumentError greedy_heuristic(instance; show_progress=false)
 
     # FillThenSpillMode (spills across modes): still infeasible when the
     # *combined* capacity (1 + 2 = 3) is insufficient for the 5 units needed.
@@ -319,7 +319,7 @@ end
         nodes, arcs, commodities_insufficient, Day(1); allow_multimodal=true
     )
     @test_throws ArgumentError greedy_heuristic(
-        instance_insufficient; mode_selector=FillThenSpillMode()
+        instance_insufficient; mode_selector=FillThenSpillMode(), show_progress=false
     )
 end
 
@@ -357,7 +357,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
 
     @test is_feasible(sol, instance)
     # 1 unit on cheap mode (5.0) + 1 unit on expensive mode (10.0) = 15.0
@@ -400,7 +400,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
 
     @test is_feasible(sol, instance)
     @test cost(sol) == 15.0
@@ -430,7 +430,7 @@ end
     ]
     instance = Instance(nodes, arcs, commodities, Day(1))
     @test_throws Union{TypeError,MethodError} greedy_heuristic(
-        instance; mode_selector=:cheapest
+        instance; mode_selector=:cheapest, show_progress=false
     )
 end
 
@@ -485,7 +485,7 @@ end
         nodes, arcs, commodities, Day(1); wrap_time=true, allow_multimodal=true
     )
 
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance)
     # Whatever the realized cost is, calling cost(sol) (sum of per-edge costs)
     # must match the cost of reconstructing the solution from the stored paths.
@@ -594,7 +594,7 @@ end
 @testset "Tight window keeps only the truck edge, greedy equals rebuilt" begin
     for (wrap_time, departure_days, expected) in ((false, (1,), 20.0), (true, (1, 6), 40.0))
         instance = _leg_instance(_TRUCK_TRAIN_MODES, 1; departure_days, wrap_time)
-        sol = greedy_heuristic(instance)
+        sol = greedy_heuristic(instance; show_progress=false)
         @test cost(sol) == expected
         @test all(a -> a isa TPO.SingleAssignment, values(sol.assignments))
         _test_matches_rebuild(sol, instance)
@@ -603,7 +603,7 @@ end
 
 @testset "Loose window uses the train, greedy equals rebuilt" begin
     instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     @test cost(sol) == 10.0
     _test_matches_rebuild(sol, instance)
 end
@@ -632,7 +632,7 @@ end
     # Two 1-day modes (capacity 3 each) and an expensive 2-day barge.
     modes = [(10.0, 1, 3), (5.0, 1, 3), (20.0, 2, 100)]
     instance = _leg_instance(modes, 3; quantity=5)
-    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
     assignment = only(values(sol.assignments))
     @test assignment isa TPO.MultiAssignment
     @test length(assignment.per_mode) == 2
@@ -645,14 +645,14 @@ end
 
 @testset "is_feasible rejects an assignment that does not match its edge arc" begin
     instance = _leg_instance(_TRUCK_TRAIN_MODES, 1)
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     edge, single = only(sol.assignments)
     sol.assignments[edge] = TPO.MultiAssignment([single, single], 0.0)
     @test !is_feasible(sol, instance)
 
     modes = [(10.0, 1, 3), (5.0, 1, 3)]
     instance = _leg_instance(modes, 1)
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     edge, multi = only(sol.assignments)
     sol.assignments[edge] = TPO.MultiAssignment(multi.per_mode[1:1], 0.0)
     @test !is_feasible(sol, instance)
@@ -661,7 +661,7 @@ end
 @testset "local_search! and ILS keep split legs consistent" begin
     for days in (1, 3)
         instance = _leg_instance(_TRUCK_TRAIN_MODES, days)
-        sol = greedy_heuristic(instance)
+        sol = greedy_heuristic(instance; show_progress=false)
         local_search!(sol, instance; max_iter=20, time_limit=5.0, rng=MersenneTwister(1))
         _test_matches_rebuild(sol, instance)
 

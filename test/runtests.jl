@@ -140,6 +140,10 @@ using .TestFixtures
         end
     end
 
+    @testset "Inbound datasets" begin
+        include("test_inbound_datasets.jl")
+    end
+
     @testset "Multicommodity flow datasets" begin
         include("test_multi_commodity_flow_datasets.jl")
     end

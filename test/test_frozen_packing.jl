@@ -18,13 +18,13 @@ using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instanc
     instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
 
     # Default packing is :frozen.
-    frozen_sol = TPO.greedy_heuristic(instance)
+    frozen_sol = TPO.greedy_heuristic(instance; show_progress=false)
     @test TPO.is_feasible(frozen_sol, instance)
     frozen_cost = TPO.cost(frozen_sol)
     @test isfinite(frozen_cost)
 
     # FFD-union remains a valid opt-in.
-    ffd_sol = TPO.greedy_heuristic(instance; packing=:ffd_union)
+    ffd_sol = TPO.greedy_heuristic(instance; packing=:ffd_union, show_progress=false)
     @test TPO.is_feasible(ffd_sol, instance)
     ffd_cost = TPO.cost(ffd_sol)
     @test isfinite(ffd_cost)
@@ -33,7 +33,7 @@ using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instanc
     @test isapprox(frozen_cost, ffd_cost; rtol=5e-2)
 
     # The mixed solution under the frozen default is feasible.
-    mixed = TPO.mix_greedy_and_lower_bound(instance).mixed
+    mixed = TPO.mix_greedy_and_lower_bound(instance; show_progress=false).mixed
     @test TPO.is_feasible(mixed, instance)
     @test isfinite(TPO.cost(mixed))
 end

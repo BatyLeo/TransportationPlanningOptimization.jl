@@ -1,12 +1,16 @@
 """
 `Inbound` reads and parses inbound transportation instances from CSV files.
 Contains constants for column mappings and functions for loading instance data.
+The [`RenaultInbound`](@ref) dataset downloads the Renault instances from Zenodo with
+DataDeps.jl.
 """
 module Inbound
 
 using CSV: CSV
+using DataDeps: DataDep, register, unpack, @datadep_str
 using DataFrames: DataFrame
 using Dates: DateTime, Week
+using DocStringExtensions: TYPEDEF, TYPEDSIGNATURES
 using ...TransportationPlanningOptimization:
     TransportationPlanningOptimization,
     NetworkNode,
@@ -15,13 +19,24 @@ using ...TransportationPlanningOptimization:
     LinearArcCost,
     BinPackingArcCost,
     Commodity,
+    Instance,
     AbstractArcCostFunction,
     LightCommodity,
     evaluate
+using ..Problems: AbstractDataset
+import ..Problems: list_instances, dataset_dir, load_instance
 
 const TPO = TransportationPlanningOptimization
 
-export InboundArcInfo, InboundCommodityInfo, StockArcCost, parse_inbound_instance
+export InboundArcInfo,
+    InboundCommodityInfo,
+    StockArcCost,
+    RenaultInbound,
+    parse_inbound_instance,
+    list_instances,
+    load_instance
+
+public dataset_dir, datasets
 
 # Node CSV column mappings
 const NODE_ID = :point_account
@@ -97,5 +112,6 @@ function TPO.evaluate(
 end
 
 include("parser.jl")
+include("datasets.jl")
 
 end

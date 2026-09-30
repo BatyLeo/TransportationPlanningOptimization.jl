@@ -22,13 +22,14 @@ using ShipperTransportationPlanning
 const STP = ShipperTransportationPlanning
 using MetaGraphsNext: MetaGraphsNext
 
-using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
+using TransportationPlanningOptimization.Problems.Inbound:
+    RenaultInbound, load_instance, dataset_dir
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-const DATA_DIR = joinpath(@__DIR__, "..", "..", "data", "inbound")
+const DATA_DIR = dataset_dir(RenaultInbound())
 const OUTPUT_DIR = joinpath(@__DIR__, "..", "benchmark", "results")
 
 # Instances to compare, smallest first. Comment out large ones for a quick run.
@@ -327,10 +328,7 @@ function compare_instance(name::String, ls_limit::Real; ils_limit::Real=0)
 
     local tpo_instance
     tpo_build_time = @elapsed begin
-        (; nodes, arcs, commodities) = parse_inbound_instance(
-            nodes_file, legs_file, com_file
-        )
-        tpo_instance = TPO.Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+        tpo_instance = load_instance(RenaultInbound(), name)
     end
 
     local stp_instance

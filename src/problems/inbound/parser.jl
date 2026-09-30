@@ -5,7 +5,7 @@ Read an inbound instance from three CSV files: nodes, legs, and commodities.
 
 Returns a named tuple `(; nodes, arcs, commodities)` containing:
 - `nodes::Vector{NetworkNode}` - Network nodes parsed from node_file
-- `arcs::Vector{NetworkArc}` - Network arcs parsed from leg_file
+- `arcs::Vector{Arc}` - Network arcs parsed from leg_file
 - `commodities::Vector{Commodity}` - Commodities parsed from commodity_file
 
 The function performs deduplication of arcs (keeps only the first arc for each
@@ -82,7 +82,7 @@ function parse_inbound_instance(node_file::String, leg_file::String, commodity_f
         end
     end, raw_arcs)
     if nb_duplicates > 0
-        @warn "$nb_duplicates duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept."
+        @debug "$nb_duplicates duplicate arcs found; only the first occurrence for each (origin, destination) pair is kept."
     end
     # filter!(arc -> arc.info.arc_type in ALLOWED_ARC_TYPES, raw_arcs)
     # arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)

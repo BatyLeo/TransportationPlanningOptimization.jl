@@ -1,20 +1,9 @@
-using Dates
 using TransportationPlanningOptimization
 const TPO = TransportationPlanningOptimization
 using TransportationPlanningOptimization.Problems.Inbound
 
 instance_name = "small"
-datadir = joinpath(@__DIR__, "..", "..", "data", "inbound")
-# datadir = joinpath(@__DIR__, "..", "..", "test", "public")
-nodes_file = joinpath(datadir, "$(instance_name)_nodes.csv")
-legs_file = joinpath(datadir, "$(instance_name)_legs.csv")
-commodities_file = joinpath(datadir, "$(instance_name)_commodities.csv")
-
-(; nodes, arcs, commodities) = Inbound.parse_inbound_instance(
-    nodes_file, legs_file, commodities_file
-);
-
-instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true);
+instance = load_instance(RenaultInbound(), instance_name);
 instance
 
 filtering_sol = lower_bound_filtering(instance);

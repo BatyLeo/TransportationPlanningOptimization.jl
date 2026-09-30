@@ -24,7 +24,7 @@ MULTIGEN.DAT:
     @test is_feasible(res.solution, res.instance; verbose=true)
     @test cost(res.solution) ≈ res.objective_value
 
-    greedy = greedy_heuristic(res.instance)
+    greedy = greedy_heuristic(res.instance; show_progress=false)
     @test res.objective_value <= cost(greedy)
 end
 
@@ -59,7 +59,7 @@ end
     @test is_feasible(res.solution, res.instance; verbose=true)
     @test cost(res.solution) ≈ res.objective_value
 
-    greedy = greedy_heuristic(res.instance)
+    greedy = greedy_heuristic(res.instance; show_progress=false)
     @test res.objective_value <= cost(greedy)
 end
 
@@ -70,8 +70,8 @@ end
             @test res.termination_status == OPTIMAL
             @test is_feasible(res.solution, res.instance; verbose=true)
 
-            greedy_cost = cost(greedy_heuristic(res.instance))
-            lb = cost(lower_bound(res.instance))
+            greedy_cost = cost(greedy_heuristic(res.instance; show_progress=false))
+            lb = cost(lower_bound(res.instance; show_progress=false))
             @test lb <= res.objective_value <= greedy_cost + 1e-6
         end
 
@@ -80,7 +80,7 @@ end
             @test !isnothing(res.solution)
             @test is_feasible(res.solution, res.instance; verbose=true)
 
-            greedy_cost = cost(greedy_heuristic(res.instance))
+            greedy_cost = cost(greedy_heuristic(res.instance; show_progress=false))
             @test res.objective_value <= greedy_cost + 1e-6
             if res.termination_status == OPTIMAL
                 @test isapprox(res.objective_value, 423_933; rtol=1e-4)

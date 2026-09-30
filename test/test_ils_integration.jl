@@ -58,7 +58,7 @@ end
     instance = build_small_instance()
 
     # Phase 1: initial solution
-    sol_data = solve_filtered(instance)
+    sol_data = solve_filtered(instance; show_progress=false)
     local_search!(sol_data.solution, sol_data.sub_instance; time_limit=2.0)
     post_ls_cost = cost(sol_data.solution)
 

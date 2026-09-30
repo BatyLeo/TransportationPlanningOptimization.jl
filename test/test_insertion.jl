@@ -65,7 +65,7 @@ using MetaGraphsNext
     end
 
     @testset "Greedy Construction (LinearArcCost)" begin
-        sol = greedy_heuristic(instance)
+        sol = greedy_heuristic(instance; show_progress=false)
         @test cost(sol) == 20.0
         @test is_feasible(sol, instance)
     end

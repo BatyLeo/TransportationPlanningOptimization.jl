@@ -109,7 +109,7 @@ end
     for name in ("tiny", "small")
         instance = _instance_with_node_cost(name)
 
-        sol = greedy_heuristic(instance)
+        sol = greedy_heuristic(instance; show_progress=false)
         _check_node_cost_consistency(sol, instance)
         name == "small" && @test total_node_cost(sol) > 0
 
@@ -220,7 +220,7 @@ end
     @test isapprox(cost(sol), 163.0; atol=1e-9)
     @test isapprox(cost(Solution(sol.bundle_paths, instance)), 163.0; atol=1e-9)
 
-    sol_greedy = greedy_heuristic(instance)
+    sol_greedy = greedy_heuristic(instance; show_progress=false)
     @test isapprox(cost(sol_greedy), 163.0; atol=1e-9)
 
     removed_c = TPO.remove_bundle_path!(sol, instance, idx_c)
@@ -314,7 +314,9 @@ end
 
     sol_via_h = Solution(instance)
     TPO.add_bundle_path!(sol_via_h, instance, 1, _ttg_path(ttg, 1, "A", "H", "C"))
-    chosen = TPO.choose_best_feasible([sol_via_h, greedy_heuristic(instance)], instance)
+    chosen = TPO.choose_best_feasible(
+        [sol_via_h, greedy_heuristic(instance; show_progress=false)], instance
+    )
     @test isapprox(cost(chosen), 10.0; atol=1e-9)
 end
 
@@ -380,7 +382,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
     @test is_feasible(sol, instance)
 
     assignment = only(values(sol.assignments))
@@ -444,7 +446,7 @@ end
         ),
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
-    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
     edge = only(keys(sol.assignments))
     assignment = sol.assignments[edge]
 

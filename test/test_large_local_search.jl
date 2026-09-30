@@ -128,7 +128,7 @@ end
 
 @testset "large_local_search! never throws or leaves a bundle unrouted under capacity contention" begin
     instance = hub_deadlock_instance()
-    sol = greedy_heuristic(instance)
+    sol = greedy_heuristic(instance; show_progress=false)
     my_forbidden(inst, u, v) = true
 
     for seed in 1:10
