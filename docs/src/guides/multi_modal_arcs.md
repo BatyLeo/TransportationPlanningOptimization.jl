@@ -73,7 +73,7 @@ The edge's head-node cost is mode-independent (it depends on the union of the lo
 
 ## Per-Mode Capacity
 
-Each mode's `capacity` field is checked independently by `is_feasible`, and both selectors respect it during insertion. The two strategies differ in how they react to a too-small mode.
+Each mode's `capacity` field is checked independently by `is_feasible` (as are its bins against the mode's bin capacity), and both selectors respect it during insertion. The two strategies differ in how they react to a too-small mode.
 
 ```julia
 arc_tight = Arc(; origin_id="A", destination_id="B",

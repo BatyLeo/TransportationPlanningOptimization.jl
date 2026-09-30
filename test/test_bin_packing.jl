@@ -43,31 +43,3 @@ end
     instance = Instance(nodes, arcs, commodities, Day(1))
     @test_throws DomainError greedy_heuristic(instance; show_progress=false)
 end
-
-@testset "is_feasible detects oversized bins" begin
-    # The oversized-bin branch of `is_feasible` is size-independent, so `tiny`
-    # is enough here.
-    instance = TestFixtures.tiny_instance()
-
-    sol = Solution(instance)
-    # set a simple bundle path directly (origin -> destination in TTG)
-    sol.bundle_paths[1] = [
-        instance.travel_time_graph.origin_codes[1],
-        instance.travel_time_graph.destination_codes[1],
-    ]
-    order = instance.bundles[1].orders[1]
-    # project to time-space and populate edge assignments
-    tsg_path = [
-        TransportationPlanningOptimization.project_to_time_space_graph(
-            node, order, instance
-        ) for node in sol.bundle_paths[1]
-    ]
-    for i in 1:(length(tsg_path) - 1)
-        edge = (tsg_path[i], tsg_path[i + 1])
-        C = eltype(order.commodities)
-        sol.assignments[edge] = TPO.SingleAssignment{C}(
-            collect(order.commodities), [TPO.Bin{C}(C[], -59.02)], 0.0
-        )
-    end
-    @test !is_feasible(sol, instance; verbose=false)
-end

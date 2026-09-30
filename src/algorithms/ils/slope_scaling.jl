@@ -73,14 +73,3 @@ function _slope_scaling_update_edge!(
 )
     return nothing
 end
-
-"""
-$TYPEDSIGNATURES
-
-Return the `BinPackingArcCost` backing `cost`, or `nothing` if `cost` has no
-bin-packing component (a bare non-bin-packing cost, or a `SumArcCost` without a
-`BinPackingArcCost` term).
-"""
-_bin_packing_cost_of(cost::BinPackingArcCost) = cost
-_bin_packing_cost_of(cost::SumArcCost) = _try_find_bin_packing(cost)
-_bin_packing_cost_of(::AbstractArcCostFunction) = nothing
