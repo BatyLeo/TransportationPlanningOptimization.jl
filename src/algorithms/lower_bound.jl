@@ -7,7 +7,8 @@ function _shortest_path_assign!(
     instance::Instance,
     mode_selector::AbstractModeSelector,
     cost_fn,
-    label::AbstractString,
+    label::AbstractString;
+    show_progress::Bool=true,
 )
     ttg = instance.travel_time_graph
     # Initialize an empty solution and a reusable buffer
@@ -15,7 +16,7 @@ function _shortest_path_assign!(
     buffer = BinPackingBuffer()
     # Sort bundles by max_pack_size
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
-    @showprogress for i in sorted_indices
+    @showprogress enabled = show_progress for i in sorted_indices
         # Compute (and update inplace) the cost matrix for inserting bundle i into an empty solution
         update_bundle_cost_matrix!(
             empty_sol, instance, i, mode_selector; cost_fn=cost_fn, buffer=buffer
@@ -57,11 +58,21 @@ hard capacity on its own (see `_edge_lower_bound_cost`), but orders from
 different bundles are priced independently and may jointly overload an arc.
 The result is a valid lower bound when costs are linear in total volume per bundle,
 and a near-tight bound otherwise.
+Set `show_progress=false` to hide the progress bar.
 """
-function lower_bound(instance::Instance, mode_selector::AbstractModeSelector=CheapestMode())
+function lower_bound(
+    instance::Instance,
+    mode_selector::AbstractModeSelector=CheapestMode();
+    show_progress::Bool=true,
+)
     sol = Solution(instance)
     return _shortest_path_assign!(
-        sol, instance, mode_selector, compute_ttg_edge_lower_bound_cost, "lower-bound"
+        sol,
+        instance,
+        mode_selector,
+        compute_ttg_edge_lower_bound_cost,
+        "lower-bound";
+        show_progress,
     )
 end
 
@@ -72,12 +83,20 @@ Run the lower-bound filtering pre-pass. Computes, for each bundle independently,
 the cheapest path under the hybrid relaxed cost from
 `compute_ttg_edge_filtering_cost`. Bundles whose result is the direct arc
 (path length 2) are the ones `extract_filtered_instance` will drop.
+Set `show_progress=false` to hide the progress bar.
 """
 function lower_bound_filtering(
-    instance::Instance, mode_selector::AbstractModeSelector=CheapestMode()
+    instance::Instance,
+    mode_selector::AbstractModeSelector=CheapestMode();
+    show_progress::Bool=true,
 )
     sol = Solution(instance)
     return _shortest_path_assign!(
-        sol, instance, mode_selector, compute_ttg_edge_filtering_cost, "filtering"
+        sol,
+        instance,
+        mode_selector,
+        compute_ttg_edge_filtering_cost,
+        "filtering";
+        show_progress,
     )
 end

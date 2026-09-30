@@ -19,12 +19,14 @@ costs, and the greedy share grows linearly to dominate the last bundles.
 `start` seeds all three candidates via `deepcopy` (default `Solution(instance)`,
 i.e. empty), so a caller can pre-load a capacity and cost floor (see
 [`preload_filtered_bundles`](@ref)) that every candidate then builds on top of.
+Set `show_progress=false` to hide the progress bar.
 """
 function mix_greedy_and_lower_bound(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
     start::Solution=Solution(instance),
+    show_progress::Bool=true,
 )
     ttg = instance.travel_time_graph
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
@@ -37,7 +39,7 @@ function mix_greedy_and_lower_bound(
     # One bin-packing scratch buffer reused across every bundle and arc.
     buffer = BinPackingBuffer()
 
-    @showprogress for (i, bundle_idx) in enumerate(sorted_indices)
+    @showprogress enabled = show_progress for (i, bundle_idx) in enumerate(sorted_indices)
         bundle_arcs = ttg.bundle_arcs[bundle_idx]
         origin = ttg.origin_codes[bundle_idx]
         destination = ttg.destination_codes[bundle_idx]
@@ -149,13 +151,17 @@ $TYPEDSIGNATURES
 Run [`mix_greedy_and_lower_bound`](@ref) and return the best of its three
 candidates via [`choose_best_feasible`](@ref). `start` is forwarded to
 [`mix_greedy_and_lower_bound`](@ref) as the seed solution for all candidates.
+Set `show_progress=false` to hide the progress bar.
 """
 function mix_greedy_heuristic(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
     start::Solution=Solution(instance),
+    show_progress::Bool=true,
 )
-    candidates = mix_greedy_and_lower_bound(instance; mode_selector, packing, start)
+    candidates = mix_greedy_and_lower_bound(
+        instance; mode_selector, packing, start, show_progress
+    )
     return choose_best_feasible(collect(values(candidates)), instance)
 end

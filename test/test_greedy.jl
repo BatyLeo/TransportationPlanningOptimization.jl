@@ -153,3 +153,16 @@ end
     @test TransportationPlanningOptimization._try_insert_bundle!(sol, instance, 1) == false
     @test isempty(sol.bundle_paths[1])
 end
+
+@testset "show_progress=false leaves results unchanged" begin
+    instance = hub_capacity_instance(
+        LinearArcCost(0.5), LinearArcCost(10.0), LinearArcCost(0.5)
+    )
+    sol = greedy_heuristic(instance; show_progress=false)
+    @test is_feasible(sol, instance)
+    @test cost(sol) ≈ cost(greedy_heuristic(instance))
+    @test cost(lower_bound(instance; show_progress=false)) ≈ cost(lower_bound(instance))
+    @test is_feasible(mix_greedy_heuristic(instance; show_progress=false), instance)
+    res = solve_filtered(instance; show_progress=false)
+    @test is_feasible(res.solution, res.sub_instance)
+end
