@@ -83,7 +83,9 @@ length 2).
 
 For each dropped bundle, commits its full-instance path load onto the
 matching `sub_instance` time-space edges (via `_foreach_path_edge`), skipping
-edges that were pruned from `sub_instance`. Does not set `bundle_paths`: the
+edges that were pruned from `sub_instance`. These reserved commodities belong to no
+`sub_instance` bundle, which is how [`is_feasible`](@ref) tells them apart from the
+load of the bundle paths. Does not set `bundle_paths`: the
 returned solution is meant as the `start` argument of
 [`mix_greedy_and_lower_bound`](@ref), which each candidate then builds on top
 of via `deepcopy`.

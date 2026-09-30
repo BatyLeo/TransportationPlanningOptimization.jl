@@ -547,7 +547,7 @@ end
 
 # ── Greedy, rebuilt Solution and local search agree on split legs ─────────────
 
-# Leg A -> B with `modes` given as (cost per unit, travel days, capacity) tuples.
+# Leg A -> B with `modes` given as (cost per unit or arc cost, travel days, capacity) tuples.
 # `departure_days` are spread so that a wrapped horizon exceeds every transit time.
 function _leg_instance(
     modes, max_delivery_days; quantity=2, departure_days=(1,), wrap_time=false
@@ -560,7 +560,7 @@ function _leg_instance(
         Arc(;
             origin_id="A",
             destination_id="B",
-            cost=LinearArcCost(c),
+            cost=c isa Real ? LinearArcCost(c) : c,
             travel_time=Day(d),
             capacity=cap,
         ) for (c, d, cap) in modes
@@ -655,6 +655,118 @@ end
     sol = greedy_heuristic(instance; show_progress=false)
     edge, multi = only(sol.assignments)
     sol.assignments[edge] = TPO.MultiAssignment(multi.per_mode[1:1], 0.0)
+    @test !is_feasible(sol, instance)
+end
+
+@testset "is_feasible checks the bins of a multi-modal assignment against each mode" begin
+    # Both transit groups have different bin capacities: an assignment packed for the
+    # 2-day group (bin capacity 4) overflows the bins of the 1-day group (capacity 2).
+    modes = [
+        (BinPackingArcCost(10.0, 2), 1, 10),
+        (BinPackingArcCost(12.0, 2), 1, 10),
+        (BinPackingArcCost(30.0, 4), 2, 10),
+        (BinPackingArcCost(35.0, 4), 2, 10),
+    ]
+    instance = _leg_instance(modes, 3; quantity=4)
+    sol = greedy_heuristic(instance; show_progress=false)
+    @test is_feasible(sol, instance)
+
+    cache = instance.index_cache
+    edge, a = only(sol.assignments)
+    su = cache.tsg_code_to_spatial_code[edge[1]]
+    sv = cache.tsg_code_to_spatial_code[edge[2]]
+    other_arc = cache.edge_group_to_arc[(su, sv, 2)]
+    other = Solution(instance).assignments
+    TPO._add_order_to_assignment!(
+        other,
+        edge,
+        other_arc,
+        collect(commodities_of(a)),
+        CheapestMode(),
+        cache.spatial_code_to_node_cost,
+        sv,
+    )
+    sol.assignments[edge] = other[edge]
+    @test_logs (:warn, r"bin exceeding capacity") match_mode = :any !is_feasible(
+        sol, instance; verbose=true
+    )
+end
+
+@testset "is_feasible rejects an overflowing bin" begin
+    modes = [(BinPackingArcCost(10.0, 2), 1, 10)]
+    instance = _leg_instance(modes, 1; quantity=4)
+    sol = greedy_heuristic(instance; show_progress=false)
+    slot = only(values(sol.assignments))
+    @test length(slot.bins) == 2
+    # One bin of load 4 > 2, contents and load unchanged
+    slot.bins = [TPO.Bin{eltype(slot.commodities)}(copy(slot.commodities), 0.0)]
+    @test_logs (:warn, r"bin exceeding capacity") match_mode = :any !is_feasible(
+        sol, instance; verbose=true
+    )
+end
+
+@testset "is_feasible checks assignments against bundle paths" begin
+    instance = _leg_instance(_TRUCK_TRAIN_MODES, 1)
+    sol = greedy_heuristic(instance; show_progress=false)
+    edge, single = only(sol.assignments)
+    @test single isa TPO.SingleAssignment
+    c = first(single.commodities)
+    load_warning = r"copies of"
+
+    # Duplicated commodity
+    push!(single.commodities, c)
+    @test_logs (:warn, load_warning) match_mode = :any !is_feasible(
+        sol, instance; verbose=true
+    )
+    pop!(single.commodities)
+    @test is_feasible(sol, instance)
+
+    # Missing commodity
+    popfirst!(single.commodities)
+    @test_logs (:warn, load_warning) match_mode = :any !is_feasible(
+        sol, instance; verbose=true
+    )
+    pushfirst!(single.commodities, c)
+    @test is_feasible(sol, instance)
+
+    # Commodity of no bundle (a reservation) is allowed
+    foreign = LightCommodity(; origin_id="A", destination_id="B", size=0.5)
+    push!(single.commodities, foreign)
+    @test is_feasible(sol, instance)
+    pop!(single.commodities)
+end
+
+@testset "is_feasible checks bin contents unless the bins are dirty" begin
+    modes = [(BinPackingArcCost(10.0, 2), 1, 10)]
+    instance = _leg_instance(modes, 1; quantity=4)
+    sol = greedy_heuristic(instance; show_progress=false)
+    slot = only(values(sol.assignments))
+    @test slot isa TPO.SingleAssignment
+    @test is_feasible(sol, instance)
+
+    popfirst!(first(slot.bins).commodities)
+    @test_logs (:warn, r"do not hold exactly") match_mode = :any !is_feasible(
+        sol, instance; verbose=true
+    )
+    slot.bins_dirty = true
+    @test is_feasible(sol, instance)
+end
+
+@testset "is_feasible tolerates shortcut nodes in stored paths and checks path count" begin
+    instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
+    sol = greedy_heuristic(instance; show_progress=false)
+    ttg = instance.travel_time_graph
+    path = sol.bundle_paths[1]
+    n = length(path)
+    if TPO.is_date_arrival(ttg)
+        pushfirst!(path, ttg.origin_codes[1])
+    else
+        push!(path, ttg.destination_codes[1])
+    end
+    @test length(path) == n + 1
+    @test is_feasible(sol, instance)
+
+    push!(sol.bundle_paths, path)
     @test !is_feasible(sol, instance)
 end
 

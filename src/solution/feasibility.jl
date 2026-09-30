@@ -7,9 +7,21 @@ Feasibility requires:
 2. Every path must exist (each arc exists in the graph).
 3. Every path must start at the bundle's designated entry node (`origin_codes`).
 4. Every path must end at the bundle's designated exit node (`destination_codes`).
+5. Every stored assignment sits on an existing arc and respects its capacity (per mode
+   on multi-modal arcs).
+6. Every bin respects the bin capacity of its arc cost, and the bins hold exactly the
+   commodities of their assignment (unless the bins are marked dirty).
+7. The assignments carry exactly the load of the bundle paths, plus any commodity
+   belonging to no bundle of the instance (capacity reservations, see
+   [`preload_filtered_bundles`](@ref)).
 """
 function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol=EPS)
     (; travel_time_graph, time_space_graph) = instance
+    if length(sol.bundle_paths) != length(instance.bundles)
+        verbose &&
+            @warn "Solution has $(length(sol.bundle_paths)) bundle paths for $(length(instance.bundles)) bundles."
+        return false
+    end
     for (bundle_idx, path) in enumerate(sol.bundle_paths)
         if isempty(path)
             verbose && @warn "Bundle $(bundle_idx) has an empty path."
@@ -25,36 +37,22 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol
             return false
     end
 
-    # Capacity checks
-    # 1) For bin-packing arcs, ensure no bin exceeds its capacity (remaining
-    #    capacity < 0 within tolerance means total > max).
-    for (edge, assignment) in sol.assignments
-        for b in bins_of(assignment)
-            if b.remaining_capacity < -tol
-                verbose &&
-                    @warn "Bin on edge $(edge) exceeds capacity by $(-b.remaining_capacity)"
-                return false
-            end
-        end
-    end
-
-    # 2) For all time-space arcs, ensure commodity size fits arc capacity per mode.
+    # Capacity checks: bins and arc capacity per mode, for every stored assignment.
     for (edge, assignment) in sol.assignments
         u, v = edge
-        u_label = MetaGraphsNext.label_for(time_space_graph.graph, u)
-        v_label = MetaGraphsNext.label_for(time_space_graph.graph, v)
-        if MetaGraphsNext.haskey(time_space_graph.graph, u_label, v_label)
-            arc = time_space_graph.graph[u_label, v_label]
-            if !_capacity_feasible(arc, assignment, (u_label, v_label); verbose)
-                return false
-            end
-        else
-            verbose &&
-                @warn "TimeSpaceGraph arc for edge $(edge) not found, cannot check capacity."
+        arc = tsg_edge_arc(instance.index_cache, u, v)
+        if isnothing(arc)
+            verbose && @warn "TimeSpaceGraph arc for edge $(edge) not found."
+            return false
         end
+        arc_labels = (
+            MetaGraphsNext.label_for(time_space_graph.graph, u),
+            MetaGraphsNext.label_for(time_space_graph.graph, v),
+        )
+        _capacity_feasible(arc, assignment, arc_labels; tol, verbose) || return false
     end
 
-    return true
+    return _check_assignment_load(sol, instance; verbose)
 end
 
 """
@@ -182,12 +180,53 @@ function _check_destination_node(
     return true
 end
 
+"""
+$TYPEDSIGNATURES
+
+Check the bins of `slot` against the bin capacity of `arc_cost`: no bin is overloaded,
+and unless `slot.bins_dirty`, the bins hold exactly the commodities of the slot.
+Always true when `arc_cost` has no bin-packing component.
+"""
+function _bins_feasible(slot::SingleAssignment, arc_cost, arc_labels; tol, verbose::Bool)
+    bp = _bin_packing_cost_of(arc_cost)
+    isnothing(bp) && return true
+    for b in slot.bins
+        load = sum(c.size for c in b.commodities; init=0.0)
+        if load > bp.bin_capacity + tol
+            verbose &&
+                @warn "Arc $(arc_labels) has a bin exceeding capacity: $(load) > $(bp.bin_capacity)"
+            return false
+        end
+    end
+    if !slot.bins_dirty
+        if sum(length(b.commodities) for b in slot.bins; init=0) != length(slot.commodities)
+            verbose &&
+                @warn "Arc $(arc_labels) has bins that do not hold exactly its commodities"
+            return false
+        end
+        binned = Dict{eltype(slot.commodities),Int}()
+        for b in slot.bins, c in b.commodities
+            binned[c] = get(binned, c, 0) + 1
+        end
+        for c in slot.commodities
+            binned[c] = get(binned, c, 0) - 1
+        end
+        if any(!iszero, values(binned))
+            verbose &&
+                @warn "Arc $(arc_labels) has bins that do not hold exactly its commodities"
+            return false
+        end
+    end
+    return true
+end
+
 function _capacity_feasible(
-    arc::NetworkArc, assignment::SingleAssignment, arc_labels; verbose::Bool
+    arc::NetworkArc, assignment::SingleAssignment, arc_labels; tol, verbose::Bool
 )
+    _bins_feasible(assignment, arc.cost, arc_labels; tol, verbose) || return false
     arc.capacity == typemax(Int) && return true
     total_size = total_size_of(assignment)
-    if total_size > arc.capacity + EPS
+    if total_size > arc.capacity + tol
         verbose &&
             @warn "Arc $(arc_labels) exceeds capacity: $(total_size) > $(arc.capacity)"
         return false
@@ -196,7 +235,7 @@ function _capacity_feasible(
 end
 
 function _capacity_feasible(
-    arc::MultiModalArc, assignment::MultiAssignment, arc_labels; verbose::Bool
+    arc::MultiModalArc, assignment::MultiAssignment, arc_labels; tol, verbose::Bool
 )
     if length(assignment.per_mode) != length(arc.modes)
         verbose &&
@@ -204,9 +243,10 @@ function _capacity_feasible(
         return false
     end
     for (i, (mode, slot)) in enumerate(zip(arc.modes, assignment.per_mode))
+        _bins_feasible(slot, mode.cost, arc_labels; tol, verbose) || return false
         mode.capacity == typemax(Int) && continue
         total_size = slot.total_size
-        if total_size > mode.capacity + EPS
+        if total_size > mode.capacity + tol
             verbose &&
                 @warn "Arc $(arc_labels) mode $(i) exceeds capacity: $(total_size) > $(mode.capacity)"
             return false
@@ -217,9 +257,63 @@ end
 
 # The assignment shape does not match the arc (e.g. a `MultiAssignment` on a single-mode arc).
 function _capacity_feasible(
-    arc::AbstractNetworkArc, assignment::AbstractArcAssignment, arc_labels; verbose::Bool
+    arc::AbstractNetworkArc,
+    assignment::AbstractArcAssignment,
+    arc_labels;
+    tol,
+    verbose::Bool,
 )
     verbose &&
         @warn "Arc $(arc_labels) of type $(typeof(arc)) cannot hold an assignment of type $(typeof(assignment))"
     return false
+end
+
+"""
+$TYPEDSIGNATURES
+
+Check that the stored assignments carry exactly the commodities that the bundle paths
+of `sol` route over each time-space edge (same projection as [`add_bundle_path!`](@ref)).
+Commodities owned by no bundle of `instance` (reservations) are ignored.
+"""
+function _check_assignment_load(
+    sol::Solution{C}, instance::Instance; verbose::Bool
+) where {C}
+    owned = Set{C}(
+        c for bundle in instance.bundles for o in bundle.orders for c in o.commodities
+    )
+    balance = Dict{Tuple{Tuple{Int,Int},C},Int}()
+    sizehint!(
+        balance,
+        sum(a -> count(Returns(true), commodities_of(a)), values(sol.assignments); init=0),
+    )
+    for (edge, assignment) in sol.assignments
+        for c in commodities_of(assignment)
+            c in owned || continue
+            key = (edge, c)
+            balance[key] = get(balance, key, 0) + 1
+        end
+    end
+    for (bundle, path) in zip(instance.bundles, sol.bundle_paths)
+        stripped = copy(path)
+        _remove_shortcuts_from_path!(stripped, instance.travel_time_graph)
+        _foreach_path_edge(instance, bundle, stripped) do edge, _, order
+            for c in order.commodities
+                key = (edge, c)
+                balance[key] = get(balance, key, 0) - 1
+            end
+            return 0.0
+        end
+    end
+    for ((edge, c), n) in balance
+        iszero(n) && continue
+        if verbose
+            labels = map(
+                code -> MetaGraphsNext.label_for(instance.time_space_graph.graph, code),
+                edge,
+            )
+            @warn "Edge $(labels) carries $(abs(n)) $(n > 0 ? "more" : "fewer") copies of $(c) than its bundle paths route"
+        end
+        return false
+    end
+    return true
 end

@@ -72,6 +72,7 @@ end
 
     result = TPO.solve_filtered(instance; show_progress=false)
     TPO.local_search!(result.solution, result.sub_instance; time_limit=1.0)
+    @test TPO.is_feasible(result.solution, result.sub_instance; verbose=true)
     merged = TPO.merge_solutions(
         TPO.lower_bound_filtering(instance; show_progress=false),
         result.solution,
