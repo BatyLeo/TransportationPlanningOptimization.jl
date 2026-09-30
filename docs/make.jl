@@ -2,7 +2,7 @@ using TransportationPlanningOptimization
 using Documenter
 using Literate
 
-# The Canad C tutorial downloads its benchmark data at build time via DataDeps.jl,
+# The Canad C and inbound tutorials download their benchmark data at build time via DataDeps.jl,
 # so we accept the download prompt non-interactively.
 ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 
@@ -40,6 +40,7 @@ makedocs(;
         "Getting Started" => "getting_started.md",
         "Tutorials" => [
             "Basic Example" => "tutorials/basic_example.md",
+            "Inbound Transportation Planning (Renault)" => "tutorials/inbound.md",
             "Unsplittable Multicommodity Flow and Network Design (Canad C)" => "tutorials/canad_c.md",
         ],
         "Guides" => [
