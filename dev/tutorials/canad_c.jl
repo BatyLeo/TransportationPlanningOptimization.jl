@@ -66,7 +66,7 @@ using Random
 
 ls_kwargs = (; max_iter=250_000, max_no_improv=250_000, time_limit=30.0)
 
-solution = greedy_heuristic(instance)
+solution = greedy_heuristic(instance; show_progress=false)
 is_feasible(solution, instance; verbose=true)
 greedy_cost = cost(solution)
 
@@ -101,7 +101,7 @@ ls_gap = (ls_cost - umcf_optimum) / umcf_optimum * 100
 
 design_instance = load_instance(CanadC(), "c33"; network_design=true)
 
-design_solution = greedy_heuristic(design_instance)
+design_solution = greedy_heuristic(design_instance; show_progress=false)
 is_feasible(design_solution, design_instance; verbose=true)
 design_greedy_cost = cost(design_solution)
 
