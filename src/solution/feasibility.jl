@@ -183,7 +183,7 @@ function _check_destination_node(
 end
 
 function _capacity_feasible(
-    arc::NetworkArc, assignment::AbstractArcAssignment, arc_labels; verbose::Bool
+    arc::NetworkArc, assignment::SingleAssignment, arc_labels; verbose::Bool
 )
     arc.capacity == typemax(Int) && return true
     total_size = total_size_of(assignment)
@@ -198,6 +198,11 @@ end
 function _capacity_feasible(
     arc::MultiModalArc, assignment::MultiAssignment, arc_labels; verbose::Bool
 )
+    if length(assignment.per_mode) != length(arc.modes)
+        verbose &&
+            @warn "Arc $(arc_labels) has $(length(arc.modes)) modes but the assignment has $(length(assignment.per_mode)) slots"
+        return false
+    end
     for (i, (mode, slot)) in enumerate(zip(arc.modes, assignment.per_mode))
         mode.capacity == typemax(Int) && continue
         total_size = slot.total_size
@@ -208,4 +213,13 @@ function _capacity_feasible(
         end
     end
     return true
+end
+
+# The assignment shape does not match the arc (e.g. a `MultiAssignment` on a single-mode arc).
+function _capacity_feasible(
+    arc::AbstractNetworkArc, assignment::AbstractArcAssignment, arc_labels; verbose::Bool
+)
+    verbose &&
+        @warn "Arc $(arc_labels) of type $(typeof(arc)) cannot hold an assignment of type $(typeof(assignment))"
+    return false
 end

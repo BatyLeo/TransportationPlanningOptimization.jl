@@ -174,7 +174,7 @@ function _collect_common_tsg_arcs(instance)
     common_arcs = Tuple{Int,Int}[]
     arc_bp = Dict{Tuple{Int,Int},TPO.BinPackingArcCost}()
 
-    for ((su, sv), arc) in cache.spatial_pair_to_arc
+    for ((su, sv, _), arc) in cache.edge_group_to_arc
         bp = _bp_cost_of(arc.cost)
         bp === nothing && continue
         for t in 1:H
@@ -245,7 +245,7 @@ function _select_bundles_by_plant(
 
     # Approximate number of tau variables (common TSG arcs)
     n_common = 0
-    for ((su, sv), arc) in cache.spatial_pair_to_arc
+    for ((su, sv, _), arc) in cache.edge_group_to_arc
         if _bp_cost_of(arc.cost) !== nothing
             n_common += instance.time_horizon_length
         end
@@ -278,7 +278,7 @@ function _milp_arc_cost(instance, bundle_idx, u_ttg, v_ttg)
     sv = cache.ttg_code_to_spatial_code[v_ttg]
     su == sv && return 1e-5  # shortcut
 
-    arc = cache.spatial_pair_to_arc[(su, sv)]
+    arc = TPO.ttg_edge_arc(cache, u_ttg, v_ttg)
     bundle = instance.bundles[bundle_idx]
 
     cost = 0.0
@@ -378,7 +378,7 @@ function _solve_arc_flow_milp(
                 su = cache.ttg_code_to_spatial_code[u_ttg]
                 sv = cache.ttg_code_to_spatial_code[v_ttg]
                 su == sv && continue  # shortcut
-                tsg_arc = cache.spatial_pair_to_arc[(su, sv)]
+                tsg_arc = TPO.ttg_edge_arc(cache, u_ttg, v_ttg)
                 _bp_cost_of(tsg_arc.cost) === nothing && continue  # linear, no packing
 
                 u_tsg = TPO.project_to_time_space_graph(u_ttg, order, instance)
@@ -421,9 +421,7 @@ function _solve_arc_flow_milp(
     for edge in common_arcs
         bp = arc_bp[edge]
         u_tsg, v_tsg = edge
-        su = cache.tsg_code_to_spatial_code[u_tsg]
-        sv = cache.tsg_code_to_spatial_code[v_tsg]
-        scaling = get(ttg.cost_scaling, (su, sv), 1.0)
+        scaling = get(ttg.cost_scaling, TPO.tsg_edge_key(cache, u_tsg, v_tsg), 1.0)
         JuMP.add_to_expression!(obj, tau[edge], bp.cost_per_bin * scaling)
     end
 

@@ -7,9 +7,13 @@ greedy mode selection.
 using Test
 using Graphs
 using Dates
+using Random
 using TransportationPlanningOptimization
 
 const TPO = TransportationPlanningOptimization
+
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
 
 # ── Shared fixtures ────────────────────────────────────────────────────────────
 
@@ -539,4 +543,143 @@ end
         _NODES_AB, [("A", "B", truck), ("A", "B", train)]; allow_multimodal=true
     )
     @test ng.graph["A", "B"] isa MultiModalArc
+end
+
+# ── Greedy, rebuilt Solution and local search agree on split legs ─────────────
+
+# Leg A -> B with `modes` given as (cost per unit, travel days, capacity) tuples.
+# `departure_days` are spread so that a wrapped horizon exceeds every transit time.
+function _leg_instance(
+    modes, max_delivery_days; quantity=2, departure_days=(1,), wrap_time=false
+)
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(c),
+            travel_time=Day(d),
+            capacity=cap,
+        ) for (c, d, cap) in modes
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=quantity,
+            departure_date=DateTime(2024, 1, d),
+            max_delivery_time=Day(max_delivery_days),
+            size=1.0,
+        ) for d in departure_days
+    ]
+    return Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true, wrap_time)
+end
+
+const _TRUCK_TRAIN_MODES = [(10.0, 1, 10), (5.0, 2, 10)]
+
+# Assert that `sol` is feasible and identical in cost and assignment types to a rebuild.
+function _test_matches_rebuild(sol, instance)
+    rebuilt = Solution(sol.bundle_paths, instance)
+    @test is_feasible(sol, instance)
+    @test is_feasible(rebuilt, instance)
+    @test cost(sol) ≈ cost(rebuilt)
+    @test Dict(e => typeof(a) for (e, a) in sol.assignments) ==
+        Dict(e => typeof(a) for (e, a) in rebuilt.assignments)
+    return rebuilt
+end
+
+@testset "Tight window keeps only the truck edge, greedy equals rebuilt" begin
+    for (wrap_time, departure_days, expected) in ((false, (1,), 20.0), (true, (1, 6), 40.0))
+        instance = _leg_instance(_TRUCK_TRAIN_MODES, 1; departure_days, wrap_time)
+        sol = greedy_heuristic(instance)
+        @test cost(sol) == expected
+        @test all(a -> a isa TPO.SingleAssignment, values(sol.assignments))
+        _test_matches_rebuild(sol, instance)
+    end
+end
+
+@testset "Loose window uses the train, greedy equals rebuilt" begin
+    instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
+    sol = greedy_heuristic(instance)
+    @test cost(sol) == 10.0
+    _test_matches_rebuild(sol, instance)
+end
+
+@testset "cost_scaling is keyed per transit group" begin
+    instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
+    ttg = instance.travel_time_graph
+    cache = instance.index_cache
+    bundle = only(instance.bundles)
+    sol = Solution(instance)
+    edges = Dict{Int,Tuple{Int,Int}}()
+    for (u, v) in ttg.bundle_arcs[1]
+        cache.ttg_code_to_spatial_code[u] == cache.ttg_code_to_spatial_code[v] && continue
+        d = abs(cache.ttg_code_to_tau[u] - cache.ttg_code_to_tau[v])
+        get!(edges, d, (u, v))
+    end
+    inc(d) = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, edges[d]...)
+    base_1, base_2 = inc(1), inc(2)
+    ttg.cost_scaling[TPO.ttg_edge_key(cache, edges[1]...)] = 2.0
+    @test inc(1) ≈ 2 * base_1
+    @test inc(2) == base_2
+    empty!(ttg.cost_scaling)
+end
+
+@testset "FillThenSpillMode spills only inside the same-transit group" begin
+    # Two 1-day modes (capacity 3 each) and an expensive 2-day barge.
+    modes = [(10.0, 1, 3), (5.0, 1, 3), (20.0, 2, 100)]
+    instance = _leg_instance(modes, 3; quantity=5)
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+    assignment = only(values(sol.assignments))
+    @test assignment isa TPO.MultiAssignment
+    @test length(assignment.per_mode) == 2
+    @test [length(commodities_of(slot)) for slot in assignment.per_mode] == [2, 3]
+    @test cost(sol) == 3 * 5.0 + 2 * 10.0
+    rebuilt = Solution(sol.bundle_paths, instance; mode_selector=FillThenSpillMode())
+    @test cost(sol) ≈ cost(rebuilt)
+    @test is_feasible(sol, instance)
+end
+
+@testset "is_feasible rejects an assignment that does not match its edge arc" begin
+    instance = _leg_instance(_TRUCK_TRAIN_MODES, 1)
+    sol = greedy_heuristic(instance)
+    edge, single = only(sol.assignments)
+    sol.assignments[edge] = TPO.MultiAssignment([single, single], 0.0)
+    @test !is_feasible(sol, instance)
+
+    modes = [(10.0, 1, 3), (5.0, 1, 3)]
+    instance = _leg_instance(modes, 1)
+    sol = greedy_heuristic(instance)
+    edge, multi = only(sol.assignments)
+    sol.assignments[edge] = TPO.MultiAssignment(multi.per_mode[1:1], 0.0)
+    @test !is_feasible(sol, instance)
+end
+
+@testset "local_search! and ILS keep split legs consistent" begin
+    for days in (1, 3)
+        instance = _leg_instance(_TRUCK_TRAIN_MODES, days)
+        sol = greedy_heuristic(instance)
+        local_search!(sol, instance; max_iter=20, time_limit=5.0, rng=MersenneTwister(1))
+        _test_matches_rebuild(sol, instance)
+
+        iterated_local_search!(
+            sol,
+            instance,
+            [TestFixtures.ReinsertPerturbation()];
+            config=ILSConfig(;
+                time_limit=2,
+                perturbation_time_limit=1,
+                ls_time_limit=1,
+                max_no_change=2,
+                max_no_improv=2,
+            ),
+            (cost_update!)=slope_scaling_update!,
+            rng=MersenneTwister(42),
+            verbose=false,
+        )
+        _test_matches_rebuild(sol, instance)
+    end
 end

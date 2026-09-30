@@ -323,10 +323,6 @@ end
 @testset "Slope scaling does not scale node costs" begin
     instance = _through_node_instance()
     ttg = instance.travel_time_graph
-    ng = instance.network_graph.graph
-    a_code = MetaGraphsNext.code_for(ng, "A")
-    h_code = MetaGraphsNext.code_for(ng, "H")
-    ttg.cost_scaling[(a_code, h_code)] = 2.0
 
     sol = Solution(instance)
     ah_edge = only(
@@ -334,6 +330,7 @@ end
         (u, v) in ttg.bundle_arcs[1] if MetaGraphsNext.label_for(ttg.graph, u)[1] == "A" &&
             MetaGraphsNext.label_for(ttg.graph, v)[1] == "H"
     )
+    ttg.cost_scaling[TPO.ttg_edge_key(instance.index_cache, ah_edge...)] = 2.0
     inc = TPO.compute_ttg_edge_incremental_cost(
         sol, instance, instance.bundles[1], ah_edge...
     )

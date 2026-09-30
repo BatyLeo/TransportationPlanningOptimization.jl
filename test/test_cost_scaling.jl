@@ -11,7 +11,7 @@ const TPO = TransportationPlanningOptimization
     TestFixtures.reset!()  # start from a clean scaling dict
     ttg = instance.travel_time_graph
     @test hasproperty(ttg, :cost_scaling)
-    @test ttg.cost_scaling isa Dict{Tuple{Int,Int},Float64}
+    @test ttg.cost_scaling isa Dict{Tuple{Int,Int,Int},Float64}
     @test isempty(ttg.cost_scaling)
 end
 
@@ -32,10 +32,8 @@ end
     # Compute baseline cost (no scaling)
     baseline = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)
 
-    # Set scaling factor = 2.0 on the spatial arc
-    su = cache.ttg_code_to_spatial_code[u]
-    sv = cache.ttg_code_to_spatial_code[v]
-    ttg.cost_scaling[(su, sv)] = 2.0
+    # Set scaling factor = 2.0 on the edge group
+    ttg.cost_scaling[TPO.ttg_edge_key(cache, u, v)] = 2.0
 
     scaled = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)
     @test scaled ≈ 2.0 * baseline atol = 1e-6

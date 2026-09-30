@@ -110,9 +110,7 @@ function _refresh_dirty_assignments!(sol::Solution, instance::Instance, edges)
     for edge in edges
         assignment = get(sol.assignments, edge, nothing)
         assignment === nothing && continue
-        su = cache.tsg_code_to_spatial_code[edge[1]]
-        sv = cache.tsg_code_to_spatial_code[edge[2]]
-        arc = cache.spatial_pair_to_arc[(su, sv)]
+        arc = tsg_edge_arc(cache, edge[1], edge[2])
         if assignment isa SingleAssignment
             assignment.bins_dirty || continue
             _update_single_assignment_cost!(assignment, arc.cost)
