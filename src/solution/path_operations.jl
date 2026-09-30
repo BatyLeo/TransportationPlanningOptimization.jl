@@ -106,7 +106,7 @@ function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{
     for order in bundle.orders
         for k in 1:(length(path) - 1)
             arc = ttg_edge_arc(cache, path[k], path[k + 1])
-            arc === nothing && throw(
+            isnothing(arc) && throw(
                 ArgumentError("TTG edge ($(path[k]), $(path[k + 1])) has no network arc"),
             )
             u_tsg = project_to_time_space_graph(path[k], order, instance)
@@ -249,7 +249,7 @@ function Solution(
 
         for (edge, new_comms) in tsg_edge_to_new_commodities
             arc = tsg_edge_arc(cache, edge...)
-            if arc === nothing
+            if isnothing(arc)
                 tsg = time_space_graph.graph
                 throw(
                     ArgumentError(

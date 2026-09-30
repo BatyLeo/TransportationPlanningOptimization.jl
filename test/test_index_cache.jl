@@ -104,7 +104,7 @@ function _cache_matches_graphs(instance)
             arc = edge_arc(
                 cache, MetaGraphsNext.code_for(graph, u), MetaGraphsNext.code_for(graph, v)
             )
-            ok &= arc !== nothing && _same_arc(graph[u, v], arc)
+            ok &= !isnothing(arc) && _same_arc(graph[u, v], arc)
         end
     end
     return ok

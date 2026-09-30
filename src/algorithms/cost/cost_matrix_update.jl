@@ -28,7 +28,7 @@ function compute_ttg_edge_incremental_cost(
     node_part = 0.0
     edge_key = ttg_edge_key(cache, u_ttg_code, v_ttg_code)
     arc = get(cache.edge_group_to_arc, edge_key, nothing)
-    if arc === nothing
+    if isnothing(arc)
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf # Infeasible for this bundle
     end
@@ -113,7 +113,7 @@ function compute_ttg_edge_lower_bound_cost(
         return _direct_arc_lb_cost(bundle, instance, u_ttg_code, v_ttg_code, mode_selector)
     end
     arc = ttg_edge_arc(cache, u_ttg_code, v_ttg_code)
-    if arc === nothing
+    if isnothing(arc)
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf
     end
@@ -154,7 +154,7 @@ function _direct_arc_lb_cost(
 )
     cache = instance.index_cache
     arc = ttg_edge_arc(cache, u_ttg_code, v_ttg_code)
-    if arc === nothing
+    if isnothing(arc)
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf
     end
