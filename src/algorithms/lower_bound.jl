@@ -1,7 +1,8 @@
 # Shared loop for lower_bound and lower_bound_filtering: sort bundles by
 # decreasing max single-commodity size (matching greedy_heuristic), compute
 # each bundle's shortest path against the empty solution using `cost_fn`,
-# and insert it.
+# and insert it. `on_fixed(i, path)` is called for each bundle whose path is its
+# direct arc (length 2 after shortcut removal), i.e. the ones filtering fixes.
 function _shortest_path_assign!(
     current_solution::Solution,
     instance::Instance,
@@ -9,6 +10,7 @@ function _shortest_path_assign!(
     cost_fn,
     label::AbstractString;
     show_progress::Bool=true,
+    on_fixed::Function=(i, path) -> nothing,
 )
     ttg = instance.travel_time_graph
     # Initialize an empty solution and a reusable buffer
@@ -36,12 +38,17 @@ function _shortest_path_assign!(
                     "$(bundle.origin_id) -> $(bundle.destination_id), " *
                     "max_transit_steps=$(max_steps), " *
                     "forbidden_nodes=$(bundle.forbidden_nodes), " *
-                    "forbidden_arcs=$(bundle.forbidden_arcs)",
+                    "forbidden_arcs=$(bundle.forbidden_arcs)" *
+                    (
+                        label == "filtering" ?
+                        " (capacity may be taken by previously fixed direct bundles)" : ""
+                    ),
                 ),
             )
         end
         # Insert bundle i using computed path above
         add_bundle_path!(current_solution, instance, i, path; mode_selector)
+        length(path) == 2 && on_fixed(i, path)
     end
     return current_solution
 end
@@ -79,10 +86,16 @@ end
 """
 $TYPEDSIGNATURES
 
-Run the lower-bound filtering pre-pass. Computes, for each bundle independently,
+Run the lower-bound filtering pre-pass. Computes, for each bundle,
 the cheapest path under the hybrid relaxed cost from
-`compute_ttg_edge_filtering_cost`. Bundles whose result is the direct arc
-(path length 2) are the ones `extract_filtered_instance` will drop.
+`compute_ttg_edge_filtering_cost`, still priced against an empty solution.
+Bundles whose result is the direct arc (path length 2) are the ones
+`extract_filtered_instance` will drop, so they are fixed: an arc already full
+of fixed bundles is closed to later bundles, which keeps the fixed bundles
+jointly within the hard capacities (unlike [`lower_bound`](@ref)). If a bundle
+then has no path left, an `ArgumentError` is thrown. As in `greedy_heuristic`, bundles
+are fixed greedily in decreasing `max_pack_size` order, so this can also happen on a
+feasible instance whose capacity was taken by earlier fixed bundles.
 Set `show_progress=false` to hide the progress bar.
 """
 function lower_bound_filtering(
@@ -91,12 +104,35 @@ function lower_bound_filtering(
     show_progress::Bool=true,
 )
     sol = Solution(instance)
+    # Load of the fixed bundles only, read by the capacity gate (pricing stays
+    # against the empty solution).
+    fixed = Solution(instance)
+    fixed_pairs = Set{Tuple{Int,Int}}()
+    cache = instance.index_cache
+    function fix!(i, path)
+        add_bundle_path!(fixed, instance, i, path; mode_selector)
+        push!(
+            fixed_pairs,
+            (
+                cache.ttg_code_to_spatial_code[path[1]],
+                cache.ttg_code_to_spatial_code[path[2]],
+            ),
+        )
+        return nothing
+    end
+    filtering_cost(sol_, inst, bundle, u, v, sel; buffer, packing) =
+        if _fits_fixed_load(fixed, fixed_pairs, inst, bundle, u, v, sel, buffer)
+            compute_ttg_edge_filtering_cost(sol_, inst, bundle, u, v, sel; buffer, packing)
+        else
+            Inf
+        end
     return _shortest_path_assign!(
         sol,
         instance,
         mode_selector,
-        compute_ttg_edge_filtering_cost,
+        filtering_cost,
         "filtering";
         show_progress,
+        on_fixed=fix!,
     )
 end
