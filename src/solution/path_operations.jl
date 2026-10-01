@@ -95,10 +95,10 @@ time-space edge `(u_tsg, v_tsg)` and its network `arc`, and accumulate the
 `Float64` deltas returned by `f(edge, arc, order)`. Shared by
 [`add_bundle_path!`](@ref) and [`remove_bundle_path!`](@ref).
 
-Orders within a bundle have distinct delivery time steps in `1:H`, so each
-`(order, arc)` pair projects to a unique TSG edge even under `wrap_time`; the
-result is therefore a plain additive sum with no per-edge grouping (same
-zero-collision argument as the forward `compute_ttg_edge_*` rewrite).
+Each `(order, path-edge)` pair is visited once and `f` is called per pair, so
+commits and removals stay one-for-one. Under `wrap_time` a cyclic spatial path
+can make one order, or two orders of the bundle, project onto the same TSG edge:
+the deltas are still a plain additive sum, with no per-edge grouping.
 """
 function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{Int})
     cache = instance.index_cache
@@ -106,9 +106,17 @@ function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{
     for order in bundle.orders
         for k in 1:(length(path) - 1)
             arc = ttg_edge_arc(cache, path[k], path[k + 1])
-            isnothing(arc) && throw(
-                ArgumentError("TTG edge ($(path[k]), $(path[k + 1])) has no network arc"),
-            )
+            if isnothing(arc)
+                g = instance.travel_time_graph.graph
+                u_label = MetaGraphsNext.label_for(g, path[k])
+                v_label = MetaGraphsNext.label_for(g, path[k + 1])
+                throw(
+                    ArgumentError(
+                        "TTG edge ($u_label, $v_label) of bundle " *
+                        "$(bundle.origin_id) -> $(bundle.destination_id) has no network arc",
+                    ),
+                )
+            end
             u_tsg = project_to_time_space_graph(path[k], order, instance)
             v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
             delta += f((u_tsg, v_tsg), arc, order)
@@ -139,12 +147,34 @@ function add_bundle_path!(
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
     current_solution.bundle_paths[bundle_idx] = path
     bundle = instance.bundles[bundle_idx]
-    cache = instance.index_cache
 
+    return _commit_bundle_path!(
+        current_solution.assignments, instance, bundle, path, mode_selector, packing
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Commit every order of `bundle` along the already cleaned `path` into
+`assignments`, one `(order, edge)` at a time, and return the cost increase.
+Each commit receives a single order, whose commodities are sorted descending by
+size. Shared by [`add_bundle_path!`](@ref) and the `Solution(bundle_paths, instance)`
+constructor, so both pack identically.
+"""
+function _commit_bundle_path!(
+    assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment},
+    instance::Instance,
+    bundle::Bundle,
+    path::Vector{Int},
+    mode_selector::AbstractModeSelector,
+    packing::Symbol,
+)
+    cache = instance.index_cache
     return _foreach_path_edge(instance, bundle, path) do edge, arc, order
         sv = cache.tsg_code_to_spatial_code[edge[2]]
         return _add_order_to_assignment!(
-            current_solution.assignments,
+            assignments,
             edge,
             arc,
             order.commodities,
@@ -221,8 +251,7 @@ function Solution(
     instance::Instance{<:Bundle{<:Order{IDA,I}}};
     mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {IDA,I}
-    (; time_space_graph, bundles) = instance
-    cache = instance.index_cache
+    bundles = instance.bundles
 
     C = LightCommodity{I}
     assignments = Dict{Tuple{Int,Int},Union{SingleAssignment{C},MultiAssignment{C}}}()
@@ -231,43 +260,9 @@ function Solution(
     cleaned_paths = [copy(p) for p in bundle_paths]
     for (bundle_idx, ttg_path) in enumerate(cleaned_paths)
         _remove_shortcuts_from_path!(ttg_path, instance.travel_time_graph)
-        bundle = bundles[bundle_idx]
-
-        # Same bucketing as in `add_bundle_path!`: combine all the bundle's
-        # commodities per TSG edge before consulting the mode selector.
-        tsg_edge_to_new_commodities = Dict{Tuple{Int,Int},Vector{C}}()
-        for order in bundle.orders
-            tsg_path = [
-                project_to_time_space_graph(node_code, order, instance) for
-                node_code in ttg_path
-            ]
-            for i in 1:(length(tsg_path) - 1)
-                edge = (tsg_path[i], tsg_path[i + 1])
-                append!(get!(tsg_edge_to_new_commodities, edge, C[]), order.commodities)
-            end
-        end
-
-        for (edge, new_comms) in tsg_edge_to_new_commodities
-            arc = tsg_edge_arc(cache, edge...)
-            if isnothing(arc)
-                tsg = time_space_graph.graph
-                throw(
-                    ArgumentError(
-                        "Bundle $bundle_idx path uses TSG edge ($(MetaGraphsNext.label_for(tsg, edge[1])) -> $(MetaGraphsNext.label_for(tsg, edge[2]))) which has no network arc",
-                    ),
-                )
-            end
-            sv = cache.tsg_code_to_spatial_code[edge[2]]
-            _add_order_to_assignment!(
-                assignments,
-                edge,
-                arc,
-                new_comms,
-                mode_selector,
-                cache.spatial_code_to_node_cost,
-                sv,
-            )
-        end
+        _commit_bundle_path!(
+            assignments, instance, bundles[bundle_idx], ttg_path, mode_selector, :frozen
+        )
     end
 
     return Solution{C}(cleaned_paths, assignments)

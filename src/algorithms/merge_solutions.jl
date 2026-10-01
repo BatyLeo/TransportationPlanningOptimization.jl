@@ -13,9 +13,9 @@ For each bundle of `full_instance`:
   bundle's path in the merged solution.
 - Otherwise, `full_solution`'s path for that bundle is reused.
 
-The merged solution is then built in one batched pass via the
-`Solution(bundle_paths, instance)` constructor, so each arc's commodities
-are packed exactly once with their final commodity set.
+The merged solution is built in one pass by the `Solution(bundle_paths, instance)`
+constructor, which commits bundles in index order exactly like incremental
+`add_bundle_path!` calls.
 
 The caller is expected to have run `lower_bound_filtering` (or similar) on
 `full_solution` first, so every bundle of `full_instance` already has a path.

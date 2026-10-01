@@ -318,8 +318,8 @@ function _fill_then_spill_assign!(
         isempty(placed) && continue
         slot = assignment.per_mode[i]
         before = slot.arc_cost
-        # `placed` is a subset of the order's commodities, which are sorted
-        # desc at construction. The merge preserves slot.sorted=true.
+        # `placed` is a subsequence of the (descending sorted) commodities passed
+        # in, so it is sorted too and the merge preserves slot.sorted=true.
         _merge_sorted_into_slot!(slot, placed)
         _update_single_assignment_cost!(slot, arc.modes[i].cost)
         cost_delta += slot.arc_cost - before
@@ -332,8 +332,8 @@ $TYPEDSIGNATURES
 
 Merge `new_commodities` into `slot` and recompute its cost, returning the cost
 delta. Under `:frozen` the commit adds onto the slot's cached bins; otherwise it
-recomputes from scratch. `new_commodities` is sorted desc by size (the `Order`
-invariant), so the merge preserves `slot.sorted=true` and the next remove can
+recomputes from scratch. `new_commodities` must be sorted desc by size (the
+caller's duty), so the merge preserves `slot.sorted=true` and the next remove can
 skip its `_ensure_sorted!` sort.
 """
 function _commit_new_to_slot!(
