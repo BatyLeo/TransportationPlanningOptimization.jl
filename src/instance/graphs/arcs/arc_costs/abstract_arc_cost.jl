@@ -40,12 +40,15 @@ $TYPEDSIGNATURES
 Compute the additional cost of adding `new_commodities` to an arc that already contains
 `existing_commodities`.
 Default implementation: evaluate total and subtract.
+When `existing_commodities` is empty it returns `evaluate(arc_f, new_commodities)` directly,
+which assumes `evaluate` is 0 on no commodities.
 """
 function incremental_cost(
     arc_f::AbstractArcCostFunction,
     existing_commodities::Vector{C},
     new_commodities::Vector{C},
 ) where {C<:LightCommodity}
+    isempty(existing_commodities) && return evaluate(arc_f, new_commodities)
     all_commodities = vcat(existing_commodities, new_commodities)
     return evaluate(arc_f, all_commodities) - evaluate(arc_f, existing_commodities)
 end
