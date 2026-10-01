@@ -19,6 +19,25 @@ const TPO = TransportationPlanningOptimization
     @test isapprox(TPO.evaluate(c, items), 40.0; atol=1e-9)
 end
 
+@testset "StockArcCost incremental costs are additive" begin
+    mk(x) = LightCommodity(;
+        origin_id="o", destination_id="d", size=1.0, info=InboundCommodityInfo(x)
+    )
+    existing = [mk(2.5), mk(1.5)]
+    new = [mk(3.0), mk(0.5)]
+    c = StockArcCost(10.0)
+    s = TPO.SumArcCost((c, LinearArcCost(1.0)))
+    for ex in (empty(new), existing), f in (c, s)
+        expected = TPO.evaluate(f, vcat(ex, new)) - TPO.evaluate(f, ex)
+        @test TPO.incremental_cost(f, ex, new) ≈ expected
+        @test TPO.lower_bound_incremental_cost(f, ex, new) ≈ expected
+    end
+    for f in (c, s)
+        TPO.lower_bound_incremental_cost(f, existing, new)
+        @test @allocated(TPO.lower_bound_incremental_cost(f, existing, new)) == 0
+    end
+end
+
 @testset "LinearNodeCost is linear in volume" begin
     items = [
         LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)

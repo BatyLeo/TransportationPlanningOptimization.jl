@@ -111,6 +111,18 @@ function TPO.evaluate(
     return c.distance * sum(x.info.stock_cost for x in comms; init=0.0)
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Incremental stock cost of adding `new` to an arc. The cost is additive over commodities,
+so it equals `evaluate(c, new)` regardless of `existing`.
+"""
+function TPO.incremental_cost(
+    c::StockArcCost, ::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return TPO.evaluate(c, new)
+end
+
 include("parser.jl")
 include("datasets.jl")
 
