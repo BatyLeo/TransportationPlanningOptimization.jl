@@ -55,22 +55,21 @@ list_instances(CanadC())
 
 instance = load_instance(CanadC(), "c33")
 
-# We first build a solution with the greedy insertion heuristic, then refine it with
+# We first build a solution with the construction phase of [`solve`](@ref), then refine it with
 # local search.
-# To keep run times reproducible across machines, we stop on a fixed iteration
-# budget (`max_iter`) rather than on wall-clock time, and raise `max_no_improv` to
-# match so it does not cut the run short before that budget is reached.
+# By default, local search stops after 15000 consecutive non-improving iterations, which does not depend on the machine,
+# so run times are reproducible.
 # `time_limit` is kept as a generous safety cap, and the run uses a seeded RNG:
 
 using Random
 
-ls_kwargs = (; max_iter=250_000, max_no_improv=250_000, time_limit=30.0)
+solve_kwargs = (; time_limit=30.0, show_progress=false)
 
-solution = greedy_heuristic(instance; show_progress=false)
+solution = solve(instance; local_search=false, show_progress=false)
 is_feasible(solution, instance; verbose=true)
-greedy_cost = cost(solution)
+construction_cost = cost(solution)
 
-local_search!(solution, instance; ls_kwargs..., rng=MersenneTwister(0))
+solution = solve(instance; solve_kwargs..., rng=MersenneTwister(0))
 is_feasible(solution, instance; verbose=true)
 ls_cost = cost(solution)
 
@@ -85,10 +84,10 @@ umcf_result.termination_status
 is_feasible(umcf_result.solution, umcf_result.instance; verbose=true)
 umcf_optimum = umcf_result.objective_value
 
-greedy_gap = (greedy_cost - umcf_optimum) / umcf_optimum * 100
+construction_gap = (construction_cost - umcf_optimum) / umcf_optimum * 100
 ls_gap = (ls_cost - umcf_optimum) / umcf_optimum * 100
 
-(greedy_gap_pct=round(greedy_gap; digits=2), ls_gap_pct=round(ls_gap; digits=2))
+(construction_gap_pct=round(construction_gap; digits=2), ls_gap_pct=round(ls_gap; digits=2))
 
 # ## Network Design
 #
@@ -101,11 +100,11 @@ ls_gap = (ls_cost - umcf_optimum) / umcf_optimum * 100
 
 design_instance = load_instance(CanadC(), "c33"; network_design=true)
 
-design_solution = greedy_heuristic(design_instance; show_progress=false)
+design_solution = solve(design_instance; local_search=false, show_progress=false)
 is_feasible(design_solution, design_instance; verbose=true)
-design_greedy_cost = cost(design_solution)
+design_construction_cost = cost(design_solution)
 
-local_search!(design_solution, design_instance; ls_kwargs..., rng=MersenneTwister(0))
+design_solution = solve(design_instance; solve_kwargs..., rng=MersenneTwister(0))
 is_feasible(design_solution, design_instance; verbose=true)
 design_ls_cost = cost(design_solution)
 
@@ -114,5 +113,5 @@ design_ls_cost = cost(design_solution)
 # multicommodity capacitated network design problem, MCND).
 
 design_optimum = 423_933
-design_greedy_gap = (design_greedy_cost - design_optimum) / design_optimum * 100
+design_construction_gap = (design_construction_cost - design_optimum) / design_optimum * 100
 design_ls_gap = (design_ls_cost - design_optimum) / design_optimum * 100

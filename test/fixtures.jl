@@ -87,6 +87,55 @@ small_instance(; wrap_time::Bool=true) = _instance("small", wrap_time)
 tiny_greedy(; wrap_time::Bool=true) = _greedy("tiny", wrap_time)
 small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 
+# Four-node instance where F (A->B, size 3) is filtered out as a direct path and
+# K (A->D2, size 4) is kept: K's cheap route through B shares the capacity-5
+# arc A->B with F, so it must route around it through C.
+function shared_arc_instance()
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:other),
+        NetworkNode(; id="C", node_type=:other),
+        NetworkNode(; id="D2", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=5,
+        ),
+        Arc(;
+            origin_id="B", destination_id="D2", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="A", destination_id="C", cost=LinearArcCost(2.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="C", destination_id="D2", cost=LinearArcCost(2.0), travel_time=Day(1)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(1),
+            size=3.0,
+        ),
+        Commodity(;
+            origin_id="A",
+            destination_id="D2",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(2),
+            size=4.0,
+        ),
+    ]
+    return Instance(nodes, arcs, commodities, Day(1))
+end
+
 # Clear any cost_scaling mutations left on the shared instances.
 function reset!()
     for inst in values(_INSTANCE)

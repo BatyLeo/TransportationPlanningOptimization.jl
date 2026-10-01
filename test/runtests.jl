@@ -126,6 +126,9 @@ using .TestFixtures
         @testset "Solve filtered" begin
             include("test_solve_filtered.jl")
         end
+        @testset "Solve" begin
+            include("test_solve.jl")
+        end
     end
 
     @testset "ILS and integration" begin

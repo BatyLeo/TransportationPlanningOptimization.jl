@@ -50,7 +50,7 @@ end
     end
 end
 
-@testset "TPO.extract_filtered_instance with all single-hop bundles emits a warning" begin
+@testset "TPO.extract_filtered_instance with all single-hop bundles logs an info message" begin
     datadir = joinpath(@__DIR__, "public")
     (; nodes, arcs, commodities) = parse_inbound_instance(
         joinpath(datadir, "tiny_nodes.csv"),
@@ -72,8 +72,8 @@ end
     fake_filt = Solution(instance)
     fake_filt.bundle_paths .= direct_paths
 
-    @test_logs (:warn,) match_mode = :any TPO.extract_filtered_instance(instance, fake_filt)
-    sub = (@test_logs (:warn,) match_mode = :any TPO.extract_filtered_instance(
+    @test_logs (:info,) match_mode = :any TPO.extract_filtered_instance(instance, fake_filt)
+    sub = (@test_logs (:info,) match_mode = :any TPO.extract_filtered_instance(
         instance, fake_filt
     ))
     @test bundle_count(sub) == 0

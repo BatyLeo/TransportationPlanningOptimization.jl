@@ -25,8 +25,8 @@ mix_greedy_and_lower_bound   (on the sub-instance, seeded with the pre-load)
   merge_solutions            (stitch back onto full instance, checks feasibility)
 ```
 
-The function [`solve_filtered`](@ref) wraps everything up to (but not including) local search.
-For simple cases you can skip filtering entirely and use [`greedy_heuristic`](@ref) directly.
+The function [`solve`](@ref) runs this whole pipeline and is the recommended entry point.
+The function [`solve_filtered`](@ref) wraps everything up to (but not including) local search, for workflows that need control over the local search step.
 
 ## Construction Heuristics
 
@@ -83,12 +83,13 @@ The filtering pipeline pre-routes those trivial bundles so the heavier algorithm
 ```julia
 result = solve_filtered(instance)
 # result.solution lives on result.sub_instance
+# result.filtering_solution is the full-instance solution of step 1
 ```
 
 `cost(result.solution)` already includes the reserved load of filtered
 bundles whose direct arc is still in `result.sub_instance`, so it is neither
 the sub-instance cost nor the full-instance cost.
-The full-instance cost is `cost(merge_solutions(filtering_sol, result.solution, instance, result.sub_instance))`.
+The full-instance cost is `cost(merge_solutions(result.filtering_solution, result.solution, instance, result.sub_instance))`.
 
 ## Local Search
 
@@ -109,31 +110,41 @@ stats = local_search!(solution, instance; time_limit=60.0)
 
 ## Putting It All Together
 
-### Simple path
+### Recommended: `solve`
 
-For quick experiments, the greedy heuristic followed by local search is enough:
+[`solve`](@ref) runs the filtering pipeline, local search on the sub-instance, and the merge:
 
 ```julia
-solution = greedy_heuristic(instance)
-stats = local_search!(solution, instance; time_limit=120.0)
+solution = solve(instance; time_limit=120.0)
 is_feasible(solution, instance; verbose=true)
 println("Cost: ", cost(solution))
 ```
 
-### Full pipeline with filtering
+Running [`greedy_heuristic`](@ref) on the full instance is much slower on large instances, because its cost scales with the number of unit commodities times the number of bundle arcs.
+On a very large instance the difference is hours against a couple of minutes.
+`time_limit` only covers local search, and `solve` uses [`CheapestMode`](@ref) for every step.
 
-For large instances, use the filtering pipeline:
+For small instances you can skip filtering with `filtering=false`, which runs construction and local search on the full instance:
 
 ```julia
-# Steps 1-4: filter, build sub-instance, pre-load, construct initial solution
+solution = solve(instance; filtering=false)
+```
+
+### Manual pipeline with filtering
+
+Use the building blocks when you need another local search, such as [`iterated_local_search!`](@ref), on the sub-instance:
+
+```julia
+# Filter, build the sub-instance, pre-load, construct the initial solution
 result = solve_filtered(instance)
 
-# Step 5: local search on the sub-instance
+# Improve the sub-instance solution (or use iterated_local_search!)
 stats = local_search!(result.solution, result.sub_instance; time_limit=300.0)
 
-# Step 6: stitch back onto the full instance
-filtering_sol = lower_bound_filtering(instance)
-final_solution = merge_solutions(filtering_sol, result.solution, instance, result.sub_instance)
+# Stitch back onto the full instance
+final_solution = merge_solutions(
+    result.filtering_solution, result.solution, instance, result.sub_instance
+)
 
 is_feasible(final_solution, instance; verbose=true)
 println("Cost: ", cost(final_solution))
@@ -148,7 +159,7 @@ When arcs carry a [`MultiModalArc`](@ref) (multiple transport modes on the same 
 - [`CheapestMode()`](@ref) (default): place everything on the single cheapest mode that has enough capacity.
 - [`FillThenSpillMode()`](@ref): fill the cheapest mode to capacity, spill overflow to the next cheapest.
 
-Pass via the `mode_selector` keyword:
+Pass via the `mode_selector` keyword (the function [`solve`](@ref) always uses `CheapestMode()`):
 
 ```julia
 solution = greedy_heuristic(instance; mode_selector=FillThenSpillMode())

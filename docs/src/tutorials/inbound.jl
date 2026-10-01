@@ -4,7 +4,7 @@
 
 # # Inbound Transportation Planning (Renault)
 #
-# This tutorial solves a regional instance of the Renault inbound transportation planning problem with the greedy heuristic and local search.
+# This tutorial solves a regional instance of the Renault inbound transportation planning problem with [`solve`](@ref), which combines a construction heuristic and local search.
 
 # ## The Problem
 #
@@ -40,28 +40,32 @@ list_instances(RenaultInbound())
 instance = load_instance(RenaultInbound(), "small")
 (bundles=bundle_count(instance), commodities=commodity_count(instance))
 
-# ## Greedy heuristic
+# ## Construction
 #
-# The greedy heuristic inserts bundles one by one, each on its cheapest path given the bundles already placed.
+# [`solve`](@ref) is the recommended entry point.
+# It pre-routes the bundles whose best path is the direct arc, builds an initial solution for the remaining bundles with a mix of greedy and lower-bound insertion, then merges everything back onto the full instance.
+# With `local_search=false` it stops after this construction phase.
+# This filtering is what keeps the construction fast on large instances, where [`greedy_heuristic`](@ref) on the full instance takes much longer.
 
-solution = greedy_heuristic(instance; show_progress=false)
-is_feasible(solution, instance; verbose=true)
-greedy_cost = cost(solution)
+construction = solve(instance; local_search=false, show_progress=false)
+is_feasible(construction, instance; verbose=true)
+construction_cost = cost(construction)
 
 # ## Local search
 #
-# To keep run times reproducible across machines, we stop on a fixed iteration budget (`max_iter`), and raise `max_no_improv` to match so it does not cut the run short.
+# By default [`solve`](@ref) then improves the solution with [`local_search!`](@ref) on the filtered sub-instance.
+# To keep run times reproducible across machines, we stop on a fixed iteration budget (`max_iter`).
 # `time_limit` is only a generous safety cap, and the run uses a seeded RNG.
 
-ls_kwargs = (; max_iter=6_000, max_no_improv=6_000, time_limit=120.0)
-
-local_search!(solution, instance; ls_kwargs..., rng=MersenneTwister(0))
+solution = solve(
+    instance; max_iter=6_000, time_limit=120.0, rng=MersenneTwister(0), show_progress=false
+)
 is_feasible(solution, instance; verbose=true)
 ls_cost = cost(solution)
 
-# Improvement of local search over the greedy solution:
+# Improvement of local search over the construction solution:
 
-improvement = (greedy_cost - ls_cost) / greedy_cost * 100
+improvement = (construction_cost - ls_cost) / construction_cost * 100
 (improvement_pct=round(improvement; digits=2),)
 
 # ## Using your own data
