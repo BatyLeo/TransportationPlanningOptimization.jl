@@ -89,6 +89,23 @@ function lower_bound_incremental_cost(
     return _sum_lb_incremental_cost(c.terms, existing, new)
 end
 
+@inline _sum_lb_with_order(::Tuple{}, _, ::Order) = 0.0
+@inline function _sum_lb_with_order(terms::Tuple, existing, order::Order)
+    # Right fold, mirrors the commodity-vector method for bit-identity.
+    return lower_bound_incremental_cost_with_order(first(terms), existing, order) +
+           _sum_lb_with_order(Base.tail(terms), existing, order)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Order-level counterpart of the commodity-vector method: sums the order-level lower bounds
+of `c.terms`, so each term can use its O(1) fast path.
+"""
+function lower_bound_incremental_cost_with_order(c::SumArcCost, existing, order::Order)
+    return _sum_lb_with_order(c.terms, existing, order)
+end
+
 """
 $TYPEDSIGNATURES
 

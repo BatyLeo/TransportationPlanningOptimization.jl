@@ -237,3 +237,12 @@ function lower_bound_incremental_cost(
     new_size = sum(c.size for c in new_commodities; init=0.0)
     return arc_f.cost_per_bin * new_size / arc_f.bin_capacity
 end
+
+"""
+$TYPEDSIGNATURES
+
+O(1) fractional lower bound of adding a whole `order`, from its precomputed total size.
+"""
+function lower_bound_incremental_cost_with_order(arc_f::BinPackingArcCost, _, order::Order)
+    return arc_f.cost_per_bin * order.total_size / arc_f.bin_capacity
+end

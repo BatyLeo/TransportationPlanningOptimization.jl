@@ -73,3 +73,26 @@ end
     # Every commodity should carry InboundCommodityInfo.
     @test all(c -> c.info isa InboundCommodityInfo, commodities)
 end
+
+function _alloc_inbound_order_lb(f, order)
+    TPO.lower_bound_incremental_cost_with_order(f, nothing, order)
+    return @allocated TPO.lower_bound_incremental_cost_with_order(f, nothing, order)
+end
+
+@testset "Order aggregates the inbound stock cost for O(1) lower bounds" begin
+    mk(s, x) = LightCommodity(;
+        origin_id="o", destination_id="d", size=s, info=InboundCommodityInfo(x)
+    )
+    order = Order(;
+        commodities=[mk(0.3, 0.1), mk(1.7, 2.3), mk(0.9, 0.7)],
+        time_step=1,
+        max_transit_steps=1,
+    )
+    @test order.aggregate.stock_cost ===
+        sum(x.info.stock_cost for x in order.commodities; init=0.0)
+    f = TPO.SumArcCost((StockArcCost(3.7), LinearArcCost(1.3), BinPackingArcCost(2.9, 5)))
+    C = eltype(order.commodities)
+    @test TPO.lower_bound_incremental_cost_with_order(f, nothing, order) ===
+        TPO.lower_bound_incremental_cost(f, C[], order.commodities)
+    @test _alloc_inbound_order_lb(f, order) == 0
+end

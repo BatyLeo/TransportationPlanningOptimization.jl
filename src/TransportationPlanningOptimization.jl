@@ -123,5 +123,10 @@ export gurobi_optimizer
 include("problems/Problems.jl")
 
 public Problems
+public order_aggregate,
+    incremental_cost,
+    incremental_cost_with_size,
+    lower_bound_incremental_cost,
+    lower_bound_incremental_cost_with_order
 
 end

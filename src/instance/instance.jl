@@ -228,21 +228,32 @@ function _build_bundles(
     first_group_key = (
         commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
     )
-    bundle_dict = Dict{
-        Tuple{String,String,eltype(first_group_key)},Vector{Order{is_date_arrival,I}}
-    }()
+    # `Order`'s constructor sorts the commodities by size descending (the
+    # invariant the bin-packing hot path relies on), so no sort is needed here.
+    order_keys = collect(keys(order_dict))
+    orders = [
+        begin
+            commodities_list, min_steps = order_dict[key]
+            Order{is_date_arrival,I}(
+                commodities_list, key[1], min(time_horizon_length, min_steps)
+            )
+        end for key in order_keys
+    ]
+    isconcretetype(eltype(orders)) || throw(
+        ArgumentError(
+            "order_aggregate must return the same type for every order, got " *
+            "$(unique(typeof(o.aggregate) for o in orders))",
+        ),
+    )
+    O = eltype(orders)
+    bundle_dict = Dict{Tuple{String,String,eltype(first_group_key)},Vector{O}}()
     bundle_forbidden_dict = Dict{
         Tuple{String,String,eltype(first_group_key)},
         Tuple{Set{String},Set{Tuple{String,String}}},
     }()
 
-    for key in keys(order_dict)
-        time_step_idx, origin_id, destination_id, group_key = key
-        commodities_list, min_steps = order_dict[key]
-        min_steps = min(time_horizon_length, min_steps)
-        # `Order`'s constructor sorts the commodities by size descending (the
-        # invariant the bin-packing hot path relies on), so no sort is needed here.
-        order = Order{is_date_arrival,I}(commodities_list, time_step_idx, min_steps)
+    for (key, order) in zip(order_keys, orders)
+        _, origin_id, destination_id, group_key = key
 
         bundle_key = (origin_id, destination_id, group_key)
         if haskey(bundle_dict, bundle_key)
@@ -267,7 +278,7 @@ function _build_bundles(
     end
 
     group_type = fieldtype(typeof(first_group_key), 3)
-    bundles = Bundle{Order{is_date_arrival,I},group_type}[]
+    bundles = Bundle{O,group_type}[]
     for key in keys(bundle_dict)
         origin_id, destination_id, group_key = key
         forbidden_nodes, forbidden_arcs = get(

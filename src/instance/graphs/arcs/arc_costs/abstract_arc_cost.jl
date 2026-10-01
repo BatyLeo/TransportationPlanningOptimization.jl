@@ -9,14 +9,20 @@ Concrete subtypes **must** implement:
 
 Concrete subtypes **may** overload (sensible defaults are provided in terms of `evaluate`,
 see `incremental_cost` / `lower_bound_incremental_cost`):
-- `incremental_cost(arc_f::T, existing, new) -> Float64`: marginal cost of adding `new` to
+- `incremental_cost(arc_f::T, existing::Vector{C}, new::Vector{C}) where {C<:LightCommodity} -> Float64`: marginal cost of adding `new` to
   an arc that already holds `existing`.
   Defaults to `evaluate(arc_f, existing ∪ new) - evaluate(arc_f, existing)`.
   Overload it when a closed form is cheaper (e.g. [`LinearArcCost`](@ref), [`BinPackingArcCost`](@ref)).
-- `lower_bound_incremental_cost(arc_f::T, existing, new) -> Float64`: a relaxation of
+- `lower_bound_incremental_cost(arc_f::T, existing::Vector{C}, new::Vector{C}) where {C<:LightCommodity} -> Float64`: a relaxation of
   `incremental_cost` used by the lower-bound / filtering pass. Defaults to `incremental_cost`.
   Overload it only when the lower bound differs from the true cost and must under-estimate it
   (e.g. [`BinPackingArcCost`](@ref), which relaxes the integer bin count to a fractional one).
+  The typed `Vector{C}` signatures are needed to avoid method ambiguities with the generic fallbacks.
+- `lower_bound_incremental_cost_with_order(arc_f::T, existing, order::Order) -> Float64`: optional
+  O(1) fast path over a whole order, using `order.total_size` or `order.aggregate` (see
+  [`order_aggregate`](@ref)). Must return the same value as the commodity-vector method on
+  `order.commodities`. Only the lower-bound passes call it. Defaults to the commodity-vector
+  method, and `existing` may be `nothing` (empty arc).
 """
 abstract type AbstractArcCostFunction end
 
@@ -90,6 +96,24 @@ function lower_bound_incremental_cost(
     new_commodities::Vector{C},
 ) where {C<:LightCommodity}
     return incremental_cost(arc_f, existing_commodities, new_commodities)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Order-level lower bound: forwards to the commodity-vector method with the commodities
+of `order`. `existing` may be `nothing` for an empty arc.
+Specialize it to use the order aggregates (`total_size`, `aggregate`) in O(1).
+It must return the same value as the commodity-vector method.
+"""
+function lower_bound_incremental_cost_with_order(
+    arc_f::AbstractArcCostFunction, existing, order::Order
+)
+    return lower_bound_incremental_cost(
+        arc_f,
+        existing === nothing ? eltype(order.commodities)[] : existing,
+        order.commodities,
+    )
 end
 
 """

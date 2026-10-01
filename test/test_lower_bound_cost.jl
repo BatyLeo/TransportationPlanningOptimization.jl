@@ -77,9 +77,14 @@ end
 @testset "_direct_arc_order_lb_cost: LinearArcCost is fractional" begin
     cost = LinearArcCost(2.0)
     f = TransportationPlanningOptimization._direct_arc_order_lb_cost
-    @test f(cost, 0.0) == 0.0
-    @test f(cost, 25.0) == 50.0
-    @test f(cost, 0.5) == 1.0
+    mk(s) = LightCommodity(; origin_id="o", destination_id="d", size=s, info=nothing)
+    order_of(s) = Order(; commodities=[mk(s)], time_step=1, max_transit_steps=1)
+    empty_order = Order(;
+        commodities=LightCommodity{Nothing}[], time_step=1, max_transit_steps=1
+    )
+    @test f(cost, empty_order) == 0.0
+    @test f(cost, order_of(25.0)) == 50.0
+    @test f(cost, order_of(0.5)) == 1.0
 end
 
 @testset "compute_ttg_edge_lower_bound_cost uses per-order ceil on direct arc" begin
@@ -137,7 +142,7 @@ end
             expected += arc.cost.cost_per_unit_size * order_size
         else
             expected += TransportationPlanningOptimization._direct_arc_order_lb_cost(
-                arc, order_size, order.commodities, CheapestMode()
+                arc, order, CheapestMode()
             )
         end
         # Destination-node cost charged once per order on the direct arc.
@@ -149,4 +154,66 @@ end
     end
 
     @test isapprox(direct_cost, expected; atol=1e-6)
+end
+
+struct _EvalOnlyArcCost <: TransportationPlanningOptimization.AbstractArcCostFunction end
+function TransportationPlanningOptimization.evaluate(
+    ::_EvalOnlyArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
+    return 0.7 * sum(c.size for c in comms; init=0.0)
+end
+
+function _alloc_order_lb(f, order)
+    TransportationPlanningOptimization.lower_bound_incremental_cost_with_order(
+        f, nothing, order
+    )
+    return @allocated TransportationPlanningOptimization.lower_bound_incremental_cost_with_order(
+        f, nothing, order
+    )
+end
+
+@testset "lower_bound_incremental_cost_with_order matches the commodity-vector method" begin
+    TPO = TransportationPlanningOptimization
+    C = LightCommodity{Nothing}
+    mk(s) = LightCommodity(; origin_id="o", destination_id="d", size=s, info=nothing)
+    order = Order(;
+        commodities=[mk(0.1), mk(0.7), mk(1.3), mk(2.9), mk(0.30000000000000004)],
+        time_step=1,
+        max_transit_steps=1,
+    )
+    loaded = [mk(3.3), mk(1.1)]
+    bp = BinPackingArcCost(7.3, 11)
+    lin = LinearArcCost(1.7)
+    costs = (bp, lin, TPO.SumArcCost((bp, lin)), _EvalOnlyArcCost())
+    for f in costs, ex in (nothing, C[], loaded)
+        vec_ex = ex === nothing ? C[] : ex
+        @test TPO.lower_bound_incremental_cost_with_order(f, ex, order) ===
+            TPO.lower_bound_incremental_cost(f, vec_ex, order.commodities)
+    end
+    for f in costs[1:3]
+        @test _alloc_order_lb(f, order) == 0
+    end
+end
+
+# User cost type overriding only the commodity-vector lower bound.
+struct _UserLbArcCost <: TransportationPlanningOptimization.AbstractArcCostFunction end
+function TransportationPlanningOptimization.evaluate(
+    ::_UserLbArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
+    return sum(c.size for c in comms; init=0.0)
+end
+function TransportationPlanningOptimization.lower_bound_incremental_cost(
+    ::_UserLbArcCost, existing::Vector{C}, new::Vector{C}
+) where {C<:LightCommodity}
+    return 0.5 * sum(c.size for c in new; init=0.0)
+end
+
+@testset "user lower_bound_incremental_cost methods stay unambiguous with the order-level method" begin
+    TPO = TransportationPlanningOptimization
+    mk(s) = LightCommodity(; origin_id="o", destination_id="d", size=s, info=nothing)
+    order = Order(; commodities=[mk(1.0), mk(2.5)], time_step=1, max_transit_steps=1)
+    f = _UserLbArcCost()
+    C = eltype(order.commodities)
+    @test TPO.lower_bound_incremental_cost_with_order(f, nothing, order) ===
+        TPO.lower_bound_incremental_cost(f, C[], order.commodities)
 end

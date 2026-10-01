@@ -325,14 +325,14 @@ end
     pricier_large = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(5.0), capacity=10)
     arc = MultiModalArc([cheap_small, pricier_large])
     comms = [LightCommodity(; origin_id="A", destination_id="B", size=7.0, info=nothing)]
-    order_size = sum(c.size for c in comms)
-    expected = 5.0 * order_size
+    order = Order(; commodities=comms, time_step=1, max_transit_steps=1)
+    expected = 5.0 * order.total_size
 
     @test TransportationPlanningOptimization._edge_lower_bound_cost(
-        arc, nothing, comms, CheapestMode()
+        arc, nothing, order, CheapestMode()
     ) == expected
     @test TransportationPlanningOptimization._direct_arc_order_lb_cost(
-        arc, order_size, comms, CheapestMode()
+        arc, order, CheapestMode()
     ) == expected
 
     too_small_both = MultiModalArc([
@@ -340,10 +340,10 @@ end
         NetworkArc(; travel_time_steps=1, cost=LinearArcCost(5.0), capacity=4),
     ])
     @test TransportationPlanningOptimization._edge_lower_bound_cost(
-        too_small_both, nothing, comms, CheapestMode()
+        too_small_both, nothing, order, CheapestMode()
     ) == Inf
     @test TransportationPlanningOptimization._direct_arc_order_lb_cost(
-        too_small_both, order_size, comms, CheapestMode()
+        too_small_both, order, CheapestMode()
     ) == Inf
 end
 

@@ -22,6 +22,7 @@ using ...TransportationPlanningOptimization:
     Instance,
     AbstractArcCostFunction,
     LightCommodity,
+    Order,
     evaluate
 using ..Problems: AbstractDataset
 import ..Problems: list_instances, dataset_dir, load_instance
@@ -100,6 +101,7 @@ is read from `commodity.info.stock_cost`.
 Requires `Commodity.info` to be an `InboundCommodityInfo` (or any struct
 exposing `stock_cost`). Calling `evaluate` on commodities without that field
 errors at the property access.
+Lower bounds over an `Order` of `InboundCommodityInfo` use the order's aggregated stock cost in O(1).
 """
 struct StockArcCost <: AbstractArcCostFunction
     distance::Float64
@@ -121,6 +123,27 @@ function TPO.incremental_cost(
     c::StockArcCost, ::Vector{C}, new::Vector{C}
 ) where {C<:LightCommodity}
     return TPO.evaluate(c, new)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Order-level summary of the stock costs, folded exactly like `StockArcCost.evaluate` so the
+O(1) lower bound is bit-identical to the per-commodity sum.
+"""
+function TPO.order_aggregate(comms::Vector{LightCommodity{InboundCommodityInfo}})
+    return (; stock_cost=sum(x.info.stock_cost for x in comms; init=0.0))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+O(1) lower bound of adding a whole inbound `order`, from its aggregated stock cost.
+"""
+function TPO.lower_bound_incremental_cost_with_order(
+    c::StockArcCost, _, order::Order{IDA,InboundCommodityInfo}
+) where {IDA}
+    return c.distance * order.aggregate.stock_cost
 end
 
 include("parser.jl")

@@ -122,15 +122,16 @@ function compute_ttg_edge_lower_bound_cost(
     # 1:time_horizon_length, so two orders cannot alias modulo the horizon and
     # therefore project to distinct TSG edges on this arc even under wrap_time
     # (verified: zero collisions). The cost is an additive sum over orders.
+    node_f = cache.spatial_code_to_node_cost[sv]
     for order in bundle.orders
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
         edge = (u_tsg, v_tsg)
         existing = get(current_solution.assignments, edge, nothing)
-        total += _edge_lower_bound_cost(arc, existing, order.commodities, mode_selector)
-
-        node_f = cache.spatial_code_to_node_cost[sv]
-        total += _node_lower_bound_incremental_cost(node_f, existing, order.commodities)
+        total += _edge_lower_bound_cost(arc, existing, order, mode_selector)
+        total += _node_lower_bound_incremental_cost(
+            node_f, existing, order.commodities, order.total_size
+        )
     end
     return total
 end
@@ -161,86 +162,55 @@ function _direct_arc_lb_cost(
     node_f = cache.spatial_code_to_node_cost[cache.ttg_code_to_spatial_code[v_ttg_code]]
     total = 0.0
     for order in bundle.orders
-        order_size = order.total_size
-        total += _direct_arc_order_lb_cost(
-            arc, order_size, order.commodities, mode_selector
-        )
+        total += _direct_arc_order_lb_cost(arc, order, mode_selector)
 
         # Destination-node cost on the direct arc, charged once per order.
         # Per-order incremental: existing is empty (LB is against empty solution).
-        total += _node_lower_bound_incremental_cost(node_f, nothing, order.commodities)
+        total += _node_lower_bound_incremental_cost(
+            node_f, nothing, order.commodities, order.total_size
+        )
     end
     return total
 end
 
-function _direct_arc_order_lb_cost(
-    arc::NetworkArc,
-    order_size::Real,
-    commodities::Vector{<:LightCommodity},
-    ::AbstractModeSelector,
-)
+function _direct_arc_order_lb_cost(arc::NetworkArc, order::Order, ::AbstractModeSelector)
     # Batch-only capacity gate: see the "Relaxed lower-bound cost" rationale in edge_cost.jl.
-    _mode_has_capacity(arc, 0.0, commodities) || return Inf
-    return _direct_arc_order_lb_cost(arc.cost, order_size, commodities)
+    _mode_has_capacity(arc, 0.0, order.total_size) || return Inf
+    return _direct_arc_order_lb_cost(arc.cost, order)
 end
 
-# Two-argument variants kept for direct callers that only need the size-based
-# formula (linear, bin-packing). Auxiliary terms (carbon, stock, etc.) cannot
-# be evaluated without commodities and are only reachable via the
-# three-argument overloads below.
+# Two-argument size-based variants kept for direct callers that only need the
+# formula (bin-packing). Auxiliary terms (carbon, stock, etc.) are only
+# reachable via the `Order` overloads below.
 function _direct_arc_order_lb_cost(cost::BinPackingArcCost, order_size::Real)
     return cost.cost_per_bin * ceil(order_size / cost.bin_capacity)
 end
 
-function _direct_arc_order_lb_cost(cost::LinearArcCost, order_size::Real)
-    return cost.cost_per_unit_size * order_size
+# `Order` overloads dispatched from `_direct_arc_lb_cost`. The size-only terms
+# use the order's total size. Generic `AbstractArcCostFunction` terms fall back
+# to `lower_bound_incremental_cost_with_order` against an empty existing-set so SumArcCost
+# terms like LinearArcCost and StockArcCost can be evaluated on the order.
+function _direct_arc_order_lb_cost(cost::BinPackingArcCost, order::Order)
+    return _direct_arc_order_lb_cost(cost, order.total_size)
 end
 
-# Three-argument overloads dispatched from `_direct_arc_lb_cost`. The
-# size-only terms ignore the commodities vector. Generic
-# `AbstractArcCostFunction` terms fall back to `lower_bound_incremental_cost`
-# against an empty existing-set so SumArcCost terms like LinearArcCost and
-# StockArcCost can be evaluated using the order's commodities.
-function _direct_arc_order_lb_cost(
-    cost::BinPackingArcCost, order_size::Real, ::Vector{<:LightCommodity}
-)
-    return _direct_arc_order_lb_cost(cost, order_size)
+function _direct_arc_order_lb_cost(cost::AbstractArcCostFunction, order::Order)
+    return lower_bound_incremental_cost_with_order(cost, nothing, order)
 end
 
-function _direct_arc_order_lb_cost(
-    cost::LinearArcCost, order_size::Real, ::Vector{<:LightCommodity}
-)
-    return _direct_arc_order_lb_cost(cost, order_size)
+function _direct_arc_order_lb_cost(cost::SumArcCost, order::Order)
+    return sum(_direct_arc_order_lb_cost(t, order) for t in cost.terms)
 end
 
-function _direct_arc_order_lb_cost(
-    cost::AbstractArcCostFunction, ::Real, commodities::Vector{C}
-) where {C<:LightCommodity}
-    return lower_bound_incremental_cost(cost, C[], commodities)
-end
-
-function _direct_arc_order_lb_cost(
-    cost::SumArcCost, order_size::Real, commodities::Vector{<:LightCommodity}
-)
-    return sum(_direct_arc_order_lb_cost(t, order_size, commodities) for t in cost.terms)
-end
-
-function _direct_arc_order_lb_cost(
-    arc::MultiModalArc,
-    order_size::Real,
-    commodities::Vector{<:LightCommodity},
-    ::CheapestMode,
-)
+function _direct_arc_order_lb_cost(arc::MultiModalArc, order::Order, ::CheapestMode)
     # Batch-only capacity gate: see the "Relaxed lower-bound cost" rationale in edge_cost.jl.
     # Valid only when one mode carries the whole batch (CheapestMode), not when
     # FillThenSpillMode may split it across modes.
-    return minimum(
-        if _mode_has_capacity(mode, 0.0, commodities)
-            _direct_arc_order_lb_cost(mode.cost, order_size, commodities)
-        else
-            Inf
-        end for mode in arc.modes
-    )
+    return minimum(if _mode_has_capacity(mode, 0.0, order.total_size)
+        _direct_arc_order_lb_cost(mode.cost, order)
+    else
+        Inf
+    end for mode in arc.modes)
 end
 
 """

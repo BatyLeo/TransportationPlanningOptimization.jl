@@ -218,7 +218,7 @@ Throws an `ArgumentError` if a path uses an edge that has no network arc.
 """
 function Solution(
     bundle_paths::Vector{Vector{Int}},
-    instance::Instance{<:Bundle{Order{IDA,I}}};
+    instance::Instance{<:Bundle{<:Order{IDA,I}}};
     mode_selector::AbstractModeSelector=CheapestMode(),
 ) where {IDA,I}
     (; time_space_graph, bundles) = instance

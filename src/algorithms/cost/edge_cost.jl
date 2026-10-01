@@ -278,45 +278,40 @@ end
 """
 $TYPEDSIGNATURES
 
-Empty `NetworkArc` lower bound: relaxed increment of the batch against no load,
-gated on the batch alone fitting the arc.
+Empty `NetworkArc` lower bound: relaxed increment of the order against no load,
+gated on the order alone fitting the arc.
 """
 function _edge_lower_bound_cost(
-    arc::NetworkArc, ::Nothing, new_comms::Vector{C}, ::AbstractModeSelector
-) where {C<:LightCommodity}
-    _mode_has_capacity(arc, 0.0, new_comms) || return Inf
-    return lower_bound_incremental_cost(arc.cost, C[], new_comms)
+    arc::NetworkArc, ::Nothing, order::Order, ::AbstractModeSelector
+)
+    _mode_has_capacity(arc, 0.0, order.total_size) || return Inf
+    return lower_bound_incremental_cost_with_order(arc.cost, nothing, order)
 end
 
 """
 $TYPEDSIGNATURES
 
 Loaded `NetworkArc` lower bound: relaxed increment against the existing
-commodities, gated on the batch alone (ignoring existing load) fitting the arc.
+commodities, gated on the order alone (ignoring existing load) fitting the arc.
 """
 function _edge_lower_bound_cost(
-    arc::NetworkArc,
-    existing::SingleAssignment{C},
-    new_comms::Vector{C},
-    ::AbstractModeSelector,
-) where {C<:LightCommodity}
-    _mode_has_capacity(arc, 0.0, new_comms) || return Inf
-    return lower_bound_incremental_cost(arc.cost, existing.commodities, new_comms)
+    arc::NetworkArc, existing::SingleAssignment, order::Order, ::AbstractModeSelector
+)
+    _mode_has_capacity(arc, 0.0, order.total_size) || return Inf
+    return lower_bound_incremental_cost_with_order(arc.cost, existing.commodities, order)
 end
 
 """
 $TYPEDSIGNATURES
 
 Empty `MultiModalArc` lower bound under `CheapestMode`: minimum relaxed
-increment over modes, each against no load and gated on the batch alone
+increment over modes, each against no load and gated on the order alone
 fitting that mode.
 """
-function _edge_lower_bound_cost(
-    arc::MultiModalArc, ::Nothing, new_comms::Vector{C}, ::CheapestMode
-) where {C<:LightCommodity}
+function _edge_lower_bound_cost(arc::MultiModalArc, ::Nothing, order::Order, ::CheapestMode)
     return minimum(
-        if _mode_has_capacity(mode, 0.0, new_comms)
-            lower_bound_incremental_cost(mode.cost, C[], new_comms)
+        if _mode_has_capacity(mode, 0.0, order.total_size)
+            lower_bound_incremental_cost_with_order(mode.cost, nothing, order)
         else
             Inf
         end for mode in arc.modes
@@ -328,15 +323,15 @@ $TYPEDSIGNATURES
 
 Loaded `MultiModalArc` lower bound under `CheapestMode`: minimum relaxed
 increment over modes, each against that mode's existing commodities and gated
-on the batch alone (ignoring existing load) fitting that mode.
+on the order alone (ignoring existing load) fitting that mode.
 """
 function _edge_lower_bound_cost(
-    arc::MultiModalArc, existing::MultiAssignment{C}, new_comms::Vector{C}, ::CheapestMode
-) where {C<:LightCommodity}
+    arc::MultiModalArc, existing::MultiAssignment, order::Order, ::CheapestMode
+)
     return minimum(
-        if _mode_has_capacity(arc.modes[i], 0.0, new_comms)
-            lower_bound_incremental_cost(
-                arc.modes[i].cost, existing.per_mode[i].commodities, new_comms
+        if _mode_has_capacity(arc.modes[i], 0.0, order.total_size)
+            lower_bound_incremental_cost_with_order(
+                arc.modes[i].cost, existing.per_mode[i].commodities, order
             )
         else
             Inf
@@ -379,18 +374,24 @@ function _node_incremental_cost(
 end
 
 @inline function _node_lower_bound_incremental_cost(
-    ::NoNodeCost, _, ::Vector{<:LightCommodity}
+    ::NoNodeCost, _, ::Vector{<:LightCommodity}, ::Float64
 )
     return 0.0
+end
+@inline function _node_lower_bound_incremental_cost(
+    f::LinearNodeCost, _, ::Vector{<:LightCommodity}, s::Float64
+)
+    return f.cost_per_unit_size * s
 end
 """
 $TYPEDSIGNATURES
 
 Lower-bound counterpart of [`_node_incremental_cost`](@ref): the relaxed marginal
-head-node cost of routing `new` onto an edge already carrying `existing`.
+head-node cost of routing `new` (with precomputed total size `s`) onto an edge already
+carrying `existing`.
 """
 function _node_lower_bound_incremental_cost(
-    f::AbstractNodeCostFunction, existing, new::Vector{C}
+    f::AbstractNodeCostFunction, existing, new::Vector{C}, ::Float64
 ) where {C<:LightCommodity}
     load = existing === nothing ? C[] : _node_load(existing)
     return lower_bound_incremental_cost(f, load, new)

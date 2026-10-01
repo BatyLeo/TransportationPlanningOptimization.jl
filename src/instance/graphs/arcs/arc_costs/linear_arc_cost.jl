@@ -38,6 +38,15 @@ end
 """
 $TYPEDSIGNATURES
 
+O(1) lower bound of adding a whole `order`, from its precomputed total size.
+"""
+function lower_bound_incremental_cost_with_order(arc_f::LinearArcCost, _, order::Order)
+    return arc_f.cost_per_unit_size * order.total_size
+end
+
+"""
+$TYPEDSIGNATURES
+
 Linear cost is additive, so the marginal cost depends only on `new`.
 """
 function incremental_cost(
