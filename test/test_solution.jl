@@ -1,4 +1,5 @@
 using TransportationPlanningOptimization
+const TPO = TransportationPlanningOptimization
 using Test
 using Dates
 using Graphs
@@ -312,5 +313,73 @@ using MetaGraphsNext
 
         # The cleaned path should be feasible for the instance
         @test is_feasible(sol2, instance3)
+    end
+end
+
+@testset "Solution from paths matches incremental construction on cyclic paths" begin
+    # With wrap_time the horizon is the last order step (4 here), so on the path
+    # O -> X -> Y -> X -> Y the order at step 1 uses edge (X,4)->(Y,1) at its
+    # fourth arc, which is also the second arc of the order at step 3.
+    nodes = [
+        NetworkNode(; id="O", node_type=:origin),
+        NetworkNode(; id="X", node_type=:other),
+        NetworkNode(; id="Y", node_type=:destination),
+    ]
+    arc(o, d) = Arc(;
+        origin_id=o,
+        destination_id=d,
+        cost=BinPackingArcCost(100.0, 10),
+        capacity=100,
+        travel_time=Day(1),
+    )
+    arcs = [arc("O", "X"), arc("X", "Y"), arc("Y", "X")]
+    # Sizes per order step: step 1, step 3 and step 4.
+    scenarios = [
+        "interleaved sizes" => ((5.0, 1.0), (3.0, 2.0), (4.0,)),
+        "counterexample" => ((4.0, 4.0), (6.0, 6.0), (1.0,)),
+    ]
+    for (name, (sizes1, sizes3, sizes4)) in scenarios
+        @testset "$name" begin
+            commodity(date, size) = Commodity(;
+                origin_id="O",
+                destination_id="Y",
+                quantity=1,
+                departure_date=date,
+                max_delivery_time=Day(4),
+                size=size,
+            )
+            commodities = vcat(
+                [commodity(DateTime(2021, 1, 1), s) for s in sizes1],
+                [commodity(DateTime(2021, 1, 3), s) for s in sizes3],
+                [commodity(DateTime(2021, 1, 4), s) for s in sizes4],
+            )
+            instance = Instance(nodes, arcs, commodities, Day(1); wrap_time=true)
+            @test bundle_count(instance) == 1
+            @test order_count(instance) == 3
+
+            ttg = instance.travel_time_graph
+            path = [
+                MetaGraphsNext.code_for(ttg.graph, node) for
+                node in [("O", 0), ("X", 1), ("Y", 2), ("X", 3), ("Y", 4)]
+            ]
+            sol = Solution([path], instance)
+            @test is_feasible(sol, instance)
+
+            incremental = Solution(instance)
+            TPO.add_bundle_path!(incremental, instance, 1, copy(path))
+            @test cost(sol) ≈ cost(incremental)
+
+            for assignment in values(sol.assignments)
+                slots =
+                    assignment isa TPO.MultiAssignment ? assignment.per_mode : [assignment]
+                for slot in slots
+                    sizes = [c.size for c in slot.commodities]
+                    @test issorted(sizes; rev=true)
+                end
+            end
+
+            TPO.remove_bundle_path!(sol, instance, 1)
+            @test cost(sol) ≈ 0.0 atol = 1e-9
+        end
     end
 end
