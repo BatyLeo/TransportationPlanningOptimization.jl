@@ -40,15 +40,87 @@ end
     @test any(length(p) > 2 for p in filt.bundle_paths)
 end
 
-@testset "lower_bound_filtering can overflow capacity under a custom group_by" begin
-    # Two same-OD commodities, distinguished only by a custom `group_by`, so
-    # they become two separate bundles sharing one arc. `_shortest_path_assign!`
-    # prices each bundle's cost matrix against a permanently empty baseline, so
-    # it never sees the other bundle's commitment within the same
-    # `lower_bound_filtering` call, and both get routed onto the same
-    # capacity-5 arc for a combined 6.0.
-    # Fix deferred: not addressed by `preload_filtered_bundles`, which only
-    # protects the sub-instance solve after filtering.
+# Two same-OD commodities of size 3, split into two bundles by a custom `group_by`,
+# on an A->B arc of capacity `cap`, optionally with an A->H->B detour via a hub.
+function two_bundle_direct_instance(cap; with_hub::Bool)
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=cap,
+        ),
+    ]
+    if with_hub
+        push!(nodes, NetworkNode(; id="H", node_type=:other))
+        for (o, d) in (("A", "H"), ("H", "B"))
+            push!(
+                arcs,
+                Arc(;
+                    origin_id=o,
+                    destination_id=d,
+                    cost=LinearArcCost(1.0),
+                    travel_time=Day(1),
+                    capacity=100,
+                ),
+            )
+        end
+    end
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(with_hub ? 2 : 1),
+            size=3.0,
+            info="p$k",
+        ) for k in 1:2
+    ]
+    return Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.info)
+end
+
+@testset "lower_bound_filtering fixes bundles jointly within the hard capacities" begin
+    # `lower_bound` prices bundles independently, but filtering must not fix
+    # bundles on one arc beyond its capacity: the second bundle is kept and
+    # re-solved, here through the hub.
+    instance = two_bundle_direct_instance(5; with_hub=true)
+    filt = lower_bound_filtering(instance; show_progress=false)
+    @test is_feasible(filt, instance)
+    @test count(p -> length(p) == 2, filt.bundle_paths) == 1
+    @test count(p -> length(p) > 2, filt.bundle_paths) == 1
+
+    res = TransportationPlanningOptimization.solve_filtered(instance; show_progress=false)
+    @test length(res.sub_instance.bundles) == 1
+    merged = TransportationPlanningOptimization.merge_solutions(
+        filt, res.solution, instance, res.sub_instance
+    )
+    @test is_feasible(merged, instance)
+    @test cost(merged) == 9.0
+end
+
+@testset "lower_bound_filtering fixes every bundle on a roomy direct arc" begin
+    instance = two_bundle_direct_instance(1000; with_hub=true)
+    filt = lower_bound_filtering(instance; show_progress=false)
+    @test all(p -> length(p) == 2, filt.bundle_paths)
+    @test is_feasible(filt, instance)
+end
+
+@testset "lower_bound_filtering throws when fixed bundles leave no feasible path" begin
+    instance = two_bundle_direct_instance(5; with_hub=false)
+    @test_throws "No feasible filtering path" lower_bound_filtering(
+        instance; show_progress=false
+    )
+end
+
+@testset "lower_bound_filtering fixes one bundle per mode of parallel legs" begin
+    # Two A->B legs of capacity 5 with the same transit time form a MultiModalArc:
+    # each size-3 bundle fits one leg only, so both are fixed, one per mode.
     nodes = [
         NetworkNode(; id="A", node_type=:origin),
         NetworkNode(; id="B", node_type=:destination),
@@ -60,7 +132,7 @@ end
             cost=LinearArcCost(1.0),
             travel_time=Day(1),
             capacity=5,
-        ),
+        ) for _ in 1:2
     ]
     commodities = [
         Commodity(;
@@ -70,21 +142,56 @@ end
             departure_date=DateTime(2021, 1, 1),
             max_delivery_time=Day(1),
             size=3.0,
-            info="p1",
-        ),
+            info="p$k",
+        ) for k in 1:2
+    ]
+    instance = Instance(
+        nodes, arcs, commodities, Day(1); group_by=c -> c.info, allow_multimodal=true
+    )
+    filt = lower_bound_filtering(instance; show_progress=false)
+    @test all(p -> length(p) == 2, filt.bundle_paths)
+    @test is_feasible(filt, instance)
+end
+
+@testset "lower_bound_filtering fixes the direct-only bundle first and routes the other" begin
+    # Y (size 3, direct only) is processed before X (size 2.5, hub possible):
+    # Y takes the direct arc, so X no longer fits it and is kept, routed via the hub.
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin),
+        NetworkNode(; id="B", node_type=:destination),
+        NetworkNode(; id="H", node_type=:other),
+    ]
+    arcs = [
+        Arc(;
+            origin_id=o,
+            destination_id=d,
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=cap,
+        ) for (o, d, cap) in (("A", "B", 5), ("A", "H", 100), ("H", "B", 100))
+    ]
+    commodities = [
         Commodity(;
             origin_id="A",
             destination_id="B",
             quantity=1,
             departure_date=DateTime(2021, 1, 1),
-            max_delivery_time=Day(1),
-            size=3.0,
-            info="p2",
-        ),
+            max_delivery_time=Day(mdt),
+            size=size,
+            info=info,
+        ) for (info, size, mdt) in (("X", 2.5, 2), ("Y", 3.0, 1))
     ]
     instance = Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.info)
+    filt = lower_bound_filtering(instance; show_progress=false)
+    @test is_feasible(filt, instance)
+    @test sort(length.(filt.bundle_paths)) == [2, 3]
 
-    @test_broken is_feasible(lower_bound_filtering(instance; show_progress=false), instance)
+    res = TransportationPlanningOptimization.solve_filtered(instance; show_progress=false)
+    @test length(res.sub_instance.bundles) == 1
+    merged = TransportationPlanningOptimization.merge_solutions(
+        filt, res.solution, instance, res.sub_instance
+    )
+    @test is_feasible(merged, instance)
 end
 
 @testset "lower_bound and lower_bound_filtering skip a batch that overflows a bin-packed arc" begin

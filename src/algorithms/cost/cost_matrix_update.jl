@@ -313,6 +313,46 @@ end
 """
 $TYPEDSIGNATURES
 
+Whether every order of `bundle` still fits, under the hard capacities, on the TTG
+edge `(u_ttg_code, v_ttg_code)` on top of the load already in `fixed_solution`.
+`fixed_pairs` holds the spatial `(u, v)` code pairs that carry fixed load, so the
+projections are only computed on those. Reuses the greedy capacity gate
+(`_edge_incremental_cost` is `Inf` exactly when the batch does not fit), so `MultiModalArc` modes and `wrap_time` projections
+are handled like in the construction.
+"""
+function _fits_fixed_load(
+    fixed_solution::Solution,
+    fixed_pairs::Set{Tuple{Int,Int}},
+    instance::Instance,
+    bundle::Bundle,
+    u_ttg_code::Int,
+    v_ttg_code::Int,
+    mode_selector::AbstractModeSelector,
+    buffer::BinPackingBuffer,
+)
+    cache = instance.index_cache
+    pair = (
+        cache.ttg_code_to_spatial_code[u_ttg_code],
+        cache.ttg_code_to_spatial_code[v_ttg_code],
+    )
+    pair in fixed_pairs || return true
+    arc = ttg_edge_arc(cache, u_ttg_code, v_ttg_code)
+    for order in bundle.orders
+        u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
+        v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
+        existing = get(fixed_solution.assignments, (u_tsg, v_tsg), nothing)
+        isnothing(existing) && continue
+        cost = _edge_incremental_cost(
+            buffer, arc, existing, order.commodities, mode_selector
+        )
+        isfinite(cost) || return false
+    end
+    return true
+end
+
+"""
+$TYPEDSIGNATURES
+
 Lower-level overload that accepts a `bundle` and its `bundle_arcs` set
 directly, bypassing the `instance.bundles[bundle_idx]` lookup. Used by
 `two_node_common_incremental!` (Phase 3.7) to compute the cost matrix for a
