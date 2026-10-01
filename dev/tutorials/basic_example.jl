@@ -99,11 +99,12 @@ commodities = [
 
 instance = Instance(nodes, arcs, commodities, Day(1))
 
-# ## Solve with Greedy Heuristic
+# ## Solve the Instance
 #
-# Apply the greedy insertion heuristic to find a solution:
+# [`solve`](@ref) builds an initial solution with a construction heuristic and improves it with local search.
+# On large instances it is much faster than calling [`greedy_heuristic`](@ref) directly.
 
-solution = greedy_heuristic(instance)
+solution = solve(instance)
 
 # ## Validate and Evaluate the Solution
 #
