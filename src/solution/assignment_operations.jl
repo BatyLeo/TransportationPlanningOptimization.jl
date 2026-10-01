@@ -466,6 +466,13 @@ function _mode_has_capacity(
 )
     mode.capacity == typemax(Int) && return true
     new_size = sum(c.size for c in new_comms; init=0.0)
+    return _mode_has_capacity(mode, existing_total_size, new_size)
+end
+
+function _mode_has_capacity(
+    mode::NetworkArc, existing_total_size::Float64, new_size::Float64
+)
+    mode.capacity == typemax(Int) && return true
     return existing_total_size + new_size <= mode.capacity + EPS
 end
 

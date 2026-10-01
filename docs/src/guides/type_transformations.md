@@ -51,6 +51,7 @@ An `Order` holds:
 - `time_step`: the discrete time index (arrival deadline or departure date)
 - `max_transit_steps`: maximum transit time in time steps (minimum across grouped commodities)
 - `total_size`: precomputed sum of commodity sizes
+- `aggregate`: order-level summary of the commodities, `nothing` unless the problem overloads `order_aggregate`
 
 ### Order -> Bundle
 

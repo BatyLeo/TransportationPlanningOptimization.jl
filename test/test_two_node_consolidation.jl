@@ -4,6 +4,7 @@ using Dates
 using Graphs
 using MetaGraphsNext: label_for, code_for
 using Random: MersenneTwister
+using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 const TPO = TransportationPlanningOptimization
 
@@ -252,4 +253,18 @@ end
     @test is_feasible(sol, instance; verbose=true)
     @test saved >= -1e-6
     @test cost(sol) <= c0 + 1e-6
+end
+
+@testset "merge_bundles recomputes the order aggregate of merged orders" begin
+    datadir = joinpath(@__DIR__, "public")
+    (; nodes, arcs, commodities) = parse_inbound_instance(
+        (joinpath(datadir, "small_$(f).csv") for f in ("nodes", "legs", "commodities"))...
+    )
+    instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
+    virtual, _ = TPO.merge_bundles(instance, [1, 2])
+    @test length(virtual.orders) < sum(length(instance.bundles[i].orders) for i in (1, 2))
+    for o in virtual.orders
+        @test o.aggregate.stock_cost ===
+            sum(x.info.stock_cost for x in o.commodities; init=0.0)
+    end
 end

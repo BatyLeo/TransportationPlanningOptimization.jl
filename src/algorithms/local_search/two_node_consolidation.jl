@@ -18,6 +18,13 @@ function bundles_through_arc(sol::Solution, src::Int, dst::Int)
     return out
 end
 
+# Rebuild an order of type `O` from merged commodities (recomputes its aggregate).
+function _merged_order(
+    ::Type{<:Order{IDA,I}}, commodities::Vector{LightCommodity{I}}, t::Int, max_transit::Int
+) where {IDA,I}
+    return Order{IDA,I}(commodities, t, max_transit)
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -65,7 +72,7 @@ function merge_bundles(instance::Instance, lifted_idxs::Vector{Int})
             run = @view all_lifted_orders[i:j]
             commodities = reduce(vcat, [o.commodities for o in run])
             max_transit = minimum(o.max_transit_steps for o in run)
-            push!(all_orders, O(commodities, t, max_transit))
+            push!(all_orders, _merged_order(O, commodities, t, max_transit))
         end
         i = j + 1
     end

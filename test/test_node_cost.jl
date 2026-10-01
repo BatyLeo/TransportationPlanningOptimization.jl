@@ -505,9 +505,9 @@ function _alloc_node_incremental_cost(node_f, existing, comms, s)
     return @allocated TPO._node_incremental_cost(node_f, existing, comms, s)
 end
 
-function _alloc_node_lower_bound_incremental_cost(node_f, existing, comms)
-    TPO._node_lower_bound_incremental_cost(node_f, existing, comms) # warm-up
-    return @allocated TPO._node_lower_bound_incremental_cost(node_f, existing, comms)
+function _alloc_node_lower_bound_incremental_cost(node_f, existing, comms, s)
+    TPO._node_lower_bound_incremental_cost(node_f, existing, comms, s) # warm-up
+    return @allocated TPO._node_lower_bound_incremental_cost(node_f, existing, comms, s)
 end
 
 @testset "NoNodeCost/LinearNodeCost fast paths allocate nothing" begin
@@ -520,5 +520,7 @@ end
 
     @test _alloc_node_incremental_cost(NoNodeCost(), nothing, comms, 1.0) == 0
     @test _alloc_refresh_node_cost!(single, NoNodeCost()) == 0
-    @test _alloc_node_lower_bound_incremental_cost(LinearNodeCost(1.0), single, comms) == 0
+    @test _alloc_node_lower_bound_incremental_cost(
+        LinearNodeCost(1.0), single, comms, 1.0
+    ) == 0
 end

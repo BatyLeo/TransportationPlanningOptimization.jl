@@ -192,9 +192,20 @@ Both overrides must stay consistent with `evaluate` (routing uses the incrementa
 To implement custom arc cost logic, create a new type that subtypes [`AbstractArcCostFunction`](@ref) and implement:
 
 - `evaluate(c, commodities; presorted=false)`: total cost for a set of commodities.
-- `incremental_cost(c, existing, new)` (optional): marginal cost of adding `new` commodities to `existing` ones.
+- `incremental_cost(c::MyCost, existing::Vector{C}, new::Vector{C}) where {C<:LightCommodity}` (optional): marginal cost of adding `new` commodities to `existing` ones.
   Defaults to `evaluate(c, existing + new) - evaluate(c, existing)`.
-- `lower_bound_incremental_cost(c, existing, new)` (optional): relaxed cost used by the lower-bound pass.
+- `lower_bound_incremental_cost(c::MyCost, existing::Vector{C}, new::Vector{C}) where {C<:LightCommodity}` (optional): relaxed cost used by the lower-bound pass.
   Defaults to `incremental_cost`.
+- `lower_bound_incremental_cost_with_order(c, existing, order::Order)` (optional): O(1) fast path over a whole order, using `order.total_size` or `order.aggregate`.
+  It must return the same value as the commodity-vector method on `order.commodities`.
+  It is only used by `lower_bound`, `lower_bound_filtering` and `mix_greedy_heuristic`.
+  Defaults to the commodity-vector method, and `existing` may be `nothing`.
+
+The typed `Vector{C}` signatures are needed to avoid method ambiguities with the generic fallbacks.
+
+To fill `order.aggregate`, overload `order_aggregate(commodities)` for your commodity type.
+It is called once per order at construction, on the commodities sorted by decreasing size.
+It may return any value, but the same type for every order of a problem.
+It returns `nothing` by default.
 
 See the API reference for the full interface.

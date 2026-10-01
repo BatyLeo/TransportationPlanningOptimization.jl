@@ -12,6 +12,7 @@ using Test
     @test length(order.commodities) == 1
     @test order.time_step == 1
     @test order.max_transit_steps == 7
+    @test order.aggregate === nothing
 end
 
 @testset "Order with multiple commodities" begin
@@ -70,4 +71,9 @@ end
         total_size = sum(c.size for c in order.commodities)
         isapprox(total_size, 7.0)
     end
+end
+
+@testset "Order has no unchecked field constructor" begin
+    comms = [LightCommodity(; origin_id="1", destination_id="2", size=1.0)]
+    @test_throws MethodError Order{false,Nothing,Nothing}(comms, 1, 1, 1.0, nothing)
 end
