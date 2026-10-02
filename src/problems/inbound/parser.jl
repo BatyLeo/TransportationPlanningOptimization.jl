@@ -4,7 +4,7 @@
 Read an inbound instance from three CSV files: nodes, legs, and commodities.
 
 Returns a named tuple `(; nodes, arcs, commodities)` containing:
-- `nodes::Vector{NetworkNode}` - Network nodes parsed from node_file
+- `nodes::Vector{Node}` - Nodes parsed from node_file
 - `arcs::Vector{Arc}` - Network arcs parsed from leg_file
 - `commodities::Vector{Commodity}` - Commodities parsed from commodity_file
 
@@ -39,7 +39,7 @@ function parse_inbound_instance(
             :other
         end
 
-        return NetworkNode(;
+        return Node(;
             id=string(row[NODE_ID]),
             node_type=node_type_symbol,
             capacity=Int(row[NODE_CAPACITY]),

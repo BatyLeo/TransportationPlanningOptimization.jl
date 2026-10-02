@@ -7,9 +7,9 @@ using DataFrames
 @testset "Solution Parsing" begin
     # Setup simple network
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:other),
-        NetworkNode(; id="C", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other),
+        Node(; id="C", node_type=:destination),
     ]
     arc_ab = Arc(;
         origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)

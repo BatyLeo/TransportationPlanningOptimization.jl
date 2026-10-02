@@ -12,8 +12,8 @@ using TransportationPlanningOptimization.Problems.Inbound
 @testset "Instance creation" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, capacity=100, info=nothing),
-            NetworkNode(; id="2", node_type=:destination, capacity=200, info=nothing),
+            Node(; id="1", node_type=:origin, capacity=100, info=nothing),
+            Node(; id="2", node_type=:destination, capacity=200, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -67,9 +67,9 @@ end
 @testset "Instance bundle aggregation" begin
     @test begin
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, capacity=50, info=nothing),
-            NetworkNode(; id="B", node_type=:other, capacity=100, info=nothing),
-            NetworkNode(; id="C", node_type=:destination, capacity=150, info=nothing),
+            Node(; id="A", node_type=:origin, capacity=50, info=nothing),
+            Node(; id="B", node_type=:other, capacity=100, info=nothing),
+            Node(; id="C", node_type=:destination, capacity=150, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -129,8 +129,8 @@ end
 @testset "Instance with linear arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, capacity=1000, info=nothing),
-            NetworkNode(; id="2", node_type=:destination, capacity=1000, info=nothing),
+            Node(; id="1", node_type=:origin, capacity=1000, info=nothing),
+            Node(; id="2", node_type=:destination, capacity=1000, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -159,8 +159,8 @@ end
 @testset "Instance with bin packing arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, capacity=500, info=nothing),
-            NetworkNode(; id="2", node_type=:destination, capacity=500, info=nothing),
+            Node(; id="1", node_type=:origin, capacity=500, info=nothing),
+            Node(; id="2", node_type=:destination, capacity=500, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -189,9 +189,9 @@ end
 @testset "Instance with heterogeneous arc costs" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, capacity=1000, info=nothing),
-            NetworkNode(; id="2", node_type=:other, capacity=1000, info=nothing),
-            NetworkNode(; id="3", node_type=:destination, capacity=1000, info=nothing),
+            Node(; id="1", node_type=:origin, capacity=1000, info=nothing),
+            Node(; id="2", node_type=:other, capacity=1000, info=nothing),
+            Node(; id="3", node_type=:destination, capacity=1000, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -240,8 +240,8 @@ end
 @testset "Instance time period handling" begin
     @test begin
         nodes = [
-            NetworkNode(; id="1", node_type=:origin, capacity=100, info=nothing),
-            NetworkNode(; id="2", node_type=:destination, capacity=100, info=nothing),
+            Node(; id="1", node_type=:origin, capacity=100, info=nothing),
+            Node(; id="2", node_type=:destination, capacity=100, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -275,8 +275,8 @@ end
             model::String
         end
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, capacity=10, info=nothing),
-            NetworkNode(; id="B", node_type=:destination, capacity=10, info=nothing),
+            Node(; id="A", node_type=:origin, capacity=10, info=nothing),
+            Node(; id="B", node_type=:destination, capacity=10, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -326,9 +326,9 @@ end
 
 @testset "Instance keeps input and commodity mapping" begin
     nodes = [
-        NetworkNode(; id="A", node_type=:origin, capacity=100, info=nothing),
-        NetworkNode(; id="C", node_type=:origin, capacity=100, info=nothing),
-        NetworkNode(; id="B", node_type=:destination, capacity=100, info=nothing),
+        Node(; id="A", node_type=:origin, capacity=100, info=nothing),
+        Node(; id="C", node_type=:origin, capacity=100, info=nothing),
+        Node(; id="B", node_type=:destination, capacity=100, info=nothing),
     ]
     mk_arc(o, d) = Arc(;
         origin_id=o,
@@ -439,4 +439,36 @@ end
     @test departure.input.commodities === departure_commodities
     @test departure.bundles[1].orders[1] isa TransportationPlanningOptimization.Order{false}
     check_mapping(departure, departure_commodities)
+end
+
+@testset "Node input is converted to NetworkNode" begin
+    nodes = [
+        Node(; id="A", node_type=:origin, capacity=7, info=:a),
+        Node(; id="B", node_type=:destination, info=:b, node_cost=LinearNodeCost(2.0)),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="B", travel_time=Day(1), cost=LinearArcCost(1.0)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            size=1.0,
+            quantity=1,
+            arrival_date=DateTime(2024, 1, 5),
+            max_delivery_time=Day(2),
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    @test instance.input.nodes === nodes
+    for node in nodes
+        network_node = instance.network_graph.graph[node.id]
+        @test network_node isa NetworkNode
+        for field in fieldnames(Node)
+            @test getfield(network_node, field) == getfield(node, field)
+        end
+    end
+    @test_throws ArgumentError Node(; id="X", node_type=:bad)
 end

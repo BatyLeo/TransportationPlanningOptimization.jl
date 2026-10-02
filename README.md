@@ -37,9 +37,9 @@ using Dates
 
 # Define network nodes
 nodes = [
-    NetworkNode(; id="Origin", node_type=:origin),
-    NetworkNode(; id="Hub", node_type=:other),
-    NetworkNode(; id="Destination", node_type=:destination),
+    Node(; id="Origin", node_type=:origin),
+    Node(; id="Hub", node_type=:other),
+    Node(; id="Destination", node_type=:destination),
 ]
 
 # Define transportation arcs

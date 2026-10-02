@@ -32,7 +32,7 @@ using JuMP:
 using HiGHS: HiGHS
 using MetaGraphsNext: code_for
 using ...TransportationPlanningOptimization:
-    NetworkNode, Arc, LinearArcCost, BinPackingArcCost, Commodity, Instance, Solution, cost
+    Node, Arc, LinearArcCost, BinPackingArcCost, Commodity, Instance, Solution, cost
 using ..Problems: AbstractDataset
 import ..Problems: list_instances, dataset_dir, load_instance, benchmark_solve
 

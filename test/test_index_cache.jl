@@ -116,10 +116,7 @@ end
 
 for date_kw in (:departure_date, :arrival_date)
     @testset "tsg_edge_arc and ttg_edge_arc match the graph edges (mixed transit, wrap, $date_kw)" begin
-        nodes = [
-            NetworkNode(; id="A", node_type=:origin),
-            NetworkNode(; id="B", node_type=:destination),
-        ]
+        nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
         # One singleton group (1 day) and one group of two modes (2 days).
         arcs = [
             Arc(;

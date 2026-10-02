@@ -30,8 +30,8 @@ end
     @test TPO.lower_bound_incremental_cost(NoNodeCost(), C[], items) == 0.0
 end
 
-@testset "NetworkNode defaults node_cost to NoNodeCost" begin
-    n = NetworkNode(; id="A", node_type=:other)
+@testset "Node defaults node_cost to NoNodeCost" begin
+    n = Node(; id="A", node_type=:other)
     @test n.node_cost isa NoNodeCost
 end
 
@@ -88,7 +88,7 @@ function _instance_with_node_cost(name::String)
     (; nodes, arcs, commodities) =
         name == "small" ? TestFixtures.small_parsed() : TestFixtures.tiny_parsed()
     nodes_with_cost = [
-        NetworkNode(;
+        Node(;
             id=n.id,
             node_type=n.node_type,
             capacity=n.capacity,
@@ -128,12 +128,10 @@ end
 
 function _nonlinear_shared_arc_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(;
-            id="B", node_type=:other, node_cost=FixedPlusLinearNodeCost(100.0, 1.0)
-        ),
-        NetworkNode(; id="C", node_type=:destination),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other, node_cost=FixedPlusLinearNodeCost(100.0, 1.0)),
+        Node(; id="C", node_type=:destination),
+        Node(; id="D", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -237,8 +235,8 @@ end
 
 @testset "_direct_arc_lb_cost includes the destination node cost" begin
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination, node_cost=LinearNodeCost(5.0)),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:destination, node_cost=LinearNodeCost(5.0)),
     ]
     arcs = [
         Arc(;
@@ -270,9 +268,9 @@ end
 
 function _through_node_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="H", node_type=:other, node_cost=LinearNodeCost(100.0)),
-        NetworkNode(; id="C", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="H", node_type=:other, node_cost=LinearNodeCost(100.0)),
+        Node(; id="C", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -345,10 +343,8 @@ end
 
 function _multimodal_node_cost_network()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(;
-            id="B", node_type=:other, node_cost=FixedPlusLinearNodeCost(100.0, 1.0)
-        ),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other, node_cost=FixedPlusLinearNodeCost(100.0, 1.0)),
     ]
     arcs = [
         Arc(;
@@ -471,8 +467,8 @@ end
     TPO.evaluate(::_BrokenNodeCost, ::Vector{<:LightCommodity}) = 1.0
 
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination, node_cost=_BrokenNodeCost()),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:destination, node_cost=_BrokenNodeCost()),
     ]
     arcs = [
         Arc(;

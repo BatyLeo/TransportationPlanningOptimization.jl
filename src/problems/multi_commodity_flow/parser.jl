@@ -72,7 +72,7 @@ Build the package `Instance` for `data`, see [`load_instance`](@ref) for the res
 problem variants.
 """
 function _to_instance(data::_MCFData)
-    nodes = [NetworkNode(; id=string(i), node_type=:other) for i in 1:(data.n_nodes)]
+    nodes = [Node(; id=string(i), node_type=:other) for i in 1:(data.n_nodes)]
 
     arcs = map(eachindex(data.tails)) do a
         cost = if data.network_design

@@ -71,10 +71,10 @@ deadlock in `large_local_search!` when both bundles become "forbidden".
 """
 function hub_deadlock_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="H", node_type=:other),
-        NetworkNode(; id="B", node_type=:destination),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="H", node_type=:other),
+        Node(; id="B", node_type=:destination),
+        Node(; id="D", node_type=:destination),
     ]
     arcs = [
         Arc(;

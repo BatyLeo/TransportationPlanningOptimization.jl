@@ -91,10 +91,10 @@ small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 # arc A->B with F, so it must route around it through C.
 function shared_arc_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:other),
-        NetworkNode(; id="C", node_type=:other),
-        NetworkNode(; id="D2", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other),
+        Node(; id="C", node_type=:other),
+        Node(; id="D2", node_type=:destination),
     ]
     arcs = [
         Arc(;

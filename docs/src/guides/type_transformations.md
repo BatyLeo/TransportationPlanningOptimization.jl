@@ -14,11 +14,11 @@ Commodity ──┘
 
 Arc ────── convert ──> NetworkArc (or MultiModalArc)
 
-NetworkNode ─────────────────────────────────────────────────
+Node ───── convert ──> NetworkNode
 
-                      ┌─> NetworkGraph
-NetworkNode + Arc ────┼─> TimeSpaceGraph
-                      └─> TravelTimeGraph
+                         ┌─> NetworkGraph
+NetworkNode + NetworkArc ┼─> TimeSpaceGraph
+                         └─> TravelTimeGraph
 
 All combined ──> Instance
 ```
@@ -66,6 +66,15 @@ A `Bundle` holds:
 Bundles are the routing unit: each bundle is assigned a single path in the [`TravelTimeGraph`](@ref).
 All orders in a bundle follow the same spatial path but with order-specific timing.
 
+## Node pipeline
+
+### Node -> NetworkNode
+
+[`Node`](@ref) is the user-facing input type, converted to a [`NetworkNode`](@ref) by [`collect_nodes`](@ref TransportationPlanningOptimization.collect_nodes) during instance construction.
+Its fields are copied as is, except that `node_cost` is narrowed to a union type for type stability across heterogeneous cost functions.
+The i-th `Node` becomes the i-th `NetworkNode`.
+The `info` type parameter is taken from the first node, so all nodes must share one `info` type.
+
 ## Arc pipeline
 
 ### Arc -> NetworkArc
@@ -85,7 +94,7 @@ The network is expanded into three graph representations, each serving a differe
 ### NetworkGraph
 
 The spatial network: nodes and arcs as provided, without time expansion.
-Built directly from `Vector{NetworkNode}` and the converted `NetworkArc` tuples.
+Built directly from the converted `Vector{NetworkNode}` and the converted `NetworkArc` tuples.
 
 ### TimeSpaceGraph
 

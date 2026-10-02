@@ -146,10 +146,10 @@ Use [`total_arc_cost`](@ref) and [`total_node_cost`](@ref) to read the two compo
 Slope scaling (the optional `slope_scaling_update!` callback passed as `cost_update!` to [`iterated_local_search!`](@ref)) only scales arc costs, never node costs.
 
 By default, nodes use [`NoNodeCost`](@ref) (zero cost).
-To add a node cost, pass a `node_cost` keyword to [`NetworkNode`](@ref):
+To add a node cost, pass a `node_cost` keyword to [`Node`](@ref):
 
 ```julia
-NetworkNode(; id="Hub", node_type=:other, node_cost=my_custom_cost)
+Node(; id="Hub", node_type=:other, node_cost=my_custom_cost)
 ```
 
 ### LinearNodeCost
@@ -157,7 +157,7 @@ NetworkNode(; id="Hub", node_type=:other, node_cost=my_custom_cost)
 [`LinearNodeCost`](@ref) is a built-in node cost proportional to total volume:
 
 ```julia
-NetworkNode(; id="Hub", node_type=:other, node_cost=LinearNodeCost(2.0))
+Node(; id="Hub", node_type=:other, node_cost=LinearNodeCost(2.0))
 ```
 
 The cost is `cost_per_unit_size * sum(commodity.size)` for all commodities transiting the node.

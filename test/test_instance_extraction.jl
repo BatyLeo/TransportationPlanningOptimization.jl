@@ -168,9 +168,9 @@ size 4, kept) share arc A->B (capacity 5).
 """
 function fb_shared_arc_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:other),
-        NetworkNode(; id="D2", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other),
+        Node(; id="D2", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -256,8 +256,8 @@ end
     # full `(origin, destination, group)` triple, so it disambiguates them
     # instead of throwing (which the old OD-only keying would have done).
     nodes = [
-        NetworkNode(; id="A", node_type=:origin, capacity=10, info=nothing),
-        NetworkNode(; id="B", node_type=:destination, capacity=10, info=nothing),
+        Node(; id="A", node_type=:origin, capacity=10, info=nothing),
+        Node(; id="B", node_type=:destination, capacity=10, info=nothing),
     ]
     arcs = [
         Arc(;

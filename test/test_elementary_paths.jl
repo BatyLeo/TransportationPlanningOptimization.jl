@@ -15,11 +15,11 @@ using .TestFixtures
 # bin by looping X -> Y -> X until day 3, which raw Dijkstra does.
 function looping_instance()
     nodes = [
-        NetworkNode(; id="O1", node_type=:origin),
-        NetworkNode(; id="O2", node_type=:origin),
-        NetworkNode(; id="X", node_type=:other),
-        NetworkNode(; id="Y", node_type=:other),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="O1", node_type=:origin),
+        Node(; id="O2", node_type=:origin),
+        Node(; id="X", node_type=:other),
+        Node(; id="Y", node_type=:other),
+        Node(; id="D", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -123,12 +123,12 @@ function splice_instance(;
     with_detour::Bool, with_shortcut::Bool=true, hc_capacity::Int=typemax(Int)
 )
     nodes = [
-        NetworkNode(; id="O", node_type=:origin),
-        NetworkNode(; id="P", node_type=:other),
-        NetworkNode(; id="H", node_type=:other),
-        NetworkNode(; id="C", node_type=:other),
-        NetworkNode(; id="Q", node_type=:other),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="O", node_type=:origin),
+        Node(; id="P", node_type=:other),
+        Node(; id="H", node_type=:other),
+        Node(; id="C", node_type=:other),
+        Node(; id="Q", node_type=:other),
+        Node(; id="D", node_type=:destination),
     ]
     arc(o, d, c, t=Day(1), cap=typemax(Int)) = Arc(;
         origin_id=o,

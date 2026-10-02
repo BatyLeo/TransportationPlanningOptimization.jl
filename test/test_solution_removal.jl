@@ -52,10 +52,7 @@ end
     # Two parallel modes with the same transit time collapse to a single
     # MultiModalArc edge in the TSG, exercising the MultiAssignment dispatch
     # of _remove_commodities_from_assignment!.
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
