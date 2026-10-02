@@ -293,7 +293,7 @@ function two_node_common_incremental!(
         return -cost_delta
     else
         for i in lifted_idxs
-            remove_bundle_path!(sol, instance, i)
+            _remove_unsnapshotted_path!(sol, instance, i, snapshots)
         end
         _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0

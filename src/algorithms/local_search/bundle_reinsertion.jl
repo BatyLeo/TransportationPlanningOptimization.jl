@@ -246,8 +246,7 @@ function _try_reinsert_bundle!(
         return -net_delta
     end
 
-    remove_bundle_path!(sol, instance, bundle_idx)
-    _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
+    _rollback_bundle!(sol, instance, bundle_idx, old_path, snapshots)
     return 0.0
 end
 

@@ -90,6 +90,30 @@ end
            _sum_evaluate_with_total_size(Base.tail(terms), comms, total_size)
 end
 
+# Term costs of a slot whose `bins` are freshly packed: the bin-packing term reuses the
+# bins instead of packing again. Same right fold as `_sum_evaluate_with_total_size`.
+@inline _packed_term_cost(slot::SingleAssignment, t::BinPackingArcCost) =
+    t.cost_per_bin * length(slot.bins)
+@inline _packed_term_cost(slot::SingleAssignment, t::AbstractArcCostFunction) =
+    _evaluate_with_total_size(t, slot.commodities, slot.total_size; presorted=true)
+
+@inline _sum_packed_cost(::SingleAssignment, ::Tuple{}) = 0.0
+@inline _sum_packed_cost(slot::SingleAssignment, terms::Tuple) =
+    _packed_term_cost(slot, first(terms)) + _sum_packed_cost(slot, Base.tail(terms))
+
+# Same fold for the removal path: the bin-packing term counts bins once and caches the
+# count in `slot.dirty_bin_count`.
+@inline function _skip_bins_term_cost!(slot::SingleAssignment, t::BinPackingArcCost)
+    slot.dirty_bin_count = tentative_bin_count(t, slot.commodities; presorted=true)
+    return t.cost_per_bin * slot.dirty_bin_count
+end
+@inline _skip_bins_term_cost!(slot::SingleAssignment, t::AbstractArcCostFunction) =
+    _evaluate_with_total_size(t, slot.commodities, slot.total_size; presorted=true)
+
+@inline _sum_skip_bins_cost!(::SingleAssignment, ::Tuple{}) = 0.0
+@inline _sum_skip_bins_cost!(slot::SingleAssignment, terms::Tuple) =
+    _skip_bins_term_cost!(slot, first(terms)) + _sum_skip_bins_cost!(slot, Base.tail(terms))
+
 function _update_single_assignment_cost!(
     slot::SingleAssignment, arc_f::AbstractArcCostFunction
 )
@@ -115,12 +139,14 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_f::SumArcCo
     # cached bin count stays consistent with slot.commodities (read by
     # incremental_cost! to skip the FFD-on-existing pass).
     bp = _try_find_bin_packing(arc_f)
-    if bp !== nothing
+    if bp === nothing
+        slot.arc_cost = _sum_evaluate_with_total_size(
+            arc_f.terms, slot.commodities, slot.total_size
+        )
+    else
         slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
+        slot.arc_cost = _sum_packed_cost(slot, arc_f.terms)
     end
-    slot.arc_cost = _sum_evaluate_with_total_size(
-        arc_f.terms, slot.commodities, slot.total_size
-    )
     slot.bins_dirty = false
     return nothing
 end
@@ -140,17 +166,15 @@ end
 
 function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::BinPackingArcCost)
     _ensure_sorted!(slot)
-    slot.arc_cost =
-        arc_f.cost_per_bin * tentative_bin_count(arc_f, slot.commodities; presorted=true)
+    slot.dirty_bin_count = tentative_bin_count(arc_f, slot.commodities; presorted=true)
+    slot.arc_cost = arc_f.cost_per_bin * slot.dirty_bin_count
     slot.bins_dirty = true
     return nothing
 end
 
 function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::SumArcCost)
     _ensure_sorted!(slot)
-    slot.arc_cost = _sum_evaluate_with_total_size(
-        arc_f.terms, slot.commodities, slot.total_size
-    )
+    slot.arc_cost = _sum_skip_bins_cost!(slot, arc_f.terms)
     slot.bins_dirty = true
     return nothing
 end

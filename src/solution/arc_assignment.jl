@@ -33,10 +33,13 @@ mutable struct SingleAssignment{C<:LightCommodity} <: AbstractArcAssignment{C}
     total_size::Float64
     "true when `bins` may not reflect `commodities` (skipped repack on removal)"
     bins_dirty::Bool
+    "first-fit-decreasing bin count of `commodities`, valid only while `bins_dirty` and the
+    cost has a `BinPackingArcCost` term (set on removal)"
+    dirty_bin_count::Int
 end
 
 function SingleAssignment{C}() where {C<:LightCommodity}
-    return SingleAssignment{C}(C[], Bin{C}[], 0.0, 0.0, true, 0.0, false)
+    return SingleAssignment{C}(C[], Bin{C}[], 0.0, 0.0, true, 0.0, false, 0)
 end
 
 """
@@ -49,8 +52,17 @@ function SingleAssignment{C}(
     commodities::Vector{C}, bins::Vector{Bin{C}}, arc_cost::Float64
 ) where {C<:LightCommodity}
     ts = sum(c.size for c in commodities; init=0.0)
-    return SingleAssignment{C}(commodities, bins, arc_cost, 0.0, false, ts, false)
+    return SingleAssignment{C}(commodities, bins, arc_cost, 0.0, false, ts, false, 0)
 end
+
+"""
+$TYPEDSIGNATURES
+
+Bin count of the commodities stored in `slot`: the cached first-fit-decreasing count when the
+bins are stale (`bins_dirty`, only meaningful for costs with a `BinPackingArcCost` term), otherwise the number of materialized bins.
+"""
+@inline _current_bin_count(slot::SingleAssignment) =
+    slot.bins_dirty ? slot.dirty_bin_count : length(slot.bins)
 
 """
 $TYPEDSIGNATURES

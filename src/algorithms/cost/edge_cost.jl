@@ -6,7 +6,8 @@ $TYPEDSIGNATURES
 Frozen-bin per-edge increment for a single-mode assignment. When bins are clean,
 dispatches to `frozen_incremental_cost!` (bin-packing terms reuse committed bins,
 others fall back to `incremental_cost_with_size` or `incremental_cost!`).
-When bins are dirty, falls back to the standard `incremental_cost!`.
+When bins are dirty, calls the standard `incremental_cost!` with the cached
+`dirty_bin_count` as `n_existing`.
 
 Shared by both the `NetworkArc` and per-mode `MultiModalArc` frozen paths (and
 reused by `assignment_operations.jl`).
@@ -19,7 +20,13 @@ function _frozen_edge_incremental_cost(
     new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
     if existing.bins_dirty
-        return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
+        return incremental_cost!(
+            buffer,
+            arc_f,
+            existing.commodities,
+            new_comms;
+            n_existing=existing.dirty_bin_count,
+        )
     end
     # else
     return frozen_incremental_cost!(
@@ -73,9 +80,12 @@ function _edge_incremental_cost(
             buffer, arc.cost, existing, new_comms, new_total_size
         )
     end
-    n_ex = existing.bins_dirty ? -1 : length(existing.bins)
     return incremental_cost!(
-        buffer, arc.cost, existing.commodities, new_comms; n_existing=n_ex
+        buffer,
+        arc.cost,
+        existing.commodities,
+        new_comms;
+        n_existing=_current_bin_count(existing),
     )
 end
 
@@ -134,17 +144,12 @@ function _edge_incremental_cost(
                     new_total_size,
                 )
             else
-                n_ex = if existing.per_mode[i].bins_dirty
-                    -1
-                else
-                    length(existing.per_mode[i].bins)
-                end
                 incremental_cost!(
                     buffer,
                     arc.modes[i].cost,
                     existing.per_mode[i].commodities,
                     new_comms;
-                    n_existing=n_ex,
+                    n_existing=_current_bin_count(existing.per_mode[i]),
                 )
             end
         else
@@ -212,9 +217,12 @@ function _edge_incremental_cost(
     total = 0.0
     for i in eachindex(arc.modes)
         isempty(partition[i]) && continue
-        n_ex = existing.per_mode[i].bins_dirty ? -1 : length(existing.per_mode[i].bins)
         total += incremental_cost!(
-            buffer, arc.modes[i].cost, existing_per_mode[i], partition[i]; n_existing=n_ex
+            buffer,
+            arc.modes[i].cost,
+            existing_per_mode[i],
+            partition[i];
+            n_existing=_current_bin_count(existing.per_mode[i]),
         )
     end
     return total

@@ -74,3 +74,37 @@ end
         origin_id="o", destination_id="d", cost=(), travel_time=Day(1)
     )
 end
+
+@testset "SumArcCost slot cost reuses the packed bins and caches the dirty count" begin
+    C = LightCommodity{Nothing}
+    items = C[
+        LightCommodity(; origin_id="o", destination_id="d", size=s, info=nothing) for
+        s in (40.0, 60.0, 35.0, 25.0, 70.0)
+    ]
+    bp = BinPackingArcCost(10.0, 100)
+    new = sort(
+        [LightCommodity(; origin_id="o", destination_id="d", size=30.0, info=nothing)];
+        by=c -> -c.size,
+    )
+    for arc_f in (
+        SumArcCost((bp, LinearArcCost(0.3))),
+        SumArcCost((LinearArcCost(0.3), bp)),
+        SumArcCost((LinearArcCost(0.3), bp, LinearArcCost(0.7))),
+    )
+        slot = TPO.SingleAssignment{C}(copy(items), TPO.Bin{C}[], 0.0)
+        slot.total_size = sum(c.size for c in items)
+        TPO._update_single_assignment_cost!(slot, arc_f)
+        @test slot.arc_cost === TPO.evaluate(arc_f, slot.commodities; presorted=true)
+
+        # Removal path: cached FFD count, and the dirty-slot increment matches the uncached one
+        popfirst!(slot.commodities)
+        slot.total_size = sum(c.size for c in slot.commodities)
+        TPO._update_cost_skip_bins!(slot, arc_f)
+        @test slot.bins_dirty
+        @test slot.dirty_bin_count == TPO.tentative_bin_count(bp, slot.commodities)
+        @test slot.arc_cost === TPO.evaluate(arc_f, slot.commodities; presorted=true)
+        buffer = TPO.BinPackingBuffer()
+        @test TPO._frozen_edge_incremental_cost(buffer, arc_f, slot, new) ===
+            TPO.incremental_cost!(buffer, arc_f, slot.commodities, new)
+    end
+end

@@ -74,7 +74,7 @@ function large_local_search!(
         else
             # Roll back the whole batch (see docstring).
             for b in processed
-                remove_bundle_path!(sol, instance, b)
+                _remove_unsnapshotted_path!(sol, instance, b, snapshots)
             end
             _restore_multi_bundle_assignments!(sol, forbidden_bundles, old_paths, snapshots)
         end

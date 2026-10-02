@@ -11,6 +11,7 @@ struct _SingleAssignmentSnapshot{C<:LightCommodity}
     sorted::Bool
     total_size::Float64
     bins_dirty::Bool
+    dirty_bin_count::Int
 end
 
 function _snapshot_assignment(a::SingleAssignment{C}) where {C}
@@ -22,6 +23,7 @@ function _snapshot_assignment(a::SingleAssignment{C}) where {C}
         a.sorted,
         a.total_size,
         a.bins_dirty,
+        a.dirty_bin_count,
     )
 end
 
@@ -33,6 +35,7 @@ function _restore_assignment!(a::SingleAssignment, snap::_SingleAssignmentSnapsh
     a.sorted = snap.sorted
     a.total_size = snap.total_size
     a.bins_dirty = snap.bins_dirty
+    a.dirty_bin_count = snap.dirty_bin_count
     return nothing
 end
 
@@ -93,6 +96,51 @@ function _restore_path_assignments!(
         _restore_assignment!(sol.assignments[edge], snap)
     end
     return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
+Remove bundle `bundle_idx` from `sol` like [`remove_bundle_path!`](@ref), but skip the
+edges present in `snapshots`. Meant for rollbacks, where restoring the snapshots
+overwrites those slots anyway. The removal deltas are discarded.
+"""
+function _remove_unsnapshotted_path!(
+    sol::Solution, instance::Instance, bundle_idx::Int, snapshots::Dict
+)
+    path = sol.bundle_paths[bundle_idx]
+    isempty(path) && return nothing
+    cache = instance.index_cache
+    _foreach_path_edge(instance, instance.bundles[bundle_idx], path) do edge, arc, order
+        haskey(snapshots, edge) && return 0.0
+        _remove_commodities_from_assignment!(
+            sol.assignments[edge],
+            arc,
+            order.commodities,
+            cache.spatial_code_to_node_cost,
+            cache.tsg_code_to_spatial_code[edge[2]],
+        )
+        return 0.0
+    end
+    sol.bundle_paths[bundle_idx] = Int[]
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
+Roll back a rejected move on `bundle_idx`: remove its current path, skipping the edges
+that the snapshot restore overwrites, then restore `old_path` and the snapshots.
+"""
+function _rollback_bundle!(
+    sol::Solution,
+    instance::Instance,
+    bundle_idx::Int,
+    old_path::Vector{Int},
+    snapshots::Dict,
+)
+    _remove_unsnapshotted_path!(sol, instance, bundle_idx, snapshots)
+    return _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
 end
 
 function _snapshot_multi_bundle_assignments(
