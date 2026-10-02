@@ -63,6 +63,7 @@ const COMMODITY_ORIGIN_ID = :supplier_account
 const COMMODITY_DESTINATION_ID = :customer_account
 const COMMODITY_SIZE = :size
 const COMMODITY_ARRIVAL_DATE = :delivery_date
+const COMMODITY_TIME_STEP = :delivery_time_step
 const COMMODITY_MAX_DELIVERY_TIME = :max_delivery_time
 const COMMODITY_QUANTITY = :quantity
 const COMMODITY_LEAD_TIME_COST = :lead_time_cost
