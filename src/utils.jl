@@ -15,8 +15,8 @@ An integer representing the number of steps.
 ```julia
 period_steps(Day(10), Week(1))                   # => 1 (default floor)
 period_steps(Day(10), Week(1); roundup=ceil)     # => 2
-period_steps(Hour(25), Week(1))                  # => 2
-period_steps(Day(1), Hour(12); roundup=ceil)     # => 1
+period_steps(Hour(25), Hour(12))                 # => 2
+period_steps(Hour(13), Hour(12); roundup=ceil)   # => 2
 ```
 """
 function period_steps(p::Dates.Period, step::Dates.Period; roundup=floor)

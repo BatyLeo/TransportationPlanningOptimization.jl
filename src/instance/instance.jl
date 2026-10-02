@@ -43,8 +43,8 @@ $TYPEDFIELDS
     time_horizon_length::Int
     "discretization time step for the instance"
     time_step::Period
-    "mapping from time step index to date"
-    time_step_to_date::Vector{Dates.Date}
+    "mapping from time step index to the date and time at which the step starts"
+    time_step_to_date::Vector{Dates.DateTime}
     "time expanded graph (for order paths)"
     time_space_graph::TSG
     "travel time graph (for bundle paths)"
@@ -131,7 +131,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Compute the calendar date that anchors time step 1 of the instance's discrete horizon.
+Compute the `DateTime` (at midnight) that anchors time step 1 of the instance's discrete horizon.
 All time step indices and `time_step_to_date` entries are measured as offsets from this date.
 
 The chosen date is the earliest relevant date across all commodities, where "relevant"
@@ -147,14 +147,16 @@ function _compute_start_date(
     if is_date_arrival
         # Arrival-based: start date is min of arrival dates (- max delivery times)
         return if wrap_time
-            minimum(Dates.Date(c.date) for c in commodities)
+            Dates.DateTime(minimum(Dates.Date(c.date) for c in commodities))
         else
             # Need to extend the time horizon to account for max delivery times, if no wrapping
-            minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
+            Dates.DateTime(
+                minimum(Dates.Date(c.date - c.max_delivery_time) for c in commodities)
+            )
         end
     else
         # Departure-based: start date is min of departure dates
-        return minimum(Dates.Date(c.date) for c in commodities)
+        return Dates.DateTime(minimum(Dates.Date(c.date) for c in commodities))
     end
 end
 
@@ -205,9 +207,7 @@ function _expand_commodities(
             commodity.max_delivery_time, time_step; roundup=floor
         )
         time_step_idx =
-            period_steps(
-                Dates.Date(commodity.date) - start_date, time_step; roundup=floor
-            ) + 1
+            period_steps(commodity.date - start_date, time_step; roundup=floor) + 1
         key = (
             time_step_idx,
             commodity.origin_id,
@@ -579,7 +579,7 @@ duplicate `(origin_id, destination_id)` arcs raise an `ArgumentError`. When true
 duplicates are auto-promoted to a `MultiModalArc`.
 
 # Discretization and Normalization
-1. **Start Date**: The time horizon starts at the earliest release date
+1. **Start Date**: The time horizon starts at midnight of the earliest release date
 (for departure-based) or the earliest possible start (for arrival-based).
 2. **Time Steps**: Dates and periods are converted to discrete steps using `period_steps`.
 3. **Consolidation**: Commodities with the same origin, destination, and delivery step are

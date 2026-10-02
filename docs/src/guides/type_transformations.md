@@ -124,7 +124,7 @@ Instance(;
     network_graph,        # NetworkGraph
     time_horizon_length,  # Int
     time_step,            # Period
-    time_step_to_date,    # Vector{Date} (maps step index back to calendar date)
+    time_step_to_date,    # Vector{DateTime} (start of each time step)
     time_space_graph,     # TimeSpaceGraph
     travel_time_graph,    # TravelTimeGraph
     index_cache,          # IndexCache (precomputed lookups for the hot path)

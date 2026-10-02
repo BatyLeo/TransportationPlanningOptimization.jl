@@ -368,7 +368,7 @@ end
             @test instance.bundles[b].origin_id == commodity.origin_id
             @test instance.bundles[b].destination_id == commodity.destination_id
             date = instance.time_step_to_date[instance.bundles[b].orders[o].time_step]
-            @test date == Date(commodity.date)
+            @test date == DateTime(Date(commodity.date))
         end
         # Each order holds exactly the light commodities of its mapped input commodities
         for (b, bundle) in enumerate(instance.bundles),
@@ -554,7 +554,8 @@ end
         Node(; id="C", node_type=:origin),
         Node(; id="B", node_type=:destination),
     ]
-    mk_arc(o, d, cost) = Arc(; origin_id=o, destination_id=d, travel_time=Day(1), cost=cost)
+    mk_cost_arc(o, d, cost) =
+        Arc(; origin_id=o, destination_id=d, travel_time=Day(1), cost=cost)
     commodities = [
         Commodity(;
             origin_id="A",
@@ -568,8 +569,8 @@ end
 
     @testset "Union arc type is preserved" begin
         arcs = [
-            mk_arc("A", "B", LinearArcCost(1.0)),
-            mk_arc("C", "B", BinPackingArcCost(1.0, 10.0)),
+            mk_cost_arc("A", "B", LinearArcCost(1.0)),
+            mk_cost_arc("C", "B", BinPackingArcCost(1.0, 10.0)),
         ]
         instance = Instance(nodes, arcs, commodities, Day(1))
         TestFixtures.check_input_links(instance)
@@ -580,8 +581,8 @@ end
 
     @testset "unknown arc endpoint throws" begin
         lin = LinearArcCost(1.0)
-        for bad in (mk_arc("Z", "B", lin), mk_arc("A", "Z", lin))
-            arcs = [mk_arc("A", "B", lin), bad]
+        for bad in (mk_cost_arc("Z", "B", lin), mk_cost_arc("A", "Z", lin))
+            arcs = [mk_cost_arc("A", "B", lin), bad]
             @test_throws "has an unknown endpoint" Instance(
                 nodes, arcs, commodities, Day(1)
             )
@@ -596,5 +597,89 @@ end
                 net_nodes, [("A", "B", arc), bad]
             )
         end
+    end
+end
+
+@testset "Sub-day time steps" begin
+    nodes = [
+        Node(; id="1", node_type=:origin, capacity=100, info=nothing),
+        Node(; id="2", node_type=:destination, capacity=200, info=nothing),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="1",
+            destination_id="2",
+            travel_time=Hour(7),
+            cost=LinearArcCost(5.0),
+            info=nothing,
+        ),
+    ]
+    mk(date) = Commodity(;
+        origin_id="1",
+        destination_id="2",
+        size=10.0,
+        quantity=1,
+        departure_date=date,
+        max_delivery_time=Hour(24),
+    )
+    commodities = [mk(DateTime(2024, 1, 1, 1)), mk(DateTime(2024, 1, 1, 13))]
+    instance = Instance(nodes, arcs, commodities, Hour(6); wrap_time=true)
+    steps = [
+        instance.bundles[b].orders[o].time_step for (b, o) in instance.commodity_to_order
+    ]
+    @test steps == [1, 3]
+    dates = instance.time_step_to_date
+    @test dates isa Vector{DateTime}
+    @test dates[1] == DateTime(2024, 1, 1)
+    @test dates[steps[2]] == DateTime(2024, 1, 1, 12)
+    @test all(diff(dates) .== Hour(6))
+    @test instance.network_graph.graph["1", "2"].travel_time_steps == 1
+end
+
+@testset "Non-midnight dates keep Day, Week and 30-day order steps" begin
+    nodes = [
+        Node(; id="1", node_type=:origin, capacity=100, info=nothing),
+        Node(; id="2", node_type=:destination, capacity=200, info=nothing),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="1",
+            destination_id="2",
+            travel_time=Day(1),
+            cost=LinearArcCost(5.0),
+            info=nothing,
+        ),
+    ]
+    # Whole days elapsed since 2024-01-01 at midnight, each date also has a fractional day
+    offsets = [0, 6, 13, 14, 30, 35]
+    dates = [
+        DateTime(2024, 1, 1, 5),
+        DateTime(2024, 1, 7, 23, 59),
+        DateTime(2024, 1, 14, 18),
+        DateTime(2024, 1, 15, 1),
+        DateTime(2024, 1, 31, 1),
+        DateTime(2024, 2, 5, 12),
+    ]
+    max_delivery = 30
+    # Arrival without wrapping starts max_delivery days earlier, other cases start at 2024-01-01
+    for arrival in (true, false), wrap in (true, false), step in (Day(1), Week(1), Day(30))
+        commodities = [
+            Commodity(;
+                origin_id="1",
+                destination_id="2",
+                size=10.0,
+                quantity=1,
+                (arrival ? :arrival_date : :departure_date) => date,
+                max_delivery_time=Day(max_delivery),
+            ) for date in dates
+        ]
+        instance = Instance(nodes, arcs, commodities, step; wrap_time=wrap)
+        steps = [
+            instance.bundles[b].orders[o].time_step for
+            (b, o) in instance.commodity_to_order
+        ]
+        shift = arrival && !wrap ? max_delivery : 0
+        n = Dates.value(Day(step))
+        @test steps == fld.(offsets .+ shift, n) .+ 1
     end
 end
