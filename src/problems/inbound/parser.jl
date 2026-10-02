@@ -1,5 +1,5 @@
 """
-    parse_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
+    parse_inbound_instance(node_file, leg_file, commodity_file; dates_from_time_step=true)
 
 Read an inbound instance from three CSV files: nodes, legs, and commodities.
 
@@ -10,8 +10,22 @@ Returns a named tuple `(; nodes, arcs, commodities)` containing:
 
 The function performs deduplication of arcs (keeps only the first arc for each
 origin-destination pair) and handles heterogeneous cost function types.
+
+By default (`dates_from_time_step=true`), the commodity dates are rewritten to
+`minimum(delivery_date) + Week(delivery_time_step)`, so the `delivery_time_step` column
+defines the time model, as in the reference implementation.
+This differs from the calendar when `delivery_date` is not `minimum(delivery_date)` plus
+`delivery_time_step` weeks (as in `world2` to `world5`).
+With `dates_from_time_step=false`, the real `delivery_date` is read instead.
+An `ArgumentError` is thrown if the `delivery_time_step` column is missing and
+`dates_from_time_step=true`.
 """
-function parse_inbound_instance(node_file::String, leg_file::String, commodity_file::String)
+function parse_inbound_instance(
+    node_file::String,
+    leg_file::String,
+    commodity_file::String;
+    dates_from_time_step::Bool=true,
+)
     df_nodes = DataFrame(CSV.File(node_file; stringtype=String))
     df_legs = DataFrame(CSV.File(leg_file; stringtype=String))
     df_commodities = DataFrame(CSV.File(commodity_file; stringtype=String))
@@ -87,13 +101,27 @@ function parse_inbound_instance(node_file::String, leg_file::String, commodity_f
     # filter!(arc -> arc.info.arc_type in ALLOWED_ARC_TYPES, raw_arcs)
     # arcs = collect_arcs((LinearArcCost, BinPackingArcCost), raw_arcs)
 
-    commodities = map(eachrow(df_commodities)) do row
+    dates = [
+        DateTime(d, "yyyy-mm-dd HH:MM:SS+00:00") for
+        d in df_commodities[!, COMMODITY_ARRIVAL_DATE]
+    ]
+    if dates_from_time_step
+        hasproperty(df_commodities, COMMODITY_TIME_STEP) || throw(
+            ArgumentError(
+                "Column `$COMMODITY_TIME_STEP` not found in $commodity_file, " *
+                "use `dates_from_time_step=false` to read `$COMMODITY_ARRIVAL_DATE` instead.",
+            ),
+        )
+        dates = minimum(dates) .+ Week.(df_commodities[!, COMMODITY_TIME_STEP])
+    end
+
+    commodities = map(zip(eachrow(df_commodities), dates)) do (row, date)
         return Commodity(;
             origin_id=string(row[COMMODITY_ORIGIN_ID]),
             destination_id=string(row[COMMODITY_DESTINATION_ID]),
             size=Float64(max(1, round(Int, row[COMMODITY_SIZE] * VOLUME_FACTOR))),
             quantity=Int(row[COMMODITY_QUANTITY]),
-            arrival_date=DateTime(row[COMMODITY_ARRIVAL_DATE], "yyyy-mm-dd HH:MM:SS+00:00"),
+            arrival_date=date,
             max_delivery_time=Week(row[COMMODITY_MAX_DELIVERY_TIME]),
             info=InboundCommodityInfo(Float64(row[COMMODITY_LEAD_TIME_COST])),
         )

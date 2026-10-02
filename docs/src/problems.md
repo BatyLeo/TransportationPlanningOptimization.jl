@@ -27,6 +27,9 @@ Nodes use a [`LinearNodeCost`](@ref) for the per-unit handling cost.
 The parser drops legs with missing values, keeps only the first leg of each duplicated (origin, destination) pair, and scales volumes and capacities by 100.
 
 The [`Problems.Inbound.RenaultInbound`](@ref) dataset gives access to nine Renault instances, from the regional `small` to the worldwide `world5`, with weekly time steps.
+By default, the commodity dates are rebuilt from the `delivery_time_step` column (`minimum(delivery_date) + Week(step)`), which reproduces the time model of the reference implementation (a 26-step cyclic horizon on `world2` to `world5`, where the steps do not follow the calendar).
+Pass `dates_from_time_step=false` to `load_instance` or `parse_inbound_instance` to read the real `delivery_date` instead.
+Both readings agree on `small` to `world`.
 They are downloaded on demand from Zenodo ([DOI 10.5281/zenodo.17234091](https://doi.org/10.5281/zenodo.17234091), CC-BY-4.0) via [DataDeps.jl](https://github.com/oxinabox/DataDeps.jl).
 They come from the paper "Optimizing a Worldwide-scale Shipper Transportation Planning in a Carmaker Supply Chain" ([arXiv 2509.07576](https://arxiv.org/abs/2509.07576)).
 
