@@ -5,13 +5,15 @@ Check if a solution is feasible for a given instance.
 Feasibility requires:
 1. Every bundle in the instance must have a corresponding path in the solution.
 2. Every path must exist (each arc exists in the graph).
-3. Every path must start at the bundle's designated entry node (`origin_codes`).
-4. Every path must end at the bundle's designated exit node (`destination_codes`).
-5. Every stored assignment sits on an existing arc and respects its capacity (per mode
+3. Every path is elementary: it never revisits a physical node after leaving it
+   (waiting on the same node is allowed).
+4. Every path must start at the bundle's designated entry node (`origin_codes`).
+5. Every path must end at the bundle's designated exit node (`destination_codes`).
+6. Every stored assignment sits on an existing arc and respects its capacity (per mode
    on multi-modal arcs).
-6. Every bin respects the bin capacity of its arc cost, and the bins hold exactly the
+7. Every bin respects the bin capacity of its arc cost, and the bins hold exactly the
    commodities of their assignment (unless the bins are marked dirty).
-7. The assignments carry exactly the load of the bundle paths, plus any commodity
+8. The assignments carry exactly the load of the bundle paths, plus any commodity
    belonging to no bundle of the instance (capacity reservations, see
    [`preload_filtered_bundles`](@ref)).
 """
@@ -32,6 +34,7 @@ function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol
 
         _check_path_edges(travel_time_graph, bundle, bundle_idx, path; verbose) ||
             return false
+        _check_elementary_path(instance, bundle_idx, path; verbose) || return false
         _check_origin_node(travel_time_graph, bundle_idx, path; verbose) || return false
         _check_destination_node(travel_time_graph, bundle_idx, path; verbose) ||
             return false
@@ -97,6 +100,25 @@ function _check_path_edges(
         end
     end
     return true
+end
+
+"""
+$TYPEDSIGNATURES
+
+Check that `path` of bundle `bundle_idx` is elementary, see [`is_elementary_path`](@ref).
+"""
+function _check_elementary_path(
+    instance::Instance, bundle_idx::Int, path::Vector{Int}; verbose::Bool
+)
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    is_elementary_path(path, spatial) && return true
+    if verbose
+        ids = [
+            MetaGraphsNext.label_for(instance.travel_time_graph.graph, v)[1] for v in path
+        ]
+        @warn "Bundle $(bundle_idx) path is not elementary, it revisits a physical node: $(ids)."
+    end
+    return false
 end
 
 """

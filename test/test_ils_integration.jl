@@ -29,8 +29,7 @@ function TransportationPlanningOptimization.perturbate!(
     TPO.update_bundle_cost_matrix!(sol, instance, idx)
     origin = ttg.origin_codes[idx]
     destination = ttg.destination_codes[idx]
-    parents, _ = TPO.bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=destination)
-    path = TPO.trace_path(parents, origin, destination)
+    path = TPO.bundle_shortest_path(instance, origin, destination)
     if !isempty(path)
         TPO.add_bundle_path!(sol, instance, idx, path)
     end

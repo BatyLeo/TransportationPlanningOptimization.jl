@@ -363,7 +363,11 @@ end
                 node in [("O", 0), ("X", 1), ("Y", 2), ("X", 3), ("Y", 4)]
             ]
             sol = Solution([path], instance)
-            @test is_feasible(sol, instance)
+            # The path revisits X and Y on purpose, so only the loads are checked.
+            @test_logs (:warn, r"elementary") match_mode = :any @test !is_feasible(
+                sol, instance; verbose=true
+            )
+            @test TPO._check_assignment_load(sol, instance; verbose=true)
 
             incremental = Solution(instance)
             TPO.add_bundle_path!(incremental, instance, 1, copy(path))

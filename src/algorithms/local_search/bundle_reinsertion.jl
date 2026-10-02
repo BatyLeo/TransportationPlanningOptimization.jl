@@ -54,6 +54,7 @@ $TYPEDSIGNATURES
 Lazy Dijkstra for a single bundle reinsertion: evaluates edge costs on-demand
 as nodes are settled and stops at the destination. Returns the `parents`
 vector (for use with `trace_path`).
+Its path may loop on a physical node, see [`bundle_shortest_path`](@ref).
 """
 function _lazy_bundle_dijkstra!(
     sol::Solution{C},
@@ -177,14 +178,13 @@ function _try_reinsert_bundle!(
     # When multiple threads are available, pre-compute all arc costs in
     # parallel and run standard Dijkstra. Otherwise, use lazy Dijkstra
     # (fewer arc evaluations, better for single-threaded).
-    parents = if Threads.nthreads() > 1 && buffer_pool !== nothing
+    new_path = if Threads.nthreads() > 1 && buffer_pool !== nothing
         parallel_update_bundle_cost_matrix!(
             sol, instance, bundle_idx, mode_selector, buffer_pool; packing=cost_packing
         )
-        p, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=dest, workspace)
-        p
+        bundle_shortest_path(instance, origin, dest; workspace)
     elseif bundle_adj !== nothing
-        _lazy_bundle_dijkstra!(
+        parents = _lazy_bundle_dijkstra!(
             sol,
             instance,
             bundle_idx,
@@ -196,14 +196,28 @@ function _try_reinsert_bundle!(
             packing=cost_packing,
             workspace,
         )
+        lazy_path = trace_path(parents, origin, dest)
+        if is_elementary_path(lazy_path, instance.index_cache.ttg_code_to_spatial_code)
+            lazy_path
+        else
+            # The lazy search leaves the cost matrix unfilled, so fill it first.
+            update_bundle_cost_matrix!(
+                sol, instance, bundle_idx, mode_selector; buffer, packing=cost_packing
+            )
+            elementary_shortest_path(
+                ttg.graph,
+                ttg.cost_matrix,
+                instance.index_cache.ttg_code_to_spatial_code,
+                origin,
+                dest,
+            )
+        end
     else
         update_bundle_cost_matrix!(
             sol, instance, bundle_idx, mode_selector; packing=cost_packing
         )
-        p, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=dest)
-        p
+        bundle_shortest_path(instance, origin, dest)
     end
-    new_path = trace_path(parents, origin, dest)
     if !isempty(new_path)
         _remove_shortcuts_from_path!(new_path, ttg)
     end

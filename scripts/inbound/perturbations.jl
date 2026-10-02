@@ -560,7 +560,9 @@ function _solve_arc_flow_milp(
             steps += 1
         end
 
-        if current != destination
+        # The MILP has no elementarity constraint, so keep the old path on a loop.
+        if current != destination ||
+            !TPO.is_elementary_path(path, cache.ttg_code_to_spatial_code)
             paths[i] = copy(sol.bundle_paths[b])
         else
             paths[i] = path

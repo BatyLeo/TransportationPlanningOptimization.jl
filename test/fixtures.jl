@@ -68,10 +68,9 @@ function TransportationPlanningOptimization.perturbate!(
     TransportationPlanningOptimization.update_bundle_cost_matrix!(sol, instance, idx)
     origin = ttg.origin_codes[idx]
     destination = ttg.destination_codes[idx]
-    parents, _ = TransportationPlanningOptimization.bundle_dijkstra(
-        ttg.graph, origin, ttg.cost_matrix; dst=destination
+    path = TransportationPlanningOptimization.bundle_shortest_path(
+        instance, origin, destination
     )
-    path = TransportationPlanningOptimization.trace_path(parents, origin, destination)
     if !isempty(path)
         TransportationPlanningOptimization.add_bundle_path!(sol, instance, idx, path)
     end

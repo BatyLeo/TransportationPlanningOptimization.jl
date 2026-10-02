@@ -235,16 +235,37 @@ function two_node_common_incremental!(
         )
     end
     ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
     parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst, workspace)
     new_sub_path = trace_path(parents, src, dst)
+    # Splicing can loop even when the segment is elementary. In that case search
+    # again: src and dst are adjacent on every old path, so only their physical
+    # nodes may reappear.
+    new_paths = Vector{Int}[]
+    if !isempty(new_sub_path)
+        new_paths = [splice_path(p, src, dst, new_sub_path) for p in old_paths]
+        if !all(p -> is_elementary_path(p, spatial), new_paths)
+            avoid = BitSet()
+            for p in old_paths, v in p
+                push!(avoid, spatial[v])
+            end
+            delete!(avoid, spatial[src])
+            delete!(avoid, spatial[dst])
+            new_sub_path = elementary_shortest_path(
+                ttg.graph, ttg.cost_matrix, spatial, src, dst; visited=avoid
+            )
+            if !isempty(new_sub_path)
+                new_paths = [splice_path(p, src, dst, new_sub_path) for p in old_paths]
+            end
+        end
+    end
 
     if isempty(new_sub_path)
         _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0
     end
 
-    for (k, i) in enumerate(lifted_idxs)
-        new_path = splice_path(old_paths[k], src, dst, new_sub_path)
+    for (i, new_path) in zip(lifted_idxs, new_paths)
         cost_delta += add_bundle_path!(sol, instance, i, new_path; mode_selector, packing)
     end
 
