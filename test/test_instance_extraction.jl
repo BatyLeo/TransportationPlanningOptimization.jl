@@ -148,6 +148,8 @@ end
         travel_time_graph=instance.travel_time_graph,
         # Reuses the original graphs, so the original cache stays valid.
         index_cache=instance.index_cache,
+        input=instance.input,
+        commodity_to_order=instance.commodity_to_order,
     )
 
     sol = greedy_heuristic(instance; show_progress=false)
@@ -298,4 +300,53 @@ end
     merged = TPO.merge_solutions(sol, sol, instance, instance)
     @test is_feasible(merged, instance; verbose=true)
     @test length(merged.bundle_paths) == 2
+end
+
+@testset "TPO.extract_filtered_instance maps input commodities to the sub-instance" begin
+    instance = TestFixtures.tiny_instance()
+    @test bundle_count(instance) == 4
+
+    # Only the length of a bundle path matters to the extraction: 2 is dropped, 3 is kept
+    function fake_filtering(inst, dropped)
+        sol = Solution(inst)
+        sol.bundle_paths .= [
+            i in dropped ? Int[1, 2] : Int[1, 2, 3] for i in 1:bundle_count(inst)
+        ]
+        return sol
+    end
+
+    function check_sub(sub, parent, keep_idxs)
+        @test sub.input === parent.input
+        @test bundle_count(sub) == length(keep_idxs)
+        for (k, (i, o)) in enumerate(parent.commodity_to_order)
+            j = i == 0 ? nothing : findfirst(==(i), keep_idxs)
+            if j === nothing
+                @test sub.commodity_to_order[k] == (0, 0)
+            else
+                @test sub.commodity_to_order[k] == (j, o)
+                @test sub.bundles[j].orders[o] === parent.bundles[i].orders[o]
+            end
+        end
+    end
+
+    # Drop bundles 1 and 3: kept bundles are re-indexed
+    keep1 = [2, 4]
+    sub1 = TPO.extract_filtered_instance(instance, fake_filtering(instance, [1, 3]))
+    check_sub(sub1, instance, keep1)
+
+    # Drop one more bundle from the sub-instance: entries already at (0, 0) stay there
+    sub2 = TPO.extract_filtered_instance(sub1, fake_filtering(sub1, [1]))
+    check_sub(sub2, sub1, [2])
+    for (k, (i, o)) in enumerate(instance.commodity_to_order)
+        expected = i == keep1[2] ? (1, o) : (0, 0)
+        @test sub2.commodity_to_order[k] == expected
+    end
+
+    # All bundles dropped: every commodity maps to (0, 0) and the input is still shared
+    empty_sub = (@test_logs (:info,) match_mode = :any TPO.extract_filtered_instance(
+        instance, fake_filtering(instance, 1:bundle_count(instance))
+    ))
+    @test empty_sub.input === instance.input
+    @test all(==((0, 0)), empty_sub.commodity_to_order)
+    @test length(empty_sub.commodity_to_order) == length(instance.input.commodities)
 end

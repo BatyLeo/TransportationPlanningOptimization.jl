@@ -117,7 +117,11 @@ Instance(;
     time_space_graph,     # TimeSpaceGraph
     travel_time_graph,    # TravelTimeGraph
     index_cache,          # IndexCache (precomputed lookups for the hot path)
+    input,                # InstanceInput (nodes, arcs and commodities as given by the user)
+    commodity_to_order,   # Vector{Tuple{Int,Int}} (input commodity index to (bundle, order))
 )
 ```
+
+The `input` is kept exactly as given, and `commodity_to_order[k]` is the `(bundle_idx, order_idx)` of the `k`-th input commodity.
 
 Algorithms receive an `Instance` and produce a [`Solution`](@ref), which maps each bundle index to a path (sequence of node codes) in the `TravelTimeGraph`.
