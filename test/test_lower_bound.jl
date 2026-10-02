@@ -43,10 +43,7 @@ end
 # Two same-OD commodities of size 3, split into two bundles by a custom `group_by`,
 # on an A->B arc of capacity `cap`, optionally with an A->H->B detour via a hub.
 function two_bundle_direct_instance(cap; with_hub::Bool)
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -57,7 +54,7 @@ function two_bundle_direct_instance(cap; with_hub::Bool)
         ),
     ]
     if with_hub
-        push!(nodes, NetworkNode(; id="H", node_type=:other))
+        push!(nodes, Node(; id="H", node_type=:other))
         for (o, d) in (("A", "H"), ("H", "B"))
             push!(
                 arcs,
@@ -121,10 +118,7 @@ end
 @testset "lower_bound_filtering fixes one bundle per mode of parallel legs" begin
     # Two A->B legs of capacity 5 with the same transit time form a MultiModalArc:
     # each size-3 bundle fits one leg only, so both are fixed, one per mode.
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -157,9 +151,9 @@ end
     # Y (size 3, direct only) is processed before X (size 2.5, hub possible):
     # Y takes the direct arc, so X no longer fits it and is kept, routed via the hub.
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-        NetworkNode(; id="H", node_type=:other),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:destination),
+        Node(; id="H", node_type=:other),
     ]
     arcs = [
         Arc(;
@@ -204,10 +198,10 @@ end
     # FFD bin packing would otherwise throw `DomainError` when the cheaper
     # path is committed.
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:other),
-        NetworkNode(; id="C", node_type=:other),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other),
+        Node(; id="C", node_type=:other),
+        Node(; id="D", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -268,9 +262,9 @@ end
     # regression guard rather than a reproduction of the bug. A->C->B is
     # pricier but has enough capacity, so it is the only feasible route.
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-        NetworkNode(; id="C", node_type=:other),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:destination),
+        Node(; id="C", node_type=:other),
     ]
     arcs = [
         Arc(;

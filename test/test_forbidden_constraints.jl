@@ -7,10 +7,10 @@ using MetaGraphsNext
 # A -> B -> D
 # A -> C -> D
 nodes = [
-    NetworkNode(; id="A", node_type=:origin),
-    NetworkNode(; id="B", node_type=:other),
-    NetworkNode(; id="C", node_type=:other),
-    NetworkNode(; id="D", node_type=:destination),
+    Node(; id="A", node_type=:origin),
+    Node(; id="B", node_type=:other),
+    Node(; id="C", node_type=:other),
+    Node(; id="D", node_type=:destination),
 ]
 
 arcs = [

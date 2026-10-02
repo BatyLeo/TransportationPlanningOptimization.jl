@@ -6,7 +6,7 @@ The entry point for creating an optimization problem is the `Instance` construct
 
 ```julia
 Instance(
-    nodes::Vector{<:NetworkNode},
+    nodes::Vector{<:Node},
     arcs::Vector{<:Arc},
     commodities::Vector{Commodity},
     time_step::Period;
@@ -18,7 +18,7 @@ Instance(
 
 ### Required Parameters
 
-#### `nodes::Vector{NetworkNode}`
+#### `nodes::Vector{Node}`
 
 Physical locations in your network. Each node represents:
 - **Origins** (`:origin`): where commodities start
@@ -26,7 +26,7 @@ Physical locations in your network. Each node represents:
 - **Intermediate locations** (`:other`): intermediate platforms
 
 ```julia
-NetworkNode(;
+Node(;
     id::String,                                        # Unique identifier
     node_type::Symbol,                                 # :origin, :destination, or :other
     capacity::Int = typemax(Int),                      # Maximum throughput

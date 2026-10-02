@@ -18,10 +18,7 @@ using .TestFixtures
 end
 
 @testset "Greedy fails on input with oversized items" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",

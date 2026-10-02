@@ -9,9 +9,9 @@ using MetaGraphsNext
     @testset "Basic solution with LinearArcCost" begin
         # 1. Create a dummy instance
         nodes = [
-            NetworkNode(; id="A", node_type=:origin, capacity=0),
-            NetworkNode(; id="B", node_type=:other, capacity=0),
-            NetworkNode(; id="C", node_type=:destination, capacity=0),
+            Node(; id="A", node_type=:origin, capacity=0),
+            Node(; id="B", node_type=:other, capacity=0),
+            Node(; id="C", node_type=:destination, capacity=0),
         ]
 
         # Arc A->B
@@ -102,10 +102,7 @@ using MetaGraphsNext
     end
 
     @testset "BinPackingArcCost" begin
-        nodes = [
-            NetworkNode(; id="A", node_type=:origin),
-            NetworkNode(; id="B", node_type=:destination),
-        ]
+        nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
 
         # Arc with bin-packing cost: 100 per bin, capacity 10
         arc_ab = Arc(;
@@ -182,9 +179,9 @@ using MetaGraphsNext
     @testset "Multiple commodities with different sizes" begin
         # 1. Create a dummy instance
         nodes = [
-            NetworkNode(; id="A", node_type=:origin),
-            NetworkNode(; id="B", node_type=:other),
-            NetworkNode(; id="C", node_type=:destination),
+            Node(; id="A", node_type=:origin),
+            Node(; id="B", node_type=:other),
+            Node(; id="C", node_type=:destination),
         ]
 
         # Arcs A->B and B->C
@@ -241,9 +238,9 @@ using MetaGraphsNext
 
     @testset "Solution with Arrival Date Commodities" begin
         nodes = [
-            NetworkNode(; id="A", node_type=:origin),
-            NetworkNode(; id="B", node_type=:other),
-            NetworkNode(; id="C", node_type=:destination),
+            Node(; id="A", node_type=:origin),
+            Node(; id="B", node_type=:other),
+            Node(; id="C", node_type=:destination),
         ]
 
         # Arcs with Day(1) travel time
@@ -321,9 +318,9 @@ end
     # O -> X -> Y -> X -> Y the order at step 1 uses edge (X,4)->(Y,1) at its
     # fourth arc, which is also the second arc of the order at step 3.
     nodes = [
-        NetworkNode(; id="O", node_type=:origin),
-        NetworkNode(; id="X", node_type=:other),
-        NetworkNode(; id="Y", node_type=:destination),
+        Node(; id="O", node_type=:origin),
+        Node(; id="X", node_type=:other),
+        Node(; id="Y", node_type=:destination),
     ]
     arc(o, d) = Arc(;
         origin_id=o,

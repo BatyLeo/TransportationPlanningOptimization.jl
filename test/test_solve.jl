@@ -11,9 +11,9 @@ using .TestFixtures
 # direct path and gets filtered out, K (A->D) is kept and routes through B.
 function multimodal_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:other),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other),
+        Node(; id="D", node_type=:destination),
     ]
     truck = Arc(;
         origin_id="A", destination_id="B", cost=LinearArcCost(2.0), travel_time=Day(1)
@@ -94,10 +94,7 @@ end
 end
 
 @testset "solve when every bundle is filtered out" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)

@@ -11,7 +11,9 @@ module TestFixtures
 
 using TransportationPlanningOptimization
 using Dates
+using MetaGraphsNext
 using Random
+using Test
 using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 
 const DATADIR = joinpath(@__DIR__, "public")
@@ -91,10 +93,10 @@ small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 # arc A->B with F, so it must route around it through C.
 function shared_arc_instance()
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:other),
-        NetworkNode(; id="C", node_type=:other),
-        NetworkNode(; id="D2", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="B", node_type=:other),
+        Node(; id="C", node_type=:other),
+        Node(; id="D2", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -133,6 +135,60 @@ function shared_arc_instance()
         ),
     ]
     return Instance(nodes, arcs, commodities, Day(1))
+end
+
+# Origin id, destination id and transit steps of an input arc.
+function _input_arc_leg(a::Arc, time_step)
+    return (
+        a.origin_id,
+        a.destination_id,
+        TransportationPlanningOptimization.period_steps(
+            a.travel_time, time_step; roundup=floor
+        ),
+    )
+end
+_input_arc_leg(a::Tuple, time_step) = (a[1], a[2], a[3].travel_time_steps)
+
+# Check the provenance links of every node and arc mode of the three graphs.
+# `complete=false` skips the exhaustive index checks (for filtered sub-instances).
+function check_input_links(instance; complete::Bool=true)
+    input = instance.input
+    ng = instance.network_graph.graph
+    for label in MetaGraphsNext.labels(ng)
+        @test ng[label].input_index > 0
+        @test input.nodes[ng[label].input_index].id == label
+    end
+    seen = Int[]
+    for (name, graph) in (
+        ("network", ng),
+        ("tsg", instance.time_space_graph.graph),
+        ("ttg", instance.travel_time_graph.graph),
+    )
+        for (u, v) in MetaGraphsNext.edge_labels(graph)
+            arc = graph[u, v]
+            if arc === TransportationPlanningOptimization.SHORTCUT_ARC
+                @test arc.input_index == 0
+                continue
+            end
+            modes = arc isa MultiModalArc ? arc.modes : [arc]
+            for (slot, mode) in enumerate(modes)
+                k = TransportationPlanningOptimization.input_arc_index(arc, slot)
+                @test k > 0
+                k > 0 || continue
+                o, d, steps = _input_arc_leg(input.arcs[k], instance.time_step)
+                u1 = u isa Tuple ? u[1] : u
+                v1 = v isa Tuple ? v[1] : v
+                @test (o, d) == (u1, v1)
+                @test steps == mode.travel_time_steps
+                name == "network" && push!(seen, k)
+            end
+        end
+    end
+    if complete
+        @test sort([ng[l].input_index for l in MetaGraphsNext.labels(ng)]) == 1:length(input.nodes)
+        @test sort(seen) == 1:length(input.arcs)
+    end
+    return nothing
 end
 
 # Clear any cost_scaling mutations left on the shared instances.

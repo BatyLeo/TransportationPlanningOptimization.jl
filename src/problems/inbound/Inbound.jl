@@ -13,7 +13,7 @@ using Dates: DateTime, Week
 using DocStringExtensions: TYPEDEF, TYPEDSIGNATURES
 using ...TransportationPlanningOptimization:
     TransportationPlanningOptimization,
-    NetworkNode,
+    Node,
     LinearNodeCost,
     Arc,
     LinearArcCost,

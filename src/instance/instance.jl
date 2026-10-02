@@ -22,6 +22,7 @@ $TYPEDEF
 
 An `Instance` represents a transportation planning problem instance, containing bundles of
 orders, a network graph, and a time horizon.
+Internal nodes and arc modes link back to their input index.
 
 # Fields
 $TYPEDFIELDS
@@ -438,9 +439,9 @@ end
 """
 $TYPEDSIGNATURES
 
-Internal builder behind the public [`Instance`](@ref) constructor. Expects `nodes` and
-`arcs` already narrowed to `NetworkGraph` form (`arcs` are `(origin_id, destination_id,
-NetworkArc)` tuples).
+Internal builder behind the public [`Instance`](@ref) constructor. Expects `arcs` already
+narrowed to `(origin_id, destination_id, NetworkArc)` tuples, while `nodes` are user
+[`Node`](@ref)s narrowed through [`collect_nodes`](@ref).
 
 Runs the full pipeline: expand commodities into `Order`s and `Bundle`s, size the time
 horizon, build the `TimeSpaceGraph` and `TravelTimeGraph`, optionally validate bundle
@@ -449,9 +450,11 @@ keyword arguments.
 
 The internal keyword `input_arcs` (default `arcs`) is stored as `input.arcs`, it must have the
 same length as `arcs`. Called directly, the input arc index is the position in the tuple vector.
+The internal arcs are rebuilt with their `input_index` set to that position, the user's own
+vectors are kept untouched.
 """
 function build_instance(
-    nodes::Vector{<:NetworkNode},
+    nodes::Vector{<:Node},
     arcs::Vector{Tuple{String,String,NA}},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period;
@@ -468,7 +471,20 @@ function build_instance(
     )
     narrowed_nodes = collect_nodes(infer_node_cost_types(nodes), nodes; validate=false)
     _validate_node_costs_on_empty_load(narrowed_nodes, LightCommodity{I})
-    network_graph = NetworkGraph(narrowed_nodes, arcs; allow_multimodal)
+    indexed_arcs = Tuple{String,String,NA}[
+        (
+            o,
+            d,
+            typeof(a)(;
+                travel_time_steps=a.travel_time_steps,
+                capacity=a.capacity,
+                cost=a.cost,
+                info=a.info,
+                input_index=i,
+            ),
+        ) for (i, (o, d, a)) in enumerate(arcs)
+    ]
+    network_graph = NetworkGraph(narrowed_nodes, indexed_arcs; allow_multimodal)
     order_dict, time_horizon_length, start_date, commodity_keys = _expand_commodities(
         commodities, time_step, group_by, wrap_time
     )
@@ -506,7 +522,7 @@ delegates to the tuple-arc [`build_instance`](@ref). See [`Instance`](@ref) for 
 arguments.
 """
 function build_instance(
-    nodes::Vector{<:NetworkNode},
+    nodes::Vector{<:Node},
     raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period,
@@ -532,7 +548,7 @@ end
 
 """
     Instance(
-        nodes::Vector{<:NetworkNode},
+        nodes::Vector{<:Node},
         arcs::Vector{<:Arc},
         commodities::Vector{Commodity{is_date_arrival,ID,I}},
         time_step::Period;
@@ -546,7 +562,7 @@ Construct an `Instance` from high-level `Arc` inputs by automatically inferring 
 function types. This is the main entry point for building a problem instance.
 
 # Arguments
-- `nodes::Vector{<:NetworkNode}`: List of nodes in the spatial network.
+- `nodes::Vector{<:Node}`: List of nodes in the spatial network.
 - `arcs::Vector{<:Arc}`: Arcs in the spatial network. `Instance` infers cost types and
 narrows the vector internally via [`collect_arcs`](@ref) before building the `NetworkGraph`.
 - `commodities::Vector{Commodity}`: User-facing commodity specifications.
@@ -575,7 +591,7 @@ The input is kept as given in `instance.input`, and each input commodity is mapp
 bundle and order in `instance.commodity_to_order`.
 """
 function Instance(
-    nodes::Vector{<:NetworkNode},
+    nodes::Vector{<:Node},
     raw_arcs::Vector{<:Arc},
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     time_step::Period;

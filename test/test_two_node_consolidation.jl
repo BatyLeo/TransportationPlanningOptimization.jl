@@ -170,12 +170,12 @@ end
     # but above either order alone (1.5), so pre-fix pricing (one order at a
     # time) wrongly accepts the detour and overflows H->Z.
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="H", node_type=:other),
-        NetworkNode(; id="Z", node_type=:other),
-        NetworkNode(; id="C", node_type=:other),
-        NetworkNode(; id="B", node_type=:destination),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="H", node_type=:other),
+        Node(; id="Z", node_type=:other),
+        Node(; id="C", node_type=:other),
+        Node(; id="B", node_type=:destination),
+        Node(; id="D", node_type=:destination),
     ]
     arcs = [
         Arc(;

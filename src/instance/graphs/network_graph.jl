@@ -4,6 +4,8 @@ $TYPEDEF
 A representation of the physical network graph.
 Nodes are identified by `String` labels and store `NetworkNode` metadata.
 Edges store `NetworkArc` metadata.
+The graph is unaware of input indices, it keeps the `input_index` links carried by its
+nodes and arcs.
 
 # Fields
 $TYPEDFIELDS
@@ -78,7 +80,14 @@ function _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal::Bool
         end
         Graphs.add_vertex!(network_graph, node.id, node)
     end
-    for (origin_id, destination_id, arc) in arcs
+    for (i, (origin_id, destination_id, arc)) in enumerate(arcs)
+        for id in (origin_id, destination_id)
+            haskey(network_graph, id) || throw(
+                ArgumentError(
+                    "arc $i ($(repr(origin_id)), $(repr(destination_id))) has an unknown endpoint: $(repr(id)) is not in nodes (add a Node with this id or remove the arc)",
+                ),
+            )
+        end
         if MetaGraphsNext.haskey(network_graph, origin_id, destination_id)
             existing = network_graph[origin_id, destination_id]
             if !allow_multimodal
@@ -107,7 +116,8 @@ $TYPEDSIGNATURES
 
 Constructor for `NetworkGraph`.
 
-Ensures node IDs are unique. Multiple arcs between the same `(origin_id, destination_id)`
+Ensures node IDs are unique. An arc whose origin or destination is not in `nodes` throws an
+`ArgumentError`. Multiple arcs between the same `(origin_id, destination_id)`
 pair are rejected by default with an `ArgumentError`. Pass `allow_multimodal=true` to
 opt into multi-modal legs: the graph then keeps a single edge whose data is auto-promoted
 to a `MultiModalArc` carrying every mode declared for that leg.

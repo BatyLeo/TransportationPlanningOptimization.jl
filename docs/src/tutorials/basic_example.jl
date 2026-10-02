@@ -34,14 +34,14 @@ using Dates
 # Create nodes with unique IDs and appropriate node types:
 
 nodes = [
-    NetworkNode(; id="A1", node_type=:origin),
-    NetworkNode(; id="A2", node_type=:origin),
-    NetworkNode(; id="B1", node_type=:other),
-    NetworkNode(; id="B2", node_type=:other),
-    NetworkNode(; id="B3", node_type=:other),
-    NetworkNode(; id="B4", node_type=:other),
-    NetworkNode(; id="C1", node_type=:destination),
-    NetworkNode(; id="C2", node_type=:destination),
+    Node(; id="A1", node_type=:origin),
+    Node(; id="A2", node_type=:origin),
+    Node(; id="B1", node_type=:other),
+    Node(; id="B2", node_type=:other),
+    Node(; id="B3", node_type=:other),
+    Node(; id="B4", node_type=:other),
+    Node(; id="C1", node_type=:destination),
+    Node(; id="C2", node_type=:destination),
 ]
 
 # ## Define Transportation Arcs

@@ -14,11 +14,11 @@ Commodity ──┘
 
 Arc ────── convert ──> NetworkArc (or MultiModalArc)
 
-NetworkNode ─────────────────────────────────────────────────
+Node ───── convert ──> NetworkNode
 
-                      ┌─> NetworkGraph
-NetworkNode + Arc ────┼─> TimeSpaceGraph
-                      └─> TravelTimeGraph
+                         ┌─> NetworkGraph
+NetworkNode + NetworkArc ┼─> TimeSpaceGraph
+                         └─> TravelTimeGraph
 
 All combined ──> Instance
 ```
@@ -66,6 +66,15 @@ A `Bundle` holds:
 Bundles are the routing unit: each bundle is assigned a single path in the [`TravelTimeGraph`](@ref).
 All orders in a bundle follow the same spatial path but with order-specific timing.
 
+## Node pipeline
+
+### Node -> NetworkNode
+
+[`Node`](@ref) is the user-facing input type, converted to a [`NetworkNode`](@ref) by [`collect_nodes`](@ref TransportationPlanningOptimization.collect_nodes) during instance construction.
+Its fields are copied as is, except that `node_cost` is narrowed to a union type for type stability across heterogeneous cost functions.
+The i-th `Node` becomes the i-th `NetworkNode`, which links back to it through its `input_index`.
+The `info` type parameter is taken from the first node, so all nodes must share one `info` type.
+
 ## Arc pipeline
 
 ### Arc -> NetworkArc
@@ -75,8 +84,10 @@ All orders in a bundle follow the same spatial path but with order-specific timi
 During instance construction, each `Arc` is converted to a [`NetworkArc`](@ref) where:
 - `travel_time` (a `Period`) becomes `travel_time_steps` (an `Int`), computed via `period_steps`
 - The `cost` function is narrowed to a union type for type stability across heterogeneous cost functions
+- `input_index` is the position of the `Arc` in `instance.input.arcs`, also for every mode of a [`MultiModalArc`](@ref), read with [`input_arc_index`](@ref TransportationPlanningOptimization.input_arc_index)
 
 When `allow_multimodal=true`, duplicate `(origin_id, destination_id)` arcs are auto-promoted to a [`MultiModalArc`](@ref) that bundles multiple transport modes on the same edge.
+An `Arc` whose origin or destination is not among the nodes throws an `ArgumentError`.
 
 ## Graph layers
 
@@ -85,7 +96,7 @@ The network is expanded into three graph representations, each serving a differe
 ### NetworkGraph
 
 The spatial network: nodes and arcs as provided, without time expansion.
-Built directly from `Vector{NetworkNode}` and the converted `NetworkArc` tuples.
+Built directly from the converted `Vector{NetworkNode}` and the converted `NetworkArc` tuples.
 
 ### TimeSpaceGraph
 

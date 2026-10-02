@@ -6,6 +6,7 @@ greedy mode selection.
 
 using Test
 using Graphs
+using MetaGraphsNext
 using Dates
 using Random
 using TransportationPlanningOptimization
@@ -109,10 +110,7 @@ end
 @testset "Greedy heuristic selects cheapest mode across multi-modal scenarios" begin
     # Case 2 (same transit time -> single MultiModalArc edge): cheaper mode
     # (5.0/unit) wins over the more expensive one (10.0/unit).
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
@@ -148,10 +146,7 @@ end
     # MultiModalArc): the cheap-but-slow train (5.0/unit, 2 days) still wins
     # over the fast-but-expensive truck (10.0/unit, 1 day) when both fit the
     # delivery deadline.
-    nodes_c1 = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes_c1 = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs_c1 = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
@@ -179,10 +174,7 @@ end
     # time, so the two modes collapse to one edge): Linear (5.0/unit, cap 10)
     # vs. BinPacking (100.0/bin of 10). Linear is cheaper for 2 units, so all
     # commodities route there: 2 × 5.0 = 10.0.
-    nodes_het = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes_het = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs_het = [
         Arc(;
             origin_id="A",
@@ -220,10 +212,7 @@ end
 # ── Per-mode capacity (case 2) ────────────────────────────────────────────────
 
 @testset ":cheapest skips modes lacking capacity in case 2" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     # Cheap mode capacity=1 (cannot fit 2 units); expensive mode capacity=10
     arcs = [
         Arc(;
@@ -269,10 +258,7 @@ end
     # Default (CheapestMode, no spill): neither mode alone has enough capacity
     # for 3 units (caps 1 and 2), even though the *combined* capacity would
     # suffice. CheapestMode never spills across modes, so this is infeasible.
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -326,10 +312,7 @@ end
 # ── fill_then_spill mode selection (case 2) ──────────────────────────────────
 
 @testset "fill_then_spill assigns to cheapest then spills" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -369,10 +352,7 @@ end
 end
 
 @testset "fill_then_spill matches cheapest when capacity is sufficient" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -409,10 +389,7 @@ end
 end
 
 @testset "Symbol selector is rejected by the typed kwarg" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(5.0), travel_time=Day(1)
@@ -437,10 +414,7 @@ end
 # ── Order-bucketing under wrap_time (case 2 collision on a single TSG edge) ──
 
 @testset "wrap_time bucketing keeps placement consistent with Dijkstra estimate" begin
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     # Two parallel modes with same transit time (case 2). Cheap mode is too
     # small for the combined wrap-collided load but big enough for either order
     # alone, which is exactly the case where per-order placement diverged from
@@ -552,10 +526,7 @@ end
 function _leg_instance(
     modes, max_delivery_days; quantity=2, departure_days=(1,), wrap_time=false
 )
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -793,5 +764,41 @@ end
             verbose=false,
         )
         _test_matches_rebuild(sol, instance)
+    end
+end
+
+@testset "Mode input indices follow the transit groups" begin
+    modes = [(10.0, 1, 10), (5.0, 2, 10), (7.0, 1, 10)]
+    for (wrap_time, departure_days) in ((false, (1,)), (true, (1, 6)))
+        instance = _leg_instance(modes, 3; departure_days, wrap_time)
+        TestFixtures.check_input_links(instance)
+        cache = instance.index_cache
+        ttg, tsg = instance.travel_time_graph, instance.time_space_graph
+        for (graph, edge_arc, labels) in (
+            (tsg.graph, TPO.tsg_edge_arc, MetaGraphsNext.edge_labels(tsg.graph)),
+            (ttg.graph, TPO.ttg_edge_arc, MetaGraphsNext.edge_labels(ttg.graph)),
+        )
+            found = Dict{Int,Any}()
+            for (u, v) in labels
+                u[1] == "A" && v[1] == "B" || continue
+                arc = graph[u, v]
+                cu, cv = MetaGraphsNext.code_for(graph, u),
+                MetaGraphsNext.code_for(graph, v)
+                cached = edge_arc(cache, cu, cv)
+                # `_mode_groups` runs separately for the TSG, the TTG and the cache,
+                # so sub-arcs are equal but not identical objects.
+                if arc isa TPO.MultiModalArc
+                    @test cached.modes == arc.modes
+                else
+                    @test cached === arc
+                end
+                found[arc isa TPO.MultiModalArc ? 1 : 2] = arc
+            end
+            @test found[1] isa TPO.MultiModalArc
+            @test [TPO.input_arc_index(found[1], s) for s in 1:2] == [1, 3]
+            @test found[2] isa NetworkArc
+            @test TPO.input_arc_index(found[2], 1) == 2
+            @test_throws BoundsError TPO.input_arc_index(found[2], 2)
+        end
     end
 end

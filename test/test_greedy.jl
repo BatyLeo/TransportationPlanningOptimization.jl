@@ -7,9 +7,9 @@ using Test
     # If this breaks, update both.
 
     nodes = [
-        NetworkNode(; id="Origin", node_type=:origin),
-        NetworkNode(; id="Hub", node_type=:other),
-        NetworkNode(; id="Destination", node_type=:destination),
+        Node(; id="Origin", node_type=:origin),
+        Node(; id="Hub", node_type=:other),
+        Node(; id="Destination", node_type=:destination),
     ]
 
     arcs = [
@@ -54,10 +54,10 @@ path, so capacity is exercised across the two bundles that both need the
 """
 function hub_capacity_instance(hub_cost, direct_cost, leg_cost)
     nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="H", node_type=:other),
-        NetworkNode(; id="B", node_type=:destination),
-        NetworkNode(; id="D", node_type=:destination),
+        Node(; id="A", node_type=:origin),
+        Node(; id="H", node_type=:other),
+        Node(; id="B", node_type=:destination),
+        Node(; id="D", node_type=:destination),
     ]
     arcs = [
         Arc(;
@@ -122,10 +122,7 @@ end
     # A single commodity larger than the only capacitated arc's capacity
     # must not be routed onto it. No alternative route exists here, so
     # `greedy_heuristic` throws.
-    nodes = [
-        NetworkNode(; id="A", node_type=:origin),
-        NetworkNode(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
     arcs = [
         Arc(;
             origin_id="A",
