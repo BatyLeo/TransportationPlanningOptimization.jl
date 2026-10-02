@@ -26,8 +26,7 @@ function _try_insert_bundle!(
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]
 
-    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=destination)
-    path = trace_path(parents, origin, destination)
+    path = bundle_shortest_path(instance, origin, destination)
 
     isempty(path) && return false
 
@@ -52,7 +51,11 @@ function insert_bundle!(
 )
     _try_insert_bundle!(
         current_solution, instance, bundle_idx, mode_selector; buffer, packing
-    ) || throw(ArgumentError("No feasible path found for bundle $bundle_idx"))
+    ) || throw(
+        ArgumentError(
+            "No feasible path found for bundle $bundle_idx, no elementary path from origin to destination",
+        ),
+    )
     return nothing
 end
 

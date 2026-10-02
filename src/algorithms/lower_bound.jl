@@ -26,8 +26,7 @@ function _shortest_path_assign!(
         origin = ttg.origin_codes[i]     # origin node of bundle i in ttg
         dest = ttg.destination_codes[i]  # destination node of bundle i in ttg
         # Compute the shortest path between origin and dest
-        parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=dest)
-        path = trace_path(parents, origin, dest)
+        path = bundle_shortest_path(instance, origin, dest)
         # Throw an error if no path was found (i.e. there is no feasible path)
         if isempty(path)
             bundle = instance.bundles[i]
@@ -38,10 +37,11 @@ function _shortest_path_assign!(
                     "$(bundle.origin_id) -> $(bundle.destination_id), " *
                     "max_transit_steps=$(max_steps), " *
                     "forbidden_nodes=$(bundle.forbidden_nodes), " *
-                    "forbidden_arcs=$(bundle.forbidden_arcs)" *
+                    "forbidden_arcs=$(bundle.forbidden_arcs), " *
+                    "no elementary path from origin to destination" *
                     (
                         label == "filtering" ?
-                        " (capacity may be taken by previously fixed direct bundles)" : ""
+                        ", capacity may be taken by previously fixed direct bundles" : ""
                     ),
                 ),
             )

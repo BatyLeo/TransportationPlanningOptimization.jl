@@ -103,3 +103,97 @@ function trace_path(parents::Vector{Int}, src::Int, dst::Int)
     reverse!(path)
     return path
 end
+
+"""
+$TYPEDSIGNATURES
+
+Whether `path` (TTG codes) never revisits a physical node after leaving it.
+`spatial` maps a TTG code to its physical node code. Consecutive repeats of the
+same physical node count as waiting and are allowed.
+"""
+function is_elementary_path(path::AbstractVector{Int}, spatial::AbstractVector{Int})
+    for j in 3:length(path)
+        s = spatial[path[j]]
+        s == spatial[path[j - 1]] && continue
+        for i in 1:(j - 2)
+            spatial[path[i]] == s && return false
+        end
+    end
+    return true
+end
+
+"""
+$TYPEDSIGNATURES
+
+Cheapest elementary path from `src` to `dst` (TTG codes), or `Int[]` if none exists.
+Label-setting search where each label carries the set of physical nodes it has
+visited, so a physical node is never entered twice (staying on the current one is
+waiting and is allowed). `visited` lists physical nodes that the path must also
+avoid. The node of `src` is always allowed, and if the node of `dst` is in `visited`
+then no path is returned. Arcs with `Inf` cost are skipped, and costs must be nonnegative.
+"""
+function elementary_shortest_path(
+    graph::Graphs.AbstractGraph,
+    cost_matrix::SparseMatrixCSC{Float64,Int},
+    spatial::AbstractVector{Int},
+    src::Int,
+    dst::Int;
+    visited::BitSet=BitSet(),
+)
+    # Label k: vertex[k], parent[k] (label index) and seen[k] (physical nodes).
+    vertex = [src]
+    parent = [0]
+    seen = [push!(copy(visited), spatial[src])]
+    settled = Dict{Int,Vector{Int}}()
+    heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
+    push!(heap, (0.0, 1))
+
+    while !isempty(heap)
+        d, k = pop!(heap)
+        u = vertex[k]
+        # Dominated by a settled label at the same vertex whose visited nodes are a subset
+        labels = get!(Vector{Int}, settled, u)
+        any(l -> issubset(seen[l], seen[k]), labels) && continue
+        push!(labels, k)
+
+        if u == dst
+            path = Int[]
+            while k != 0
+                push!(path, vertex[k])
+                k = parent[k]
+            end
+            return reverse!(path)
+        end
+
+        for v in Graphs.outneighbors(graph, u)
+            w = cost_matrix[u, v]
+            isinf(w) && continue
+            sv = spatial[v]
+            if sv != spatial[u] && sv in seen[k]
+                continue
+            end
+            push!(vertex, v)
+            push!(parent, k)
+            push!(seen, push!(copy(seen[k]), sv))
+            push!(heap, (d + w, length(vertex)))
+        end
+    end
+    return Int[]
+end
+
+"""
+$TYPEDSIGNATURES
+
+Cheapest elementary path from `src` to `dst` for the bundle whose costs are in
+`instance.travel_time_graph.cost_matrix`. Runs [`bundle_dijkstra`](@ref) first and
+returns its path when it is empty or elementary. Only when that path loops on a
+physical node does it run [`elementary_shortest_path`](@ref).
+"""
+function bundle_shortest_path(instance::Instance, src::Int, dst::Int; workspace=nothing)
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst, workspace)
+    path = trace_path(parents, src, dst)
+    is_elementary_path(path, spatial) && return path
+    return elementary_shortest_path(ttg.graph, ttg.cost_matrix, spatial, src, dst)
+end

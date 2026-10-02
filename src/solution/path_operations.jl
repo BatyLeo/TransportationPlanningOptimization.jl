@@ -98,7 +98,8 @@ time-space edge `(u_tsg, v_tsg)` and its network `arc`, and accumulate the
 Each `(order, path-edge)` pair is visited once and `f` is called per pair, so
 commits and removals stay one-for-one. Under `wrap_time` a cyclic spatial path
 can make one order, or two orders of the bundle, project onto the same TSG edge:
-the deltas are still a plain additive sum, with no per-edge grouping.
+the deltas are still a plain additive sum, with no per-edge grouping. Such paths
+are infeasible for [`is_feasible`](@ref) but remain valid for accounting.
 """
 function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{Int})
     cache = instance.index_cache

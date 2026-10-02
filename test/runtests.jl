@@ -108,6 +108,9 @@ using .TestFixtures
         @testset "Greedy Insertion" begin
             include("test_insertion.jl")
         end
+        @testset "Elementary paths" begin
+            include("test_elementary_paths.jl")
+        end
         @testset "Local search" begin
             include("test_local_search.jl")
         end

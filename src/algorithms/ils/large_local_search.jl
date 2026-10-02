@@ -119,8 +119,7 @@ function _reinsert_with_filter!(
 
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]
-    parents, _ = bundle_dijkstra(ttg.graph, origin, ttg.cost_matrix; dst=destination)
-    path = trace_path(parents, origin, destination)
+    path = bundle_shortest_path(instance, origin, destination)
 
     if !isempty(path)
         add_bundle_path!(sol, instance, bundle_idx, path; mode_selector)

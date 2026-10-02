@@ -32,6 +32,8 @@ The function [`solve_filtered`](@ref) wraps everything up to (but not including)
 
 Three construction strategies are available.
 All of them process bundles one at a time (sorted by largest order size), compute a cost matrix on the [`TravelTimeGraph`](@ref), run Dijkstra to find the cheapest path, and commit the bundle to that path.
+Bundle paths must be elementary (they never revisit a physical node, though waiting on one is allowed).
+Dijkstra runs first, and a label-setting search runs only when its path loops.
 
 ### Greedy heuristic
 
@@ -96,8 +98,8 @@ The full-instance cost is `cost(merge_solutions(result.filtering_solution, resul
 [`local_search!`](@ref) improves a solution in place using random-neighborhood search.
 Each iteration randomly picks one of two moves:
 
-- **Bundle reintroduction**: remove a random bundle's path, recompute costs, find a new path via Dijkstra, accept if the total cost strictly improves.
-- **Two-node consolidation**: pick a random arc `(src, dst)` in the travel-time graph, lift all bundles passing through it, reroute the shared segment via Dijkstra, accept if cost improves.
+- **Bundle reintroduction**: remove a random bundle's path, recompute costs, find a new path via Dijkstra (with the elementary fallback), accept if the total cost strictly improves.
+- **Two-node consolidation**: pick a random arc `(src, dst)` in the travel-time graph, lift all bundles passing through it, reroute the shared segment via Dijkstra (with the elementary fallback), accept if cost improves.
 
 The loop stops when any of three conditions is met: `time_limit` seconds elapsed, `max_iter` iterations reached, or `max_no_improv` consecutive iterations without improvement.
 
