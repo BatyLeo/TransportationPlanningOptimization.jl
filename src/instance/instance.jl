@@ -1,6 +1,25 @@
 """
 $TYPEDEF
 
+The user input of an [`Instance`](@ref), kept exactly as given.
+The identity of an input commodity, node or arc is its index in these vectors.
+The vectors are shared (not copied), so they must not be mutated after the instance is built.
+
+# Fields
+$TYPEDFIELDS
+"""
+struct InstanceInput{N,A,C}
+    "input nodes"
+    nodes::Vector{N}
+    "input arcs"
+    arcs::Vector{A}
+    "input commodities"
+    commodities::Vector{C}
+end
+
+"""
+$TYPEDEF
+
 An `Instance` represents a transportation planning problem instance, containing bundles of
 orders, a network graph, and a time horizon.
 
@@ -8,7 +27,12 @@ orders, a network graph, and a time horizon.
 $TYPEDFIELDS
 """
 @kwdef struct Instance{
-    B<:Bundle,G<:NetworkGraph,TSG<:TimeSpaceGraph,TTG<:TravelTimeGraph,IC<:IndexCache
+    B<:Bundle,
+    G<:NetworkGraph,
+    TSG<:TimeSpaceGraph,
+    TTG<:TravelTimeGraph,
+    IC<:IndexCache,
+    IN<:InstanceInput,
 }
     "list of bundles in the instance"
     bundles::Vector{B}
@@ -26,6 +50,10 @@ $TYPEDFIELDS
     travel_time_graph::TTG
     "precomputed integer-indexed lookup tables for the construction hot path"
     index_cache::IC
+    "user input kept as given, see [`InstanceInput`](@ref)"
+    input::IN
+    "entry `k` is `(bundle_idx, order_idx)` of input commodity `k`, or `(0, 0)` if its bundle was dropped"
+    commodity_to_order::Vector{Tuple{Int,Int}}
 end
 
 """
@@ -135,9 +163,10 @@ $TYPEDSIGNATURES
 Expand each `Commodity` into `LightCommodity` items and group them into `Order`s keyed by
 `(time_step_idx, origin_id, destination_id, group_by(commodity))`.
 
-Returns `(order_dict, time_horizon_length, start_date)`, where `order_dict` maps each key to
-a `(commodities, min_transit_steps)` tuple, and `time_horizon_length` accounts for
-`max_delivery_time` unless `wrap_time=true`.
+Returns `(order_dict, time_horizon_length, start_date, commodity_keys)`, where `order_dict`
+maps each key to a `(commodities, min_transit_steps)` tuple, `time_horizon_length` accounts for
+`max_delivery_time` unless `wrap_time=true`, and `commodity_keys` holds the order key of each
+input commodity, in input order.
 """
 function _expand_commodities(
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
@@ -155,8 +184,9 @@ function _expand_commodities(
     order_dict = Dict{typeof(first_key),Tuple{Vector{LightCommodity{I}},Int}}()
 
     start_date = _compute_start_date(commodities, wrap_time)
+    commodity_keys = Vector{typeof(first_key)}(undef, length(commodities))
 
-    for commodity in commodities
+    for (k, commodity) in enumerate(commodities)
         light_commodity = LightCommodity(;
             origin_id=commodity.origin_id,
             destination_id=commodity.destination_id,
@@ -183,6 +213,7 @@ function _expand_commodities(
             commodity.destination_id,
             group_by(commodity),
         )
+        commodity_keys[k] = key
 
         to_append = view(
             full_commodities, light_commodities_start_idx:light_commodities_end_idx
@@ -207,7 +238,23 @@ function _expand_commodities(
         end
     end
 
-    return order_dict, time_horizon_length, start_date
+    return order_dict, time_horizon_length, start_date, commodity_keys
+end
+
+"""
+$TYPEDSIGNATURES
+
+Map each input commodity to its `(bundle_idx, order_idx)` in `bundles`, given the order key of
+each commodity from [`_expand_commodities`](@ref). The keys are rebuilt from the final
+`bundles` vector since bundle and order positions come from `Dict` iteration.
+"""
+function _commodity_to_order(bundles, commodity_keys)
+    key_to_position = Dict{eltype(commodity_keys),Tuple{Int,Int}}()
+    for (b, bundle) in enumerate(bundles), (o, order) in enumerate(bundle.orders)
+        key = (order.time_step, bundle.origin_id, bundle.destination_id, bundle.group)
+        key_to_position[key] = (b, o)
+    end
+    return [key_to_position[key] for key in commodity_keys]
 end
 
 """
@@ -399,6 +446,9 @@ Runs the full pipeline: expand commodities into `Order`s and `Bundle`s, size the
 horizon, build the `TimeSpaceGraph` and `TravelTimeGraph`, optionally validate bundle
 feasibility, and assemble the `Instance`. See [`Instance`](@ref) for the meaning of the
 keyword arguments.
+
+The internal keyword `input_arcs` (default `arcs`) is stored as `input.arcs`, it must have the
+same length as `arcs`. Called directly, the input arc index is the position in the tuple vector.
 """
 function build_instance(
     nodes::Vector{<:NetworkNode},
@@ -409,14 +459,21 @@ function build_instance(
     wrap_time=false,
     check_bundle_feasibility=true,
     allow_multimodal::Bool=false,
+    input_arcs::Vector=arcs,
 ) where {is_date_arrival,ID,I,NA<:NetworkArc}
+    length(input_arcs) == length(arcs) || throw(
+        ArgumentError(
+            "input_arcs has $(length(input_arcs)) entries but arcs has $(length(arcs))"
+        ),
+    )
     narrowed_nodes = collect_nodes(infer_node_cost_types(nodes), nodes; validate=false)
     _validate_node_costs_on_empty_load(narrowed_nodes, LightCommodity{I})
     network_graph = NetworkGraph(narrowed_nodes, arcs; allow_multimodal)
-    order_dict, time_horizon_length, start_date = _expand_commodities(
+    order_dict, time_horizon_length, start_date, commodity_keys = _expand_commodities(
         commodities, time_step, group_by, wrap_time
     )
     bundles = _build_bundles(order_dict, commodities, group_by, time_horizon_length)
+    commodity_to_order = _commodity_to_order(bundles, commodity_keys)
     time_step_to_date = [start_date + (i - 1) * time_step for i in 1:time_horizon_length]
     time_space_graph = TimeSpaceGraph(
         network_graph, time_horizon_length; wrap_time=wrap_time
@@ -435,6 +492,8 @@ function build_instance(
         time_space_graph,
         travel_time_graph,
         index_cache,
+        input=InstanceInput(nodes, input_arcs, commodities),
+        commodity_to_order,
     )
 end
 
@@ -467,6 +526,7 @@ function build_instance(
         wrap_time,
         check_bundle_feasibility,
         allow_multimodal,
+        input_arcs=raw_arcs,
     )
 end
 
@@ -510,6 +570,9 @@ duplicates are auto-promoted to a `MultiModalArc`.
 grouped into `Order`s. Orders with the same origin and destination are grouped into
 `Bundle`s for routing.
 4. **Graphs**: Both `TimeSpaceGraph` and `TravelTimeGraph` are constructed.
+
+The input is kept as given in `instance.input`, and each input commodity is mapped to its
+bundle and order in `instance.commodity_to_order`.
 """
 function Instance(
     nodes::Vector{<:NetworkNode},

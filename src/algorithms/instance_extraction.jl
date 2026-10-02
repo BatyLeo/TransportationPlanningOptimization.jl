@@ -9,7 +9,9 @@ and drops only `:origin` and `:destination` nodes that no kept bundle references
 subgraph so the sub-instance is self-consistent.
 
 The returned `Instance` shares the original bundle and commodity objects (no
-deep copy). Only the `bundles` vector and the three graph layers are new.
+deep copy) and the original `input`. Only the `bundles` vector, the three graph layers and
+`commodity_to_order` are new. The latter maps each input commodity to its position in the
+sub-instance, or to `(0, 0)` if its bundle was dropped.
 
 If no bundles survive filtering, an info message is logged and the returned instance
 has an empty `bundles` vector.
@@ -30,6 +32,8 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
             # The degenerate case reuses the original graphs verbatim, so the
             # original cache (built from those same graphs) stays valid.
             index_cache=instance.index_cache,
+            input=instance.input,
+            commodity_to_order=fill((0, 0), length(instance.input.commodities)),
         )
     end
 
@@ -61,6 +65,13 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
     )
     sub_ttg = TravelTimeGraph(sub_network, kept_bundles)
 
+    full_to_sub = zeros(Int, length(instance.bundles))
+    full_to_sub[keep_idxs] = eachindex(keep_idxs)
+    commodity_to_order = [
+        b == 0 || full_to_sub[b] == 0 ? (0, 0) : (full_to_sub[b], o) for
+        (b, o) in instance.commodity_to_order
+    ]
+
     return Instance(;
         bundles=kept_bundles,
         network_graph=sub_network,
@@ -70,6 +81,8 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
         time_space_graph=sub_tsg,
         travel_time_graph=sub_ttg,
         index_cache=build_index_cache(sub_network, sub_ttg, sub_tsg),
+        input=instance.input,
+        commodity_to_order,
     )
 end
 

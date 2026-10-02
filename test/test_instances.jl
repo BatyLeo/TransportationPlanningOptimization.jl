@@ -323,3 +323,120 @@ end
         default_group_ok && grouped_ok
     end
 end
+
+@testset "Instance keeps input and commodity mapping" begin
+    nodes = [
+        NetworkNode(; id="A", node_type=:origin, capacity=100, info=nothing),
+        NetworkNode(; id="C", node_type=:origin, capacity=100, info=nothing),
+        NetworkNode(; id="B", node_type=:destination, capacity=100, info=nothing),
+    ]
+    mk_arc(o, d) = Arc(;
+        origin_id=o,
+        destination_id=d,
+        travel_time=Day(1),
+        cost=LinearArcCost(1.0),
+        info=nothing,
+    )
+    arcs = [mk_arc("A", "B"), mk_arc("C", "B")]
+    mk_com(o, size, quantity, day) = Commodity(;
+        origin_id=o,
+        destination_id="B",
+        size=size,
+        quantity=quantity,
+        arrival_date=DateTime(2024, 1, day),
+        max_delivery_time=Day(2),
+    )
+    commodities = [
+        mk_com("A", 2.0, 3, 5),
+        mk_com("A", 1.0, 1, 5),
+        mk_com("A", 1.0, 1, 6),
+        mk_com("C", 1.0, 1, 5),
+    ]
+
+    function check_mapping(instance, commodities=commodities)
+        c2o = instance.commodity_to_order
+        @test length(c2o) == length(commodities)
+        for (k, commodity) in enumerate(commodities)
+            b, o = c2o[k]
+            @test 1 <= b <= length(instance.bundles)
+            @test 1 <= o <= length(instance.bundles[b].orders)
+            @test instance.bundles[b].origin_id == commodity.origin_id
+            @test instance.bundles[b].destination_id == commodity.destination_id
+            date = instance.time_step_to_date[instance.bundles[b].orders[o].time_step]
+            @test date == Date(commodity.date)
+        end
+        # Each order holds exactly the light commodities of its mapped input commodities
+        for (b, bundle) in enumerate(instance.bundles),
+            (o, order) in enumerate(bundle.orders)
+
+            sizes = sort(
+                reduce(
+                    vcat,
+                    [
+                        fill(c.size, c.quantity) for
+                        (k, c) in enumerate(commodities) if c2o[k] == (b, o)
+                    ];
+                    init=Float64[],
+                ),
+            )
+            @test sort([c.size for c in order.commodities]) == sizes
+        end
+    end
+
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    @test instance.input.nodes === nodes
+    @test instance.input.arcs === arcs
+    @test instance.input.commodities === commodities
+    check_mapping(instance)
+    # Same origin and destination: same bundle, different dates: different orders
+    @test instance.commodity_to_order[1][1] == instance.commodity_to_order[3][1]
+    @test instance.commodity_to_order[1] == instance.commodity_to_order[2]
+    @test instance.commodity_to_order[1][2] != instance.commodity_to_order[3][2]
+    @test instance.commodity_to_order[1][1] != instance.commodity_to_order[4][1]
+
+    grouped = Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.size > 1.5)
+    check_mapping(grouped)
+    @test grouped.commodity_to_order[1][1] != grouped.commodity_to_order[2][1]
+
+    multimodal_arcs = [
+        arcs;
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            travel_time=Day(2),
+            cost=LinearArcCost(0.5),
+            info=nothing,
+        )
+    ]
+    multimodal = Instance(
+        nodes, multimodal_arcs, commodities, Day(1); allow_multimodal=true
+    )
+    @test length(multimodal.input.arcs) == 3
+    @test multimodal.input.arcs === multimodal_arcs
+    check_mapping(multimodal)
+
+    tuple_arcs = [
+        ("A", "B", NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0))),
+        ("C", "B", NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0))),
+    ]
+    tuple_instance = TransportationPlanningOptimization.build_instance(
+        nodes, tuple_arcs, commodities, Day(1)
+    )
+    @test tuple_instance.input.arcs === tuple_arcs
+    check_mapping(tuple_instance)
+
+    departure_commodities = [
+        Commodity(;
+            origin_id=c.origin_id,
+            destination_id=c.destination_id,
+            size=c.size,
+            quantity=c.quantity,
+            departure_date=c.date,
+            max_delivery_time=c.max_delivery_time,
+        ) for c in commodities
+    ]
+    departure = Instance(nodes, arcs, departure_commodities, Day(1); wrap_time=true)
+    @test departure.input.commodities === departure_commodities
+    @test departure.bundles[1].orders[1] isa TransportationPlanningOptimization.Order{false}
+    check_mapping(departure, departure_commodities)
+end
