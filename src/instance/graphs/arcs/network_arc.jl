@@ -26,6 +26,8 @@ $TYPEDFIELDS
     cost::C
     "additional information associated with the arc"
     info::K = nothing
+    "index of the input arc of this mode in `instance.input.arcs` (0 if it has none)"
+    input_index::Int = 0
 end
 
 """
@@ -55,7 +57,7 @@ travel_time_steps(arc::NetworkArc) = arc.travel_time_steps
 $TYPEDEF
 
 A leg traversable by multiple transport modes. Each mode is its own `NetworkArc` with its
-own `travel_time_steps`, `capacity`, and `cost` function.
+own `travel_time_steps`, `capacity`, `cost` function, and `input_index`.
 
 When projected into the time-expanded graphs (`TimeSpaceGraph`, `TravelTimeGraph`), modes
 are grouped by `travel_time_steps`:
@@ -79,7 +81,7 @@ splits an order across modes.
 $TYPEDFIELDS
 """
 struct MultiModalArc{T<:NetworkArc} <: AbstractNetworkArc
-    "the modes available on this leg (one `NetworkArc` per mode)"
+    "the modes available on this leg (one `NetworkArc` per mode, each with its own `input_index`). On the per-transit-time edge arcs of the time-space and travel-time graphs, `modes[i]` is the mode of assignment slot `i`."
     modes::Vector{T}
 
     # Narrow `T` to the small `Union` of the concrete mode types when modes are
@@ -94,6 +96,20 @@ end
 function Base.show(io::IO, arc::MultiModalArc)
     return print(io, "MultiModalArc(", length(arc.modes), " modes)")
 end
+
+"""
+    input_arc_index(arc::AbstractNetworkArc, slot::Int)
+
+Return the index in `instance.input.arcs` of the input arc behind mode `slot` of `arc`
+(0 if the mode has no input arc). A `NetworkArc` has the single slot `1`.
+"""
+function input_arc_index end
+
+function input_arc_index(arc::NetworkArc, slot::Int)
+    slot == 1 || throw(BoundsError(arc, slot))
+    return arc.input_index
+end
+input_arc_index(arc::MultiModalArc, slot::Int) = arc.modes[slot].input_index
 
 """
 $TYPEDSIGNATURES

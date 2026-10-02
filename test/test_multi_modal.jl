@@ -6,6 +6,7 @@ greedy mode selection.
 
 using Test
 using Graphs
+using MetaGraphsNext
 using Dates
 using Random
 using TransportationPlanningOptimization
@@ -763,5 +764,41 @@ end
             verbose=false,
         )
         _test_matches_rebuild(sol, instance)
+    end
+end
+
+@testset "Mode input indices follow the transit groups" begin
+    modes = [(10.0, 1, 10), (5.0, 2, 10), (7.0, 1, 10)]
+    for (wrap_time, departure_days) in ((false, (1,)), (true, (1, 6)))
+        instance = _leg_instance(modes, 3; departure_days, wrap_time)
+        TestFixtures.check_input_links(instance)
+        cache = instance.index_cache
+        ttg, tsg = instance.travel_time_graph, instance.time_space_graph
+        for (graph, edge_arc, labels) in (
+            (tsg.graph, TPO.tsg_edge_arc, MetaGraphsNext.edge_labels(tsg.graph)),
+            (ttg.graph, TPO.ttg_edge_arc, MetaGraphsNext.edge_labels(ttg.graph)),
+        )
+            found = Dict{Int,Any}()
+            for (u, v) in labels
+                u[1] == "A" && v[1] == "B" || continue
+                arc = graph[u, v]
+                cu, cv = MetaGraphsNext.code_for(graph, u),
+                MetaGraphsNext.code_for(graph, v)
+                cached = edge_arc(cache, cu, cv)
+                # `_mode_groups` runs separately for the TSG, the TTG and the cache,
+                # so sub-arcs are equal but not identical objects.
+                if arc isa TPO.MultiModalArc
+                    @test cached.modes == arc.modes
+                else
+                    @test cached === arc
+                end
+                found[arc isa TPO.MultiModalArc ? 1 : 2] = arc
+            end
+            @test found[1] isa TPO.MultiModalArc
+            @test [TPO.input_arc_index(found[1], s) for s in 1:2] == [1, 3]
+            @test found[2] isa NetworkArc
+            @test TPO.input_arc_index(found[2], 1) == 2
+            @test_throws BoundsError TPO.input_arc_index(found[2], 2)
+        end
     end
 end

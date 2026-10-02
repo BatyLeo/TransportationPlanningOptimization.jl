@@ -9,6 +9,11 @@ using Test
 
 using TransportationPlanningOptimization.Problems.Inbound
 
+const TPO = TransportationPlanningOptimization
+
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 @testset "Instance creation" begin
     @test begin
         nodes = [
@@ -471,4 +476,125 @@ end
         end
     end
     @test_throws ArgumentError Node(; id="X", node_type=:bad)
+end
+
+@testset "Input links of nodes and arc modes" begin
+    for arrival in (false, true)
+        @testset "$(arrival ? "arrival" : "departure")_date commodities" begin
+            nodes = [
+                Node(; id="A", node_type=:origin),
+                Node(; id="C", node_type=:origin),
+                Node(; id="B", node_type=:destination),
+            ]
+            mk_arc(o, d, days) = Arc(;
+                origin_id=o,
+                destination_id=d,
+                travel_time=Day(days),
+                cost=LinearArcCost(1.0),
+            )
+            commodities = [
+                Commodity(;
+                    origin_id=o,
+                    destination_id="B",
+                    size=1.0,
+                    quantity=1,
+                    max_delivery_time=Day(3),
+                    info=g,
+                    (
+                        arrival ? (; arrival_date=DateTime(2024, 1, 5)) :
+                        (; departure_date=DateTime(2024, 1, 1))
+                    )...,
+                ) for (o, g) in (("A", "X"), ("C", "Y"))
+            ]
+            @test eltype(commodities) <: Commodity{arrival}
+
+            @testset "multimodal Arc input, plain and grouped" begin
+                arcs = [mk_arc("A", "B", 1), mk_arc("C", "B", 1), mk_arc("A", "B", 2)]
+                for kwargs in (NamedTuple(), (; group_by=c -> c.info))
+                    instance = Instance(
+                        nodes, arcs, commodities, Day(1); allow_multimodal=true, kwargs...
+                    )
+                    TestFixtures.check_input_links(instance)
+                    @test instance.input.arcs === arcs
+                    @test [
+                        m.input_index for m in instance.network_graph.graph["A", "B"].modes
+                    ] == [1, 3]
+                    @test instance.network_graph.graph["C", "B"].input_index == 2
+                end
+            end
+
+            @testset "exact duplicate arc gets two indices" begin
+                arcs = [mk_arc("A", "B", 1), mk_arc("A", "B", 1), mk_arc("C", "B", 1)]
+                instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
+                TestFixtures.check_input_links(instance)
+                modes = instance.network_graph.graph["A", "B"].modes
+                @test [m.input_index for m in modes] == [1, 2]
+            end
+
+            @testset "tuple arcs called directly, user arcs untouched" begin
+                mk(c) = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(c))
+                tuples = Tuple{String,String,typeof(mk(1.0))}[
+                    ("A", "B", mk(1.0)), ("C", "B", mk(2.0)), ("A", "B", mk(3.0))
+                ]
+                instance = TPO.build_instance(
+                    nodes, tuples, commodities, Day(1); allow_multimodal=true
+                )
+                TestFixtures.check_input_links(instance)
+                @test instance.input.arcs === tuples
+                @test all(t -> t[3].input_index == 0, tuples)
+                @test [
+                    m.input_index for m in instance.network_graph.graph["A", "B"].modes
+                ] == [1, 3]
+            end
+        end
+    end
+
+    nodes = [
+        Node(; id="A", node_type=:origin),
+        Node(; id="C", node_type=:origin),
+        Node(; id="B", node_type=:destination),
+    ]
+    mk_arc(o, d, cost) = Arc(; origin_id=o, destination_id=d, travel_time=Day(1), cost=cost)
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            size=1.0,
+            quantity=1,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(3),
+        ),
+    ]
+
+    @testset "Union arc type is preserved" begin
+        arcs = [
+            mk_arc("A", "B", LinearArcCost(1.0)),
+            mk_arc("C", "B", BinPackingArcCost(1.0, 10.0)),
+        ]
+        instance = Instance(nodes, arcs, commodities, Day(1))
+        TestFixtures.check_input_links(instance)
+        arc = instance.network_graph.graph["A", "B"]
+        @test arc isa NetworkArc{Union{LinearArcCost,BinPackingArcCost}}
+        @test arc.input_index == 1
+    end
+
+    @testset "unknown arc endpoint throws" begin
+        lin = LinearArcCost(1.0)
+        for bad in (mk_arc("Z", "B", lin), mk_arc("A", "Z", lin))
+            arcs = [mk_arc("A", "B", lin), bad]
+            @test_throws "has an unknown endpoint" Instance(
+                nodes, arcs, commodities, Day(1)
+            )
+        end
+        net_nodes = [
+            NetworkNode(; id="A", node_type=:origin),
+            NetworkNode(; id="B", node_type=:destination),
+        ]
+        arc = NetworkArc(; travel_time_steps=1, cost=lin)
+        for bad in (("Z", "B", arc), ("A", "Z", arc))
+            @test_throws "has an unknown endpoint" NetworkGraph(
+                net_nodes, [("A", "B", arc), bad]
+            )
+        end
+    end
 end

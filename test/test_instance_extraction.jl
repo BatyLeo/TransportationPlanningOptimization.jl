@@ -317,6 +317,13 @@ end
 
     function check_sub(sub, parent, keep_idxs)
         @test sub.input === parent.input
+        TestFixtures.check_input_links(sub; complete=false)
+        for label in MetaGraphsNext.labels(sub.network_graph.graph)
+            @test sub.network_graph.graph[label] === parent.network_graph.graph[label]
+        end
+        for (u, v) in MetaGraphsNext.edge_labels(sub.network_graph.graph)
+            @test sub.network_graph.graph[u, v] === parent.network_graph.graph[u, v]
+        end
         @test bundle_count(sub) == length(keep_idxs)
         for (k, (i, o)) in enumerate(parent.commodity_to_order)
             j = i == 0 ? nothing : findfirst(==(i), keep_idxs)

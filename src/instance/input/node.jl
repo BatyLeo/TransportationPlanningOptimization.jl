@@ -76,7 +76,8 @@ end
 $TYPEDSIGNATURES
 
 Collect nodes into a type-stable vector with the specified node cost types.
-Converts the user [`Node`](@ref)s to [`NetworkNode`](@ref)s, keeping their positions.
+Converts the user [`Node`](@ref)s to [`NetworkNode`](@ref)s, keeping their positions
+(the `input_index` of each converted node is its position).
 Mirrors [`collect_arcs`](@ref): when an instance mixes several
 [`AbstractNodeCostFunction`](@ref) subtypes, the resulting `Vector{NetworkNode{J, CostUnion}}`
 keeps Julia's small-union optimization in play (up to 4 concrete types).
@@ -119,7 +120,7 @@ function collect_nodes(
 
     return [
         NetworkNode{J,CostUnion}(
-            node.id, node.node_type, node.capacity, node.info, node.node_cost
-        ) for node in nodes
+            node.id, node.node_type, node.capacity, node.info, node.node_cost, i
+        ) for (i, node) in enumerate(nodes)
     ]
 end

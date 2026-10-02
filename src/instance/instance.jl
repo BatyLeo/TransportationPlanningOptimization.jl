@@ -22,6 +22,7 @@ $TYPEDEF
 
 An `Instance` represents a transportation planning problem instance, containing bundles of
 orders, a network graph, and a time horizon.
+Internal nodes and arc modes link back to their input index.
 
 # Fields
 $TYPEDFIELDS
@@ -449,6 +450,8 @@ keyword arguments.
 
 The internal keyword `input_arcs` (default `arcs`) is stored as `input.arcs`, it must have the
 same length as `arcs`. Called directly, the input arc index is the position in the tuple vector.
+The internal arcs are rebuilt with their `input_index` set to that position, the user's own
+vectors are kept untouched.
 """
 function build_instance(
     nodes::Vector{<:Node},
@@ -468,7 +471,20 @@ function build_instance(
     )
     narrowed_nodes = collect_nodes(infer_node_cost_types(nodes), nodes; validate=false)
     _validate_node_costs_on_empty_load(narrowed_nodes, LightCommodity{I})
-    network_graph = NetworkGraph(narrowed_nodes, arcs; allow_multimodal)
+    indexed_arcs = Tuple{String,String,NA}[
+        (
+            o,
+            d,
+            typeof(a)(;
+                travel_time_steps=a.travel_time_steps,
+                capacity=a.capacity,
+                cost=a.cost,
+                info=a.info,
+                input_index=i,
+            ),
+        ) for (i, (o, d, a)) in enumerate(arcs)
+    ]
+    network_graph = NetworkGraph(narrowed_nodes, indexed_arcs; allow_multimodal)
     order_dict, time_horizon_length, start_date, commodity_keys = _expand_commodities(
         commodities, time_step, group_by, wrap_time
     )

@@ -36,12 +36,14 @@ struct NetworkNode{J,N<:AbstractNodeCostFunction}
     info::J
     "node cost function for this node"
     node_cost::N
+    "index of the input node in `instance.input.nodes` (0 if it has none)"
+    input_index::Int
 
     function NetworkNode{J,N}(
-        id, node_type, capacity, info, node_cost
+        id, node_type, capacity, info, node_cost, input_index
     ) where {J,N<:AbstractNodeCostFunction}
         _check_node_type(node_type)
-        return new{J,N}(id, node_type, capacity, info, node_cost)
+        return new{J,N}(id, node_type, capacity, info, node_cost, input_index)
     end
 end
 
@@ -60,9 +62,10 @@ function NetworkNode(;
     capacity::Int=typemax(Int),
     info=nothing,
     node_cost::AbstractNodeCostFunction=NoNodeCost(),
+    input_index::Int=0,
 )
     return NetworkNode{typeof(info),typeof(node_cost)}(
-        id, node_type, capacity, info, node_cost
+        id, node_type, capacity, info, node_cost, input_index
     )
 end
 
