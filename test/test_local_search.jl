@@ -259,3 +259,59 @@ end
         @test is_feasible(sol, instance)
     end
 end
+
+@testset "bin_packing repack keeps all terms of a SumArcCost slot" begin
+    bp = BinPackingArcCost(10.0, 100)
+    sum_cost = SumArcCost((bp, LinearArcCost(0.5), LinearArcCost(0.25)))
+    comms = [
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (65, 60, 40, 35)
+    ]
+    # one commodity per bin: suboptimal packing (4 bins instead of 2)
+    bins = reduce(vcat, [TPO.compute_bin_assignments(bp, [c]) for c in comms])
+    sorted_comms = sort(comms; by=c -> c.size, rev=true)
+    slot = TPO.SingleAssignment{eltype(comms)}(sorted_comms, bins, 0.0)
+    slot.sorted = true
+    slot.arc_cost = 10.0 * length(bins) + 0.75 * sum(c.size for c in comms)
+
+    before = slot.arc_cost
+    @test length(slot.bins) == 4
+    saved = TPO._repack_slot!(slot, bp)
+
+    @test length(slot.bins) == 2
+    @test saved > 0
+    @test slot.arc_cost ≈ before - saved
+    @test isapprox(slot.arc_cost, TPO.evaluate(sum_cost, slot.commodities); atol=1e-9)
+    @test !slot.bins_dirty
+end
+
+@testset "bin_packing repack of a dirty SumArcCost slot after removal" begin
+    bp = BinPackingArcCost(10.0, 100)
+    sum_cost = SumArcCost((bp, LinearArcCost(0.5), LinearArcCost(0.25)))
+    comms = [
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (65, 60, 40, 35)
+    ]
+    bins = reduce(vcat, [TPO.compute_bin_assignments(bp, [c]) for c in comms])
+    sorted_comms = sort(comms; by=c -> c.size, rev=true)
+    slot = TPO.SingleAssignment{eltype(comms)}(sorted_comms, bins, 0.0)
+    slot.sorted = true
+    slot.arc_cost = 10.0 * length(bins) + 0.75 * sum(c.size for c in comms)
+
+    filter!(c -> c.size != 35.0, slot.commodities)
+    slot.total_size -= 35.0
+    TPO._update_cost_skip_bins!(slot, sum_cost)
+    @test slot.bins_dirty && length(slot.bins) == 4
+    before = slot.arc_cost
+    @test before ≈ 143.75
+
+    saved = TPO._repack_slot!(slot, bp)
+
+    @test length(slot.bins) == 2
+    @test !slot.bins_dirty
+    @test saved >= 0
+    @test slot.arc_cost ≈ 10.0 * length(slot.bins) + 0.75 * slot.total_size
+    @test slot.arc_cost ≈ before - saved
+    packed = reduce(vcat, [b.commodities for b in slot.bins])
+    @test sort([c.size for c in packed]) == sort([c.size for c in slot.commodities])
+end
