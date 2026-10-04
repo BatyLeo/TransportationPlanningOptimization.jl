@@ -1,5 +1,45 @@
 # [Solution I/O](@id solution_io_guide)
 
+## [Reading a solution on the input network](@id network_solution_guide)
+
+[`NetworkSolution`](@ref) expresses a [`Solution`](@ref) on your own input: the arcs and commodities you gave to the [`Instance`](@ref), by their position in the input vectors.
+It is built on demand and holds two vectors of `NamedTuple`s.
+
+```julia
+ns = NetworkSolution(solution, instance)
+ns.routes[k]   # legs of the k-th input commodity, in travel order
+ns.arc_flows   # load per input arc and departure date
+```
+
+- Each leg of `routes[k]` is `(arc, departure, arrival, quantity)`, where `arc` is the index of the input arc.
+  The `quantity` copies of a commodity share one route, but a leg only counts the copies using that input arc, since a multi-modal edge can split them across modes.
+- Each row of `arc_flows` is `(arc, departure, arrival, volume, n_bins, arc_cost, node_cost)`, sorted by `(arc, departure)`.
+  The sum of `arc_cost + node_cost` over the rows is `cost(solution)`.
+  The node cost of a multi-modal edge is charged once, on its first non-empty mode row.
+
+Date conventions:
+
+- Dates are the start of a time step, since order dates and transit times are floored to the time step.
+  The arrival of a leg is its departure plus the floored transit time.
+- Waiting is implicit: it is the gap before the first leg (arrival dates) or after the last leg (departure dates).
+- Route dates are unwrapped, computed from the order date and the travel-time budget, so with `wrap_time` they can leave the horizon.
+- With `wrap_time`, the departure of an `arc_flows` row is cyclic and its arrival is the departure plus the transit time, so it can pass the end of the horizon.
+  To join a leg to its row, compare the cyclic step of the departures, `mod(fld(departure - instance.time_step_to_date[1], instance.time_step), instance.time_horizon_length) + 1` (for fixed-length time steps).
+- Copies with equal size and info cannot be told apart, so when an order is split across modes they are attributed to modes by count.
+  This also holds for equal copies of other orders, other bundles or reservation commodities on the same edge (possible only with a custom `group_by` splitting on something outside `info`).
+  Totals stay consistent and only the mode of such a leg is arbitrary.
+- Commodities dropped by [`TransportationPlanningOptimization.extract_filtered_instance`](@ref) have an empty route, and the load reserved for them only appears in `arc_flows`.
+
+To flatten the routes into a table with a `commodity` column:
+
+```julia
+using DataFrames
+routes = DataFrame((; commodity=k, leg...) for (k, legs) in enumerate(ns.routes) for leg in legs)
+flows = DataFrame(ns.arc_flows)
+```
+
+## CSV files
+
 Solutions can be saved to and loaded from CSV files using [`write_solution_csv`](@ref) and [`read_solution_csv`](@ref).
 
 ## Writing a solution

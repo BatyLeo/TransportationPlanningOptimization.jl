@@ -521,36 +521,6 @@ end
 
 # ── Greedy, rebuilt Solution and local search agree on split legs ─────────────
 
-# Leg A -> B with `modes` given as (cost per unit or arc cost, travel days, capacity) tuples.
-# `departure_days` are spread so that a wrapped horizon exceeds every transit time.
-function _leg_instance(
-    modes, max_delivery_days; quantity=2, departure_days=(1,), wrap_time=false
-)
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
-    arcs = [
-        Arc(;
-            origin_id="A",
-            destination_id="B",
-            cost=c isa Real ? LinearArcCost(c) : c,
-            travel_time=Day(d),
-            capacity=cap,
-        ) for (c, d, cap) in modes
-    ]
-    commodities = [
-        Commodity(;
-            origin_id="A",
-            destination_id="B",
-            quantity=quantity,
-            departure_date=DateTime(2024, 1, d),
-            max_delivery_time=Day(max_delivery_days),
-            size=1.0,
-        ) for d in departure_days
-    ]
-    return Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true, wrap_time)
-end
-
-const _TRUCK_TRAIN_MODES = [(10.0, 1, 10), (5.0, 2, 10)]
-
 # Assert that `sol` is feasible and identical in cost and assignment types to a rebuild.
 function _test_matches_rebuild(sol, instance)
     rebuilt = Solution(sol.bundle_paths, instance)
@@ -564,7 +534,9 @@ end
 
 @testset "Tight window keeps only the truck edge, greedy equals rebuilt" begin
     for (wrap_time, departure_days, expected) in ((false, (1,), 20.0), (true, (1, 6), 40.0))
-        instance = _leg_instance(_TRUCK_TRAIN_MODES, 1; departure_days, wrap_time)
+        instance = TestFixtures._leg_instance(
+            TestFixtures._TRUCK_TRAIN_MODES, 1; departure_days, wrap_time
+        )
         sol = greedy_heuristic(instance; show_progress=false)
         @test cost(sol) == expected
         @test all(a -> a isa TPO.SingleAssignment, values(sol.assignments))
@@ -573,14 +545,14 @@ end
 end
 
 @testset "Loose window uses the train, greedy equals rebuilt" begin
-    instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
+    instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 3)
     sol = greedy_heuristic(instance; show_progress=false)
     @test cost(sol) == 10.0
     _test_matches_rebuild(sol, instance)
 end
 
 @testset "cost_scaling is keyed per transit group" begin
-    instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
+    instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 3)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     bundle = only(instance.bundles)
@@ -602,7 +574,7 @@ end
 @testset "FillThenSpillMode spills only inside the same-transit group" begin
     # Two 1-day modes (capacity 3 each) and an expensive 2-day barge.
     modes = [(10.0, 1, 3), (5.0, 1, 3), (20.0, 2, 100)]
-    instance = _leg_instance(modes, 3; quantity=5)
+    instance = TestFixtures._leg_instance(modes, 3; quantity=5)
     sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
     assignment = only(values(sol.assignments))
     @test assignment isa TPO.MultiAssignment
@@ -615,14 +587,14 @@ end
 end
 
 @testset "is_feasible rejects an assignment that does not match its edge arc" begin
-    instance = _leg_instance(_TRUCK_TRAIN_MODES, 1)
+    instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 1)
     sol = greedy_heuristic(instance; show_progress=false)
     edge, single = only(sol.assignments)
     sol.assignments[edge] = TPO.MultiAssignment([single, single], 0.0)
     @test !is_feasible(sol, instance)
 
     modes = [(10.0, 1, 3), (5.0, 1, 3)]
-    instance = _leg_instance(modes, 1)
+    instance = TestFixtures._leg_instance(modes, 1)
     sol = greedy_heuristic(instance; show_progress=false)
     edge, multi = only(sol.assignments)
     sol.assignments[edge] = TPO.MultiAssignment(multi.per_mode[1:1], 0.0)
@@ -638,7 +610,7 @@ end
         (BinPackingArcCost(30.0, 4), 2, 10),
         (BinPackingArcCost(35.0, 4), 2, 10),
     ]
-    instance = _leg_instance(modes, 3; quantity=4)
+    instance = TestFixtures._leg_instance(modes, 3; quantity=4)
     sol = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(sol, instance)
 
@@ -665,7 +637,7 @@ end
 
 @testset "is_feasible rejects an overflowing bin" begin
     modes = [(BinPackingArcCost(10.0, 2), 1, 10)]
-    instance = _leg_instance(modes, 1; quantity=4)
+    instance = TestFixtures._leg_instance(modes, 1; quantity=4)
     sol = greedy_heuristic(instance; show_progress=false)
     slot = only(values(sol.assignments))
     @test length(slot.bins) == 2
@@ -677,7 +649,7 @@ end
 end
 
 @testset "is_feasible checks assignments against bundle paths" begin
-    instance = _leg_instance(_TRUCK_TRAIN_MODES, 1)
+    instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 1)
     sol = greedy_heuristic(instance; show_progress=false)
     edge, single = only(sol.assignments)
     @test single isa TPO.SingleAssignment
@@ -709,7 +681,7 @@ end
 
 @testset "is_feasible checks bin contents unless the bins are dirty" begin
     modes = [(BinPackingArcCost(10.0, 2), 1, 10)]
-    instance = _leg_instance(modes, 1; quantity=4)
+    instance = TestFixtures._leg_instance(modes, 1; quantity=4)
     sol = greedy_heuristic(instance; show_progress=false)
     slot = only(values(sol.assignments))
     @test slot isa TPO.SingleAssignment
@@ -724,7 +696,7 @@ end
 end
 
 @testset "is_feasible tolerates shortcut nodes in stored paths and checks path count" begin
-    instance = _leg_instance(_TRUCK_TRAIN_MODES, 3)
+    instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 3)
     sol = greedy_heuristic(instance; show_progress=false)
     ttg = instance.travel_time_graph
     path = sol.bundle_paths[1]
@@ -743,7 +715,7 @@ end
 
 @testset "local_search! and ILS keep split legs consistent" begin
     for days in (1, 3)
-        instance = _leg_instance(_TRUCK_TRAIN_MODES, days)
+        instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, days)
         sol = greedy_heuristic(instance; show_progress=false)
         local_search!(sol, instance; max_iter=20, time_limit=5.0, rng=MersenneTwister(1))
         _test_matches_rebuild(sol, instance)
@@ -770,7 +742,7 @@ end
 @testset "Mode input indices follow the transit groups" begin
     modes = [(10.0, 1, 10), (5.0, 2, 10), (7.0, 1, 10)]
     for (wrap_time, departure_days) in ((false, (1,)), (true, (1, 6)))
-        instance = _leg_instance(modes, 3; departure_days, wrap_time)
+        instance = TestFixtures._leg_instance(modes, 3; departure_days, wrap_time)
         TestFixtures.check_input_links(instance)
         cache = instance.index_cache
         ttg, tsg = instance.travel_time_graph, instance.time_space_graph
