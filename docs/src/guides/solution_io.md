@@ -1,20 +1,20 @@
 # [Solution I/O](@id solution_io_guide)
 
-## [Reading a solution on the input network](@id network_solution_guide)
+## [Reading a solution on the input network](@id solution_guide)
 
-[`NetworkSolution`](@ref) expresses a [`Solution`](@ref) on your own input: the arcs and commodities you gave to the [`Instance`](@ref), by their position in the input vectors.
-It is built on demand and holds two vectors of `NamedTuple`s.
+[`Solution`](@ref) expresses a [`SolutionState`](@ref) on your own input: the arcs and commodities you gave to the [`Instance`](@ref), by their position in the input vectors.
+It is built on demand and holds two vectors of plain structs, `Leg` and `ArcFlow`, with the fields listed below.
 
 ```julia
-ns = NetworkSolution(solution, instance)
-ns.routes[k]   # legs of the k-th input commodity, in travel order
-ns.arc_flows   # load per input arc and departure date
+solution = Solution(solution_state, instance)
+solution.routes[k]   # legs of the k-th input commodity, in travel order
+solution.arc_flows   # load per input arc and departure date
 ```
 
-- Each leg of `routes[k]` is `(arc, departure, arrival, quantity)`, where `arc` is the index of the input arc.
+- Each leg of `routes[k]` is a `Leg` with fields `(arc, departure, arrival, quantity)`, where `arc` is the index of the input arc.
   The `quantity` copies of a commodity share one route, but a leg only counts the copies using that input arc, since a multi-modal edge can split them across modes.
-- Each row of `arc_flows` is `(arc, departure, arrival, volume, n_bins, arc_cost, node_cost)`, sorted by `(arc, departure)`.
-  The sum of `arc_cost + node_cost` over the rows is `cost(solution)`.
+- Each row of `arc_flows` is an `ArcFlow` with fields `(arc, departure, arrival, volume, n_bins, arc_cost, node_cost)`, sorted by `(arc, departure)`.
+  The sum of `arc_cost + node_cost` over the rows is `cost(solution_state)`.
   The node cost of a multi-modal edge is charged once, on its first non-empty mode row.
 
 Date conventions:
@@ -34,8 +34,11 @@ To flatten the routes into a table with a `commodity` column:
 
 ```julia
 using DataFrames
-routes = DataFrame((; commodity=k, leg...) for (k, legs) in enumerate(ns.routes) for leg in legs)
-flows = DataFrame(ns.arc_flows)
+routes = DataFrame([
+    (; commodity=k, leg.arc, leg.departure, leg.arrival, leg.quantity) for
+    (k, route_legs) in enumerate(solution.routes) for leg in route_legs
+])
+flows = DataFrame(solution.arc_flows)
 ```
 
 ## CSV files
@@ -45,7 +48,7 @@ Solutions can be saved to and loaded from CSV files using [`write_solution_csv`]
 ## Writing a solution
 
 ```julia
-write_solution_csv("solution.csv", solution, instance)
+write_solution_csv("solution.csv", solution_state, instance)
 ```
 
 The CSV contains one row per node in each bundle's path, with columns:
@@ -64,7 +67,7 @@ Paths are written in **reverse order** (destination to origin).
 ## Reading a solution
 
 ```julia
-solution = read_solution_csv("solution.csv", instance)
+solution_state = read_solution_csv("solution.csv", instance)
 ```
 
 The reader reconstructs full time-expanded paths from the spatial node sequence using BFS in the [`TravelTimeGraph`](@ref).
@@ -73,7 +76,7 @@ It validates that all node IDs and bundle indices exist in the instance.
 For instances with [`MultiModalArc`](@ref) edges, pass a `mode_selector` to control how commodities are distributed across modes during reconstruction:
 
 ```julia
-solution = read_solution_csv("solution.csv", instance; mode_selector=FillThenSpillMode())
+solution_state = read_solution_csv("solution.csv", instance; mode_selector=FillThenSpillMode())
 ```
 
 The default is [`CheapestMode()`](@ref).
@@ -86,16 +89,16 @@ using Dates
 
 # Build instance and solve
 instance = Instance(nodes, arcs, commodities, Day(1))
-solution = solve(instance)
+solution_state = solve(instance)
 
 # Save
-write_solution_csv("my_solution.csv", solution, instance)
+write_solution_csv("my_solution.csv", solution_state, instance)
 
 # Load back
 reloaded = read_solution_csv("my_solution.csv", instance)
 
 # Verify
-println("Original cost:  ", cost(solution))
+println("Original cost:  ", cost(solution_state))
 println("Reloaded cost:  ", cost(reloaded))
 println("Feasible:       ", is_feasible(reloaded, instance))
 ```

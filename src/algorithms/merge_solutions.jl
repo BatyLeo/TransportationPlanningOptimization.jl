@@ -2,7 +2,7 @@
 $TYPEDSIGNATURES
 
 Stitch `sub_solution` (defined on `sub_instance`) back onto `full_solution`
-(defined on `full_instance`) and return a freshly constructed `Solution` on
+(defined on `full_instance`) and return a freshly constructed `SolutionState` on
 `full_instance`.
 
 For each bundle of `full_instance`:
@@ -13,7 +13,7 @@ For each bundle of `full_instance`:
   bundle's path in the merged solution.
 - Otherwise, `full_solution`'s path for that bundle is reused.
 
-The merged solution is built in one pass by the `Solution(bundle_paths, instance)`
+The merged solution is built in one pass by the `SolutionState(bundle_paths, instance)`
 constructor, which commits bundles in index order exactly like incremental
 `add_bundle_path!` calls.
 
@@ -32,8 +32,8 @@ throws `ArgumentError` if it fails (the verbose feasibility report is logged
 automatically).
 """
 function merge_solutions(
-    full_solution::Solution,
-    sub_solution::Solution,
+    full_solution::SolutionState,
+    sub_solution::SolutionState,
     full_instance::Instance,
     sub_instance::Instance,
 )
@@ -86,7 +86,7 @@ function merge_solutions(
         end
     end
 
-    merged = Solution(fused_paths, full_instance)
+    merged = SolutionState(fused_paths, full_instance)
     is_feasible(merged, full_instance; verbose=true) || throw(
         ArgumentError(
             "merge_solutions: merged solution is infeasible on full_instance " *

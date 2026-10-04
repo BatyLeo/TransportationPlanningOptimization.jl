@@ -1,7 +1,7 @@
 """
 $TYPEDEF
 
-Per-edge assignment stored in `Solution.assignments`. Concrete subtypes:
+Per-edge assignment stored in `SolutionState.assignments`. Concrete subtypes:
 - `SingleAssignment{C}` for edges carrying a `NetworkArc`.
 - `MultiAssignment{C}` for edges carrying a `MultiModalArc`, with one
   `SingleAssignment{C}` slot per mode.

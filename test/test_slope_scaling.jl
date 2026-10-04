@@ -31,7 +31,7 @@ end
 @testset "slope_scaling_update! on empty solution leaves cost_scaling empty" begin
     instance = TestFixtures.small_instance()
     TestFixtures.reset!()
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     slope_scaling_update!(instance, sol)
     @test isempty(instance.travel_time_graph.cost_scaling)
 end
@@ -54,7 +54,7 @@ end
     slope_scaling_update!(instance, sol)
     @test !isempty(instance.travel_time_graph.cost_scaling)
 
-    empty_sol = Solution(instance)
+    empty_sol = SolutionState(instance)
     slope_scaling_update!(instance, empty_sol)
     @test isempty(instance.travel_time_graph.cost_scaling)
 end

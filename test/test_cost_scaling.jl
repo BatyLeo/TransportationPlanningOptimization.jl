@@ -18,7 +18,7 @@ end
 @testset "cost_scaling multiplies edge cost" begin
     instance = TestFixtures.tiny_instance()
     TestFixtures.reset!()  # start from a clean scaling dict
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     bundle = instance.bundles[1]

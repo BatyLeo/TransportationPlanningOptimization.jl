@@ -48,7 +48,7 @@ Returns a [`LocalSearchResult`](@ref) with cost improvement, iteration counts,
 and time-series samples for convergence analysis.
 """
 function local_search!(
-    sol::Solution{C},
+    sol::SolutionState{C},
     instance::Instance,
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=60.0,

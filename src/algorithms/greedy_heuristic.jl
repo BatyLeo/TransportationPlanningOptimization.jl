@@ -6,7 +6,7 @@ solution. Returns `false` without modifying `current_solution` if Dijkstra finds
 feasible path, `true` otherwise.
 """
 function _try_insert_bundle!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
@@ -42,7 +42,7 @@ solution. Throws `ArgumentError` when no feasible path exists: see
 [`_try_insert_bundle!`](@ref) for a non-throwing variant that returns `false` instead.
 """
 function insert_bundle!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
@@ -95,7 +95,7 @@ function greedy_heuristic(
     packing::Symbol=:frozen,
     show_progress::Bool=true,
 )
-    solution = Solution(instance)
+    solution = SolutionState(instance)
     # Sort bundles by decreasing max single-order pack size.
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
     # One bin-packing scratch buffer reused across every bundle and arc.

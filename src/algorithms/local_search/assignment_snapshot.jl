@@ -58,7 +58,7 @@ end
 const _SnapshotUnion{C} = Union{_SingleAssignmentSnapshot{C},_MultiAssignmentSnapshot{C}}
 
 function _snapshot_path_assignments(
-    sol::Solution{C},
+    sol::SolutionState{C},
     instance::Instance,
     bundle_idx::Int;
     cache::Union{Dict{Tuple{Int,Int},_SnapshotUnion{C}},Nothing}=nothing,
@@ -86,7 +86,7 @@ function _snapshot_path_assignments(
 end
 
 function _restore_path_assignments!(
-    sol::Solution, bundle_idx::Int, old_path::Vector{Int}, snapshots::Dict
+    sol::SolutionState, bundle_idx::Int, old_path::Vector{Int}, snapshots::Dict
 )
     sol.bundle_paths[bundle_idx] = old_path
     for (edge, snap) in snapshots
@@ -96,7 +96,7 @@ function _restore_path_assignments!(
 end
 
 function _snapshot_multi_bundle_assignments(
-    sol::Solution{C}, instance::Instance, bundle_idxs::Vector{Int}
+    sol::SolutionState{C}, instance::Instance, bundle_idxs::Vector{Int}
 ) where {C}
     snapshots = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
     for bi in bundle_idxs
@@ -105,7 +105,7 @@ function _snapshot_multi_bundle_assignments(
     return snapshots
 end
 
-function _refresh_dirty_assignments!(sol::Solution, instance::Instance, edges)
+function _refresh_dirty_assignments!(sol::SolutionState, instance::Instance, edges)
     cache = instance.index_cache
     for edge in edges
         assignment = get(sol.assignments, edge, nothing)
@@ -125,7 +125,10 @@ function _refresh_dirty_assignments!(sol::Solution, instance::Instance, edges)
 end
 
 function _restore_multi_bundle_assignments!(
-    sol::Solution, bundle_idxs::Vector{Int}, old_paths::Vector{Vector{Int}}, snapshots::Dict
+    sol::SolutionState,
+    bundle_idxs::Vector{Int},
+    old_paths::Vector{Vector{Int}},
+    snapshots::Dict,
 )
     for (k, bi) in enumerate(bundle_idxs)
         sol.bundle_paths[bi] = old_paths[k]

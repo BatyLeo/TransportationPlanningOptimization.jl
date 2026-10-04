@@ -48,7 +48,7 @@ function load_instance end
 Solve instance `name` of dataset `ds` with the problem's reference solver.
 
 Returns a `NamedTuple` with fields:
-- `solution`: a `Solution` of `instance`, or `nothing` if no solution was found
+- `solution`: a `SolutionState` of `instance`, or `nothing` if no solution was found
 - `instance`: the `Instance` the solution belongs to
 - `objective_value`, `objective_bound`, `relative_gap`, `termination_status`, `solve_time`
 """

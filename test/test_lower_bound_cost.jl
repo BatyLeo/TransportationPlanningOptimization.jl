@@ -42,7 +42,7 @@ end
         joinpath(datadir, "tiny_commodities.csv"),
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    empty_sol = Solution(instance)
+    empty_sol = SolutionState(instance)
 
     TransportationPlanningOptimization.update_bundle_cost_matrix!(empty_sol, instance, 1)
     classic_matrix = copy(instance.travel_time_graph.cost_matrix)
@@ -91,7 +91,7 @@ end
     # The "LB <= classic" invariant is already proved on `tiny` in the
     # "update_bundle_cost_matrix! ..." testset above, so `tiny` suffices here too.
     instance = TestFixtures.tiny_instance()
-    empty_sol = Solution(instance)
+    empty_sol = SolutionState(instance)
     ttg = instance.travel_time_graph
     tsg = instance.time_space_graph
 

@@ -49,15 +49,15 @@ The `greedy_heuristic` accepts a `mode_selector` keyword that controls how commo
 - [`FillThenSpillMode`](@ref): fill the cheapest mode up to its capacity, then spill overflow to the next-cheapest mode on the same edge, and so on. Unlike `CheapestMode`, this can split a single order's commodities across modes that share the same transit time. If the combined capacity across all modes on an edge is below the load, the edge is also treated as infeasible.
 
 ```julia
-sol = greedy_heuristic(instance)                                          # CheapestMode (default)
-sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode())       # capacity-aware
-cost(sol)
+solution_state = greedy_heuristic(instance)                                          # CheapestMode (default)
+solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())       # capacity-aware
+cost(solution_state)
 ```
 
-Inspect the per-mode breakdown via the `MultiAssignment` stored in `sol.assignments`:
+Inspect the per-mode breakdown via the `MultiAssignment` stored in `solution_state.assignments`:
 
 ```julia
-assignment = only(values(sol.assignments))
+assignment = only(values(solution_state.assignments))
 # assignment isa MultiAssignment
 
 for (i, slot) in enumerate(assignment.per_mode)

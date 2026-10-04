@@ -465,7 +465,7 @@ end
     # must match the cost of reconstructing the solution from the stored paths.
     # Pre-fix, these could diverge because placement and Dijkstra used different
     # per-mode accounting on the wrap-collided TSG edge.
-    reconstructed = Solution(deepcopy(sol.bundle_paths), instance)
+    reconstructed = SolutionState(deepcopy(sol.bundle_paths), instance)
     @test is_feasible(reconstructed, instance)
     @test cost(sol) == cost(reconstructed)
 end
@@ -519,11 +519,11 @@ end
     @test ng.graph["A", "B"] isa MultiModalArc
 end
 
-# ── Greedy, rebuilt Solution and local search agree on split legs ─────────────
+# ── Greedy, rebuilt SolutionState and local search agree on split legs ─────────────
 
 # Assert that `sol` is feasible and identical in cost and assignment types to a rebuild.
 function _test_matches_rebuild(sol, instance)
-    rebuilt = Solution(sol.bundle_paths, instance)
+    rebuilt = SolutionState(sol.bundle_paths, instance)
     @test is_feasible(sol, instance)
     @test is_feasible(rebuilt, instance)
     @test cost(sol) ≈ cost(rebuilt)
@@ -556,7 +556,7 @@ end
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     bundle = only(instance.bundles)
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     edges = Dict{Int,Tuple{Int,Int}}()
     for (u, v) in ttg.bundle_arcs[1]
         cache.ttg_code_to_spatial_code[u] == cache.ttg_code_to_spatial_code[v] && continue
@@ -581,7 +581,7 @@ end
     @test length(assignment.per_mode) == 2
     @test [length(commodities_of(slot)) for slot in assignment.per_mode] == [2, 3]
     @test cost(sol) == 3 * 5.0 + 2 * 10.0
-    rebuilt = Solution(sol.bundle_paths, instance; mode_selector=FillThenSpillMode())
+    rebuilt = SolutionState(sol.bundle_paths, instance; mode_selector=FillThenSpillMode())
     @test cost(sol) ≈ cost(rebuilt)
     @test is_feasible(sol, instance)
 end
@@ -619,7 +619,7 @@ end
     su = cache.tsg_code_to_spatial_code[edge[1]]
     sv = cache.tsg_code_to_spatial_code[edge[2]]
     other_arc = cache.edge_group_to_arc[(su, sv, 2)]
-    other = Solution(instance).assignments
+    other = SolutionState(instance).assignments
     TPO._add_order_to_assignment!(
         other,
         edge,

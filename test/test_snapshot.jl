@@ -50,7 +50,7 @@ end
     local_search!(sol, instance; time_limit=2.0)
     restore_solution!(sol, snap, instance)
 
-    # Solution must still be usable after restore
+    # SolutionState must still be usable after restore
     local_search!(sol, instance; time_limit=2.0)
     @test is_feasible(sol, instance)
 end

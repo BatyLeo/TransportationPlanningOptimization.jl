@@ -192,7 +192,7 @@ end
             MetaGraphsNext.label_for(ttg.graph, v)[1] == "B"
     )
 
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     inc = TPO.compute_ttg_edge_incremental_cost(
         sol, instance, instance.bundles[idx_c], ab_edge_c...
     )
@@ -216,7 +216,7 @@ end
     @test isapprox(added_d, 21.0; atol=1e-9)
 
     @test isapprox(cost(sol), 163.0; atol=1e-9)
-    @test isapprox(cost(Solution(sol.bundle_paths, instance)), 163.0; atol=1e-9)
+    @test isapprox(cost(SolutionState(sol.bundle_paths, instance)), 163.0; atol=1e-9)
 
     sol_greedy = greedy_heuristic(instance; show_progress=false)
     @test isapprox(cost(sol_greedy), 163.0; atol=1e-9)
@@ -224,7 +224,7 @@ end
     removed_c = TPO.remove_bundle_path!(sol, instance, idx_c)
     @test isapprox(removed_c, -42.0; atol=1e-9)
 
-    sol2 = Solution(instance)
+    sol2 = SolutionState(instance)
     TPO.add_bundle_path!(sol2, instance, idx_c, _ttg_path(ttg, idx_c, "A", "B", "C"))
     TPO.add_bundle_path!(sol2, instance, idx_d, _ttg_path(ttg, idx_d, "A", "B", "D"))
     removed_d = TPO.remove_bundle_path!(sol2, instance, idx_d)
@@ -301,7 +301,7 @@ end
     path = _ttg_path(ttg, 1, "A", "H", "C")
     @test path[end] == ttg.destination_codes[1]
 
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     TPO.add_bundle_path!(sol, instance, 1, path)
     @test is_feasible(sol, instance)
     @test isapprox(cost(sol), 102.0; atol=1e-9)
@@ -310,7 +310,7 @@ end
     @test isapprox(improvement, 92.0; atol=1e-9)
     @test isapprox(cost(sol), 10.0; atol=1e-9)
 
-    sol_via_h = Solution(instance)
+    sol_via_h = SolutionState(instance)
     TPO.add_bundle_path!(sol_via_h, instance, 1, _ttg_path(ttg, 1, "A", "H", "C"))
     chosen = TPO.choose_best_feasible(
         [sol_via_h, greedy_heuristic(instance; show_progress=false)], instance
@@ -324,7 +324,7 @@ end
     instance = _through_node_instance()
     ttg = instance.travel_time_graph
 
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     ah_edge = only(
         (u, v) for
         (u, v) in ttg.bundle_arcs[1] if MetaGraphsNext.label_for(ttg.graph, u)[1] == "A" &&
@@ -418,7 +418,7 @@ end
     idx_small = findfirst(b -> isapprox(total_size(b), 1.0), instance.bundles)
     idx_large = findfirst(b -> isapprox(total_size(b), 2.0), instance.bundles)
 
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     TPO.insert_bundle!(sol, instance, idx_small)  # fills the cap-1 cheap mode
     TPO.insert_bundle!(sol, instance, idx_large)  # cap-1 full -> spills to cap-100
     @test is_feasible(sol, instance)

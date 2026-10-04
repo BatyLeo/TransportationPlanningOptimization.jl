@@ -17,7 +17,7 @@ sub-instance, or to `(0, 0)` if its bundle was dropped.
 If no bundles survive filtering, an info message is logged and the returned instance
 has an empty `bundles` vector.
 """
-function extract_filtered_instance(instance::Instance, filtering_solution::Solution)
+function extract_filtered_instance(instance::Instance, filtering_solution::SolutionState)
     keep_idxs = findall(p -> length(p) > 2, filtering_solution.bundle_paths)
 
     if isempty(keep_idxs)
@@ -90,7 +90,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Build a fresh `Solution` on `sub_instance` that reserves the capacity and
+Build a fresh `SolutionState` on `sub_instance` that reserves the capacity and
 cost of every bundle of `full_instance` that `extract_filtered_instance`
 dropped (the direct-path bundles, i.e. `filtering_sol.bundle_paths[i]` of
 length 2).
@@ -108,9 +108,9 @@ A dropped bundle whose direct arc is not in `sub_instance` is skipped
 entirely, since it cannot contend with kept bundles for capacity there.
 """
 function preload_filtered_bundles(
-    filtering_sol::Solution, full_instance::Instance, sub_instance::Instance
+    filtering_sol::SolutionState, full_instance::Instance, sub_instance::Instance
 )
-    sol = Solution(sub_instance)
+    sol = SolutionState(sub_instance)
     full_tsg = full_instance.time_space_graph.graph
     sub_tsg = sub_instance.time_space_graph.graph
     sub_cache = sub_instance.index_cache

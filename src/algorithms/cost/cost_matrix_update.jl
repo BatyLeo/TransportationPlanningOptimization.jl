@@ -5,7 +5,7 @@ Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
 function compute_ttg_edge_incremental_cost(
-    current_solution::Solution{C},
+    current_solution::SolutionState{C},
     instance::Instance,
     bundle::Bundle,
     u_ttg_code::Int,
@@ -81,7 +81,7 @@ When the TTG edge is the bundle's direct arc (spatial labels equal to
 applied instead of the fractional formula.
 """
 function compute_ttg_edge_lower_bound_cost(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle::Bundle,
     u_ttg_code::Int,
@@ -244,7 +244,7 @@ A future task can expose `is_direct_for(arc, bundle)` dispatched on
 arc-type taxonomy. Out of scope for now.
 """
 function compute_ttg_edge_filtering_cost(
-    current_solution::Solution{C},
+    current_solution::SolutionState{C},
     instance::Instance,
     bundle::Bundle,
     u_ttg_code::Int,
@@ -291,7 +291,7 @@ projections are only computed on those. Reuses the greedy capacity gate
 are handled like in the construction.
 """
 function _fits_fixed_load(
-    fixed_solution::Solution,
+    fixed_solution::SolutionState,
     fixed_pairs::Set{Tuple{Int,Int}},
     instance::Instance,
     bundle::Bundle,
@@ -338,7 +338,7 @@ arcs, eliminating the per-arc bin-packing allocations. Ad-hoc callers that omit
 it get a fresh buffer and behave exactly as before.
 """
 function update_bundle_cost_matrix!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle::Bundle,
     bundle_arcs::Vector{Tuple{Int,Int}},
@@ -392,7 +392,7 @@ of bundle `bundle_idx`. Forwards to the lower-level overload with the bundle
 and its precomputed `bundle_arcs[bundle_idx]`.
 """
 function update_bundle_cost_matrix!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
@@ -443,7 +443,7 @@ Falls back to sequential `update_bundle_cost_matrix!` when only one thread
 is available.
 """
 function parallel_update_bundle_cost_matrix!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle::Bundle,
     bundle_arcs::Vector{Tuple{Int,Int}},
@@ -516,7 +516,7 @@ function parallel_update_bundle_cost_matrix!(
 end
 
 function parallel_update_bundle_cost_matrix!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector,

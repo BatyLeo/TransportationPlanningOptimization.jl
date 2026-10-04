@@ -135,4 +135,4 @@ Instance(;
 
 The `input` is kept exactly as given, and `commodity_to_order[k]` is the `(bundle_idx, order_idx)` of the `k`-th input commodity.
 
-Algorithms receive an `Instance` and produce a [`Solution`](@ref), which maps each bundle index to a path (sequence of node codes) in the `TravelTimeGraph`.
+Algorithms receive an `Instance` and produce a [`SolutionState`](@ref), which maps each bundle index to a path (sequence of node codes) in the `TravelTimeGraph`.

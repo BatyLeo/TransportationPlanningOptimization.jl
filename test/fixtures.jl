@@ -22,7 +22,7 @@ const DATADIR = joinpath(@__DIR__, "public")
 const _PARSED = Dict{String,Any}()
 # (name, wrap_time) => memoized built Instance
 const _INSTANCE = Dict{Tuple{String,Bool},Any}()
-# (name, wrap_time) => memoized greedy Solution (never handed out directly)
+# (name, wrap_time) => memoized greedy SolutionState (never handed out directly)
 const _GREEDY = Dict{Tuple{String,Bool},Any}()
 
 function _parsed(name::String)
@@ -53,7 +53,7 @@ end
 struct ReinsertPerturbation <: AbstractPerturbation end
 
 function TransportationPlanningOptimization.perturbate!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     ::ReinsertPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),

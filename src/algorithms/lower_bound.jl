@@ -4,7 +4,7 @@
 # and insert it. `on_fixed(i, path)` is called for each bundle whose path is its
 # direct arc (length 2 after shortcut removal), i.e. the ones filtering fixes.
 function _shortest_path_assign!(
-    current_solution::Solution,
+    current_solution::SolutionState,
     instance::Instance,
     mode_selector::AbstractModeSelector,
     cost_fn,
@@ -14,7 +14,7 @@ function _shortest_path_assign!(
 )
     ttg = instance.travel_time_graph
     # Initialize an empty solution and a reusable buffer
-    empty_sol = Solution(instance)
+    empty_sol = SolutionState(instance)
     buffer = BinPackingBuffer()
     # Sort bundles by max_pack_size
     sorted_indices = sortperm(instance.bundles; by=max_pack_size, rev=true)
@@ -58,7 +58,7 @@ $TYPEDSIGNATURES
 
 For each bundle, find the cheapest path under the relaxed lower-bound cost
 (fractional bin counts on `BinPackingArcCost` arcs) and insert it into a fresh
-`Solution`. Bundles are processed in decreasing order of `max_pack_size`, but
+`SolutionState`. Bundles are processed in decreasing order of `max_pack_size`, but
 every bundle's cost matrix is computed against the *empty* solution, so paths
 are independent of one another. Each order is still gated against every arc's
 hard capacity on its own (see `_edge_lower_bound_cost`), but orders from
@@ -72,7 +72,7 @@ function lower_bound(
     mode_selector::AbstractModeSelector=CheapestMode();
     show_progress::Bool=true,
 )
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     return _shortest_path_assign!(
         sol,
         instance,
@@ -103,10 +103,10 @@ function lower_bound_filtering(
     mode_selector::AbstractModeSelector=CheapestMode();
     show_progress::Bool=true,
 )
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     # Load of the fixed bundles only, read by the capacity gate (pricing stays
     # against the empty solution).
-    fixed = Solution(instance)
+    fixed = SolutionState(instance)
     fixed_pairs = Set{Tuple{Int,Int}}()
     cache = instance.index_cache
     function fix!(i, path)

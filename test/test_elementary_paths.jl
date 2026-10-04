@@ -68,7 +68,7 @@ end
 @testset "bundle_shortest_path avoids loops that Dijkstra takes" begin
     instance = looping_instance()
     ttg = instance.travel_time_graph
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     spatial = instance.index_cache.ttg_code_to_spatial_code
 
     # Insert the big bundle (index of O1 -> D) first, as greedy does.
@@ -160,14 +160,14 @@ function splice_instance(;
     return Instance(nodes, arcs, [commodity], Day(1))
 end
 
-# Solution holding the path O -> P -> H -> C -> D and the (H, C) arc codes.
+# SolutionState holding the path O -> P -> H -> C -> D and the (H, C) arc codes.
 function splice_solution(instance)
     ttg = instance.travel_time_graph
     code(id, τ) = MetaGraphsNext.code_for(ttg.graph, (id, τ))
     path = [
         code("O", 0), code("P", 1), code("H", 2), code("C", 3), ttg.destination_codes[1]
     ]
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     TPO.add_bundle_path!(sol, instance, 1, path)
     return sol, path[3], path[4]
 end
@@ -287,7 +287,7 @@ end
 @testset "bundle_shortest_path equals Dijkstra when there is no loop" begin
     for instance in (TestFixtures.tiny_instance(), TestFixtures.small_instance())
         ttg = instance.travel_time_graph
-        sol = Solution(instance)
+        sol = SolutionState(instance)
         for i in eachindex(instance.bundles)
             TPO.update_bundle_cost_matrix!(sol, instance, i)
             origin, dest = ttg.origin_codes[i], ttg.destination_codes[i]

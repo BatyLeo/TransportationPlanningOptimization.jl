@@ -137,7 +137,7 @@ The increase is the sum, over every path edge, of the arc-cost change (via
 `_update_single_assignment_cost!`) plus the change in the head node's cost.
 """
 function add_bundle_path!(
-    current_solution::Solution{C},
+    current_solution::SolutionState{C},
     instance::Instance,
     bundle_idx::Int,
     path::Vector{Int};
@@ -160,7 +160,7 @@ $TYPEDSIGNATURES
 Commit every order of `bundle` along the already cleaned `path` into
 `assignments`, one `(order, edge)` at a time, and return the cost increase.
 Each commit receives a single order, whose commodities are sorted descending by
-size. Shared by [`add_bundle_path!`](@ref) and the `Solution(bundle_paths, instance)`
+size. Shared by [`add_bundle_path!`](@ref) and the `SolutionState(bundle_paths, instance)`
 constructor, so both pack identically.
 """
 function _commit_bundle_path!(
@@ -221,7 +221,7 @@ the expected TSG edges. That should never happen when the bundle's stored
 path is consistent with how it was added.
 """
 function remove_bundle_path!(
-    current_solution::Solution{C}, instance::Instance, bundle_idx::Int
+    current_solution::SolutionState{C}, instance::Instance, bundle_idx::Int
 ) where {C}
     path = current_solution.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
@@ -241,13 +241,13 @@ function remove_bundle_path!(
 end
 
 """
-    Solution(bundle_paths, instance; mode_selector=CheapestMode())
+    SolutionState(bundle_paths, instance; mode_selector=CheapestMode())
 
-Construct a `Solution` from bundle paths and an instance.
+Construct a `SolutionState` from bundle paths and an instance.
 This constructor precomputes commodity distributions on arcs, bin-packing results, and total cost.
 Throws an `ArgumentError` if a path uses an edge that has no network arc.
 """
-function Solution(
+function SolutionState(
     bundle_paths::Vector{Vector{Int}},
     instance::Instance{<:Bundle{<:Order{IDA,I}}};
     mode_selector::AbstractModeSelector=CheapestMode(),
@@ -266,5 +266,5 @@ function Solution(
         )
     end
 
-    return Solution{C}(cleaned_paths, assignments)
+    return SolutionState{C}(cleaned_paths, assignments)
 end

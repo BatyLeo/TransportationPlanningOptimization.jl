@@ -13,7 +13,7 @@ using .TestFixtures
 struct DegradingPerturbation <: AbstractPerturbation end
 
 function TransportationPlanningOptimization.perturbate!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     p::DegradingPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),

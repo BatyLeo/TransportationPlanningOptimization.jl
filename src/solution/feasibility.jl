@@ -17,11 +17,11 @@ Feasibility requires:
    belonging to no bundle of the instance (capacity reservations, see
    [`preload_filtered_bundles`](@ref)).
 """
-function is_feasible(sol::Solution, instance::Instance; verbose::Bool=false, tol=EPS)
+function is_feasible(sol::SolutionState, instance::Instance; verbose::Bool=false, tol=EPS)
     (; travel_time_graph, time_space_graph) = instance
     if length(sol.bundle_paths) != length(instance.bundles)
         verbose &&
-            @warn "Solution has $(length(sol.bundle_paths)) bundle paths for $(length(instance.bundles)) bundles."
+            @warn "SolutionState has $(length(sol.bundle_paths)) bundle paths for $(length(instance.bundles)) bundles."
         return false
     end
     for (bundle_idx, path) in enumerate(sol.bundle_paths)
@@ -298,7 +298,7 @@ of `sol` route over each time-space edge (same projection as [`add_bundle_path!`
 Commodities owned by no bundle of `instance` (reservations) are ignored.
 """
 function _check_assignment_load(
-    sol::Solution{C}, instance::Instance; verbose::Bool
+    sol::SolutionState{C}, instance::Instance; verbose::Bool
 ) where {C}
     owned = Set{C}(
         c for bundle in instance.bundles for o in bundle.orders for c in o.commodities

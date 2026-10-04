@@ -11,7 +11,7 @@ using TransportationPlanningOptimization.Problems.Inbound
 struct IntegrationReinsertPerturbation <: AbstractPerturbation end
 
 function TransportationPlanningOptimization.perturbate!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     p::IntegrationReinsertPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),

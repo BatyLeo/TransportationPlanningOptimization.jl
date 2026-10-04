@@ -46,11 +46,11 @@ include("instance/instance.jl")
 include("solution/mode_selector.jl")
 include("solution/arc_assignment.jl")
 include("solution/assignment_operations.jl")
-include("solution/solution.jl")
+include("solution/solution_state.jl")
 include("solution/path_operations.jl")
 include("solution/feasibility.jl")
 include("solution/parsing.jl")
-include("solution/network_solution.jl")
+include("solution/solution.jl")
 
 include("algorithms/shortest_path.jl")
 include("algorithms/cost/edge_cost.jl")
@@ -81,7 +81,7 @@ export Node, NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
 export AbstractNodeCostFunction, NoNodeCost, LinearNodeCost
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost, SumArcCost
 export NetworkGraph, TimeSpaceGraph, TravelTimeGraph
-export Solution, NetworkSolution
+export SolutionState, Solution
 export AbstractModeSelector, CheapestMode, FillThenSpillMode
 
 # Instance queries

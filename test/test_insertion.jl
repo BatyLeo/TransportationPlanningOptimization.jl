@@ -45,8 +45,8 @@ using MetaGraphsNext
         return findfirst(b -> b.origin_id == org && b.destination_id == dst, inst.bundles)
     end
 
-    @testset "Empty Solution Initialization" begin
-        sol = Solution(instance)
+    @testset "Empty SolutionState Initialization" begin
+        sol = SolutionState(instance)
         @test bundle_count(instance) == 1
         @test isempty(sol.bundle_paths[1])
         @test isempty(sol.assignments)
@@ -54,7 +54,7 @@ using MetaGraphsNext
     end
 
     @testset "Insert Bundle (LinearArcCost)" begin
-        sol = Solution(instance)
+        sol = SolutionState(instance)
         idx = find_bundle_idx(instance, "A", "C")
         insert_bundle!(sol, instance, idx)
 
@@ -119,7 +119,7 @@ using MetaGraphsNext
     instance_bp = Instance(nodes, arcs_bp, vcat(comms_bp_1, comms_bp_2), time_step)
 
     @testset "Incremental Insertion (BinPackingArcCost)" begin
-        sol = Solution(instance_bp)
+        sol = SolutionState(instance_bp)
 
         # Insert first bundle (3 items of size 6.0)
         # Should take 3 bins per arc. (3 bins * 100 * 2 arcs = 600)
