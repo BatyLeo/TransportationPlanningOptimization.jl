@@ -76,7 +76,7 @@ ls_cost = cost(solution)
 # [`Problems.MultiCommodityFlow.benchmark_solve`](@ref) solves the exact UMCF MIP with
 # JuMP (HiGHS by default), giving the optimal value (up to the solver MIP gap) as the
 # gap reference.
-# It returns the solved `Instance` and a `Solution` of it, which we check for
+# It returns the solved `Instance` and a `SolutionState` of it, which we check for
 # feasibility:
 
 umcf_result = benchmark_solve(CanadC(), "c33")
