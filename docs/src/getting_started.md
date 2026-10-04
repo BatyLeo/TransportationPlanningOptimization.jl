@@ -122,6 +122,12 @@ After creating an `Instance`, use it to:
    total_cost = cost(solution)
    ```
 
+4. **Read** the solution on your input arcs and commodities, with dates:
+   ```julia
+   ns = NetworkSolution(solution, instance)
+   ```
+   See [Reading a solution on the input network](@ref network_solution_guide).
+
 ## Next Steps
 
 - See the [Basic Example Tutorial](tutorials/basic_example.md) for a minimal hands-on example

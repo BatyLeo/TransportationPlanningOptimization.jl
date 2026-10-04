@@ -50,6 +50,7 @@ include("solution/solution.jl")
 include("solution/path_operations.jl")
 include("solution/feasibility.jl")
 include("solution/parsing.jl")
+include("solution/network_solution.jl")
 
 include("algorithms/shortest_path.jl")
 include("algorithms/cost/edge_cost.jl")
@@ -80,7 +81,7 @@ export Node, NetworkNode, AbstractNetworkArc, NetworkArc, MultiModalArc, Arc
 export AbstractNodeCostFunction, NoNodeCost, LinearNodeCost
 export AbstractArcCostFunction, LinearArcCost, BinPackingArcCost, SumArcCost
 export NetworkGraph, TimeSpaceGraph, TravelTimeGraph
-export Solution
+export Solution, NetworkSolution
 export AbstractModeSelector, CheapestMode, FillThenSpillMode
 
 # Instance queries

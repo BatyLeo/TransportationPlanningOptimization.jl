@@ -87,6 +87,9 @@ using .TestFixtures
         @testset "Solution" begin
             include("test_solution.jl")
         end
+        @testset "Network solution" begin
+            include("test_network_solution.jl")
+        end
         @testset "Solution parsing" begin
             include("test_solution_parsing.jl")
         end

@@ -163,6 +163,19 @@ end
 """
 $TYPEDSIGNATURES
 
+The `LightCommodity` that each of the `c.quantity` copies of `c` expands to.
+Shared by the instance construction and the projection of a solution onto the input,
+so that equality and hashing always match.
+"""
+function _light_commodity(c::Commodity)
+    return LightCommodity(;
+        origin_id=c.origin_id, destination_id=c.destination_id, size=c.size, info=c.info
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
 Expand each `Commodity` into `LightCommodity` items and group them into `Order`s keyed by
 `(time_step_idx, origin_id, destination_id, group_by(commodity))`.
 
@@ -190,12 +203,7 @@ function _expand_commodities(
     commodity_keys = Vector{typeof(first_key)}(undef, length(commodities))
 
     for (k, commodity) in enumerate(commodities)
-        light_commodity = LightCommodity(;
-            origin_id=commodity.origin_id,
-            destination_id=commodity.destination_id,
-            size=commodity.size,
-            info=commodity.info,
-        )
+        light_commodity = _light_commodity(commodity)
 
         light_commodities_start_idx = length(full_commodities) + 1
         for _ in 1:(commodity.quantity)
