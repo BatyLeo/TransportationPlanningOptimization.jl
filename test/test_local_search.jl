@@ -34,13 +34,15 @@ end
     @test isapprox(c0 - cost(sol), saved; atol=1e-6)
 end
 
-@testset "TPO.bundle_reinsertion_improvement! saved matches cost(sol) delta for small" begin
-    instance = TestFixtures.small_instance()
-    sol = TestFixtures.small_greedy()
-    c0 = cost(sol)
-    saved = TPO.bundle_reinsertion_improvement!(sol, instance)
-    @test isapprox(c0 - cost(sol), saved; atol=1e-3)
-    @test saved > 0.0  # on small, reinsertion is expected to improve (~84k from earlier benchmark)
+for packing in (:frozen, :ffd_union)
+    @testset "TPO.bundle_reinsertion_improvement! saved matches cost(sol) delta for small (packing=$packing)" begin
+        instance = TestFixtures.small_instance()
+        sol = TestFixtures.small_greedy()
+        c0 = cost(sol)
+        saved = TPO.bundle_reinsertion_improvement!(sol, instance; packing=packing)
+        @test isapprox(c0 - cost(sol), saved; atol=1e-3)
+        @test saved > 0.0  # on small, reinsertion is expected to improve (~84k from earlier benchmark)
+    end
 end
 
 @testset "local_search! does not increase cost and stays feasible" begin
@@ -54,6 +56,27 @@ end
     @test cost(sol) <= c0 + 1e-6
     @test isapprox(res.final_cost, cost(sol); atol=1e-6)
     @test res.n_iter >= 1
+end
+
+@testset "local_search! with packing=:ffd_union keeps cost consistent" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    c0 = cost(sol)
+
+    res = local_search!(
+        sol,
+        instance;
+        max_iter=300,
+        packing=:ffd_union,
+        allow_repack=false,
+        rng=MersenneTwister(0),
+    )
+
+    @test is_feasible(sol, instance)
+    @test isapprox(c0 - cost(sol), res.saved; atol=1e-3)
+    @test isapprox(res.final_cost, cost(sol); atol=1e-6)
+    @test res.n_iter >= 1
+    @test res.saved > 0.0
 end
 
 @testset "TPO.tentative_best_fit_count parity with compute_bin_assignments_bfd" begin
@@ -194,7 +217,7 @@ end
     # Bounded by max_iter (deterministic given the fixed rng), not by the
     # clock. 5000 iterations run in low tens of seconds, time_limit is a
     # generous safety cap only and must never be the binding constraint.
-    local_search!(
+    res = local_search!(
         sol_ls,
         instance;
         max_iter=5000,
@@ -204,8 +227,20 @@ end
     )
     cost_ls = cost(sol_ls)
 
-    # Local search and the reinsertion pass reach different local optima,
-    # so the comparison uses a relative tolerance instead of strict dominance.
+    # Rejected moves are restored exactly: the accepted savings add up to the cost change,
+    # and every bin holds exactly the commodities of its slot.
+    @test cost_ls ≈ greedy_cost - res.saved rtol = 1e-9
+    @test is_feasible(sol_ls, instance)
+    slots = [
+        slot for a in values(sol_ls.assignments) for
+        slot in (a isa TPO.SingleAssignment ? [a] : a.per_mode) if !isempty(slot.bins)
+    ]
+    @test all(
+        sort([c.size for b in s.bins for c in b.commodities]) == sort([c.size for c in s.commodities])
+        for s in slots
+    )
+    @test all(!isempty(b.commodities) for s in slots for b in s.bins)
+
     @test cost_ls < greedy_cost
     @test cost_ls <= cost_solo * (1 + 5e-3)
 end
@@ -258,4 +293,112 @@ end
         @test isapprox(c_before - c_after, improved; atol=1e-3)
         @test is_feasible(sol, instance)
     end
+end
+
+@testset "bin_packing repack keeps all terms of a SumArcCost slot" begin
+    bp = BinPackingArcCost(10.0, 100)
+    sum_cost = SumArcCost((bp, LinearArcCost(0.5), LinearArcCost(0.25)))
+    comms = [
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (65, 60, 40, 35)
+    ]
+    # one commodity per bin: suboptimal packing (4 bins instead of 2)
+    bins = reduce(vcat, [TPO.compute_bin_assignments(bp, [c]) for c in comms])
+    sorted_comms = sort(comms; by=c -> c.size, rev=true)
+    slot = TPO.SingleAssignment{eltype(comms)}(sorted_comms, bins, 0.0)
+    slot.sorted = true
+    slot.arc_cost = 10.0 * length(bins) + 0.75 * sum(c.size for c in comms)
+
+    before = slot.arc_cost
+    @test length(slot.bins) == 4
+    saved = TPO._repack_slot!(slot, bp)
+
+    @test length(slot.bins) == 2
+    @test saved > 0
+    @test slot.arc_cost ≈ before - saved
+    @test isapprox(slot.arc_cost, TPO.evaluate(sum_cost, slot.commodities); atol=1e-9)
+end
+
+@testset "bin_packing repack dispatches on a NetworkArc with a SumArcCost" begin
+    bp = BinPackingArcCost(10.0, 100)
+    sum_cost = SumArcCost((bp, LinearArcCost(0.5)))
+    arc = NetworkArc(; travel_time_steps=1, capacity=typemax(Int), cost=sum_cost)
+    comms = [
+        LightCommodity(; origin_id="o", destination_id="d", size=Float64(s), info=nothing)
+        for s in (65, 60, 40, 35)
+    ]
+    bins = reduce(vcat, [TPO.compute_bin_assignments(bp, [c]) for c in comms])
+    slot = TPO.SingleAssignment{eltype(comms)}(
+        sort(comms; by=c -> c.size, rev=true), bins, 0.0
+    )
+    slot.sorted = true
+    # price the 4 one-commodity bins by hand (evaluate would repack optimally)
+    slot.arc_cost = 10.0 * length(bins) + 0.5 * sum(c.size for c in comms)
+    before = slot.arc_cost
+
+    saved = TPO._repack_assignment!(slot, arc)
+
+    @test saved > 0
+    @test slot.arc_cost <= before
+    @test slot.arc_cost ≈ before - saved
+    @test isapprox(slot.arc_cost, TPO.evaluate(sum_cost, slot.commodities); atol=1e-9)
+end
+
+@testset "bin_packing_improvement! keeps cost consistent on SumArcCost bin-packing arcs" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    arcs = [
+        TPO.tsg_edge_arc(instance.index_cache, e[1], e[2]) for e in keys(sol.assignments)
+    ]
+    @test any(a -> a isa NetworkArc && a.cost isa SumArcCost, arcs)
+    c0 = cost(sol)
+    # (slot, cost_per_bin, bins before) for every slot with a bin-packing term.
+    packed = [
+        (slot, bp.cost_per_bin, length(slot.bins)) for (slot, bp) in (
+            (
+                s,
+                TPO._bin_packing_cost_of(TPO.tsg_edge_arc(instance.index_cache, e...).cost),
+            ) for (e, s) in sol.assignments
+        ) if bp !== nothing
+    ]
+    saved = TPO.bin_packing_improvement!(sol, instance)
+    freed = sum(cpb * (n0 - length(s.bins)) for (s, cpb, n0) in packed)
+    @test any(t -> length(t[1].bins) < t[3], packed)
+    @test saved ≈ freed atol = 1e-6
+    @test saved >= -1e-6
+    @test cost(sol) <= c0 + 1e-6
+    @test isapprox(c0 - saved, cost(sol); atol=1e-6)
+    @test is_feasible(sol, instance)
+end
+
+@testset "is_feasible rejects an empty bin on a bin-packing arc" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    @test is_feasible(sol, instance)
+    slot = first(
+        s for (e, s) in sol.assignments if !isempty(s.bins) &&
+            TPO._bin_packing_cost_of(TPO.tsg_edge_arc(instance.index_cache, e...).cost) !==
+            nothing
+    )
+    push!(slot.bins, TPO.Bin(similar(slot.commodities, 0), 100.0))
+    @test_logs (:warn, r"empty bin") match_mode = :any @test !is_feasible(
+        sol, instance; verbose=true
+    )
+end
+
+@testset "local_search! with refine_two_node=true keeps the cost consistent" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    c0 = cost(sol)
+    res = local_search!(
+        sol,
+        instance;
+        refine_two_node=true,
+        allow_reintro=false,
+        max_iter=200,
+        rng=MersenneTwister(7),
+    )
+    @test res.n_iter >= 1
+    @test is_feasible(sol, instance)
+    @test isapprox(c0 - res.saved, cost(sol); atol=1e-6)
 end

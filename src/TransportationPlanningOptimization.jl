@@ -54,6 +54,7 @@ include("solution/solution.jl")
 include("solution/solution_state_from_solution.jl")
 
 include("algorithms/shortest_path.jl")
+include("algorithms/cost/empty_pack_counts.jl")
 include("algorithms/cost/edge_cost.jl")
 include("algorithms/cost/cost_matrix_update.jl")
 include("algorithms/greedy_heuristic.jl")

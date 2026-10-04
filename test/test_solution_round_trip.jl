@@ -1,5 +1,6 @@
 using Test
 using Dates
+using Random
 using TransportationPlanningOptimization
 
 const TPO = TransportationPlanningOptimization
@@ -411,5 +412,40 @@ end
     ]
     for (fragment, plan) in cases
         @test_throws rejects(fragment) rebuild(sub_instance, plan)
+    end
+end
+
+@testset "Frozen local search and in-place removal on a rebuilt state" begin
+    packed = TestFixtures._leg_instance(
+        [(BinPackingArcCost(10.0, 3), 1, 100)], 3; quantity=5, departure_days=(1, 2)
+    )
+    small = TestFixtures.small_instance(; wrap_time=false)
+    cases = [
+        (small, TestFixtures.small_greedy(; wrap_time=false)),
+        (TestFixtures.tiny_instance(), TestFixtures.tiny_greedy()),
+        (packed, greedy_heuristic(packed; show_progress=false)),
+    ]
+    function arc_costs_match(s)
+        return all(sl.arc_cost ≈ 10.0 * length(sl.bins) for sl in values(s.assignments))
+    end
+    for (instance, state) in cases
+        rebuild() = SolutionState(Solution(state, instance), instance)
+        rebuilt = rebuild()
+        start = cost(rebuilt)
+        res = local_search!(rebuilt, instance; max_iter=100, rng=Random.MersenneTwister(1))
+        @test is_feasible(rebuilt, instance)
+        instance === packed && @test arc_costs_match(rebuilt)
+        @test start - res.saved ≈ cost(rebuilt)
+        instance === small && @test res.saved > 0
+
+        rebuilt = rebuild()
+        path = copy(rebuilt.bundle_paths[1])
+        bins_before = sum(length(bins) for (_, (_, bins)) in slot_contents(rebuilt); init=0)
+        @test bins_before > 0
+        TPO.remove_bundle_path!(rebuilt, instance, 1)
+        TPO.add_bundle_path!(rebuilt, instance, 1, path)
+        @test is_feasible(rebuilt, instance)
+        @test all(all(!isempty, bins) for (_, (_, bins)) in slot_contents(rebuilt))
+        instance === packed && @test arc_costs_match(rebuilt)
     end
 end

@@ -177,6 +177,12 @@ that arc, merge them, reroute the merged bundle via Dijkstra, splice the new
 sub-path into each lifted bundle, optionally refine, and accept iff the cost
 strictly improves. Returns the cost improvement (`0.0` if reverted or no
 bundles traversed the arc).
+
+When the absolute time `deadline` (as `time()`) passes during the move, the move is
+rolled back and `0.0` is returned. The deadline is checked after each removal, every
+few arcs of the merged bundle's cost-matrix sweep, and before the new paths are added.
+During the refinement it only stops the remaining reinsertions (the ones already
+accepted are kept and the final accept or reject still applies).
 """
 function two_node_common_incremental!(
     sol::SolutionState,
@@ -186,13 +192,14 @@ function two_node_common_incremental!(
     mode_selector::AbstractModeSelector=CheapestMode(),
     cost_threshold::Real=0.0,
     refine::Bool=true,
-    packing::Symbol=:ffd_union,
+    packing::Symbol=:frozen,
     cost_packing::Symbol=:frozen,
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
     snapshot_cache::Union{Dict,Nothing}=nothing,
+    deadline::Float64=Inf,
 )
     lifted_idxs = bundles_through_arc(sol, src, dst)
     isempty(lifted_idxs) && return 0.0
@@ -208,18 +215,26 @@ function two_node_common_incremental!(
 
     snapshots = _snapshot_multi_bundle_assignments(sol, instance, lifted_idxs)
 
-    # Track cost deltas from remove/add/refine to avoid calling cost(sol)
-    # twice. _refresh_dirty_assignments! materializes bins but does not
-    # change slot.arc_cost, so its delta is zero.
+    # Track cost deltas from remove/add/refine to avoid calling cost(sol) twice.
     cost_delta = 0.0
+    expired = false
     for i in lifted_idxs
         cost_delta += remove_bundle_path!(sol, instance, i)
+        if time() > deadline
+            expired = true
+            break
+        end
     end
-    _refresh_dirty_assignments!(sol, instance, keys(snapshots))
+
+    if expired
+        _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
+        return 0.0
+    end
 
     virtual_bundle, virtual_arcs = merge_bundles(instance, lifted_idxs)
+    empty_counts = empty_pack_counts(instance, virtual_bundle, virtual_arcs)
 
-    if Threads.nthreads() > 1 && buffer_pool !== nothing
+    in_time = if Threads.nthreads() > 1 && buffer_pool !== nothing
         parallel_update_bundle_cost_matrix!(
             sol,
             instance,
@@ -228,11 +243,24 @@ function two_node_common_incremental!(
             mode_selector,
             buffer_pool;
             packing=cost_packing,
+            empty_counts,
+            deadline,
         )
     else
         update_bundle_cost_matrix!(
-            sol, instance, virtual_bundle, virtual_arcs, mode_selector; packing=cost_packing
+            sol,
+            instance,
+            virtual_bundle,
+            virtual_arcs,
+            mode_selector;
+            packing=cost_packing,
+            empty_counts,
+            deadline,
         )
+    end
+    if !in_time
+        _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
+        return 0.0
     end
     ttg = instance.travel_time_graph
     spatial = instance.index_cache.ttg_code_to_spatial_code
@@ -260,17 +288,22 @@ function two_node_common_incremental!(
         end
     end
 
-    if isempty(new_sub_path)
+    if isempty(new_sub_path) || time() > deadline
         _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0
     end
 
+    # Snapshot the edges only the new paths touch, so a rejected move restores them too.
+    for (i, new_path) in zip(lifted_idxs, new_paths)
+        _snapshot_path_assignments(sol, instance, i, new_path; cache=snapshots, clear=false)
+    end
     for (i, new_path) in zip(lifted_idxs, new_paths)
         cost_delta += add_bundle_path!(sol, instance, i, new_path; mode_selector, packing)
     end
 
     if refine
         for i in Random.shuffle(lifted_idxs)
+            time() > deadline && break
             bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[i]
             cost_delta -= _try_reinsert_bundle!(
                 sol,
@@ -285,6 +318,7 @@ function two_node_common_incremental!(
                 workspace,
                 buffer_pool,
                 snapshot_cache,
+                outer_snapshots=snapshots,
             )
         end
     end
@@ -292,9 +326,6 @@ function two_node_common_incremental!(
     if cost_delta < -COST_IMPROVEMENT_EPS
         return -cost_delta
     else
-        for i in lifted_idxs
-            remove_bundle_path!(sol, instance, i)
-        end
         _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0
     end
@@ -315,7 +346,7 @@ function loop_two_nodes!(
     cost_threshold_relative::Real=5e-5,
     refine::Bool=true,
     rng::Random.AbstractRNG=Random.default_rng(),
-    packing::Symbol=:ffd_union,
+    packing::Symbol=:frozen,
     cost_packing::Symbol=:frozen,
 )
     valid_pairs = compute_candidate_nodes(instance.travel_time_graph)
@@ -336,6 +367,7 @@ function loop_two_nodes!(
             refine,
             packing,
             cost_packing,
+            deadline=Float64(t_start + time_limit),
         )
     end
     return saved
@@ -365,6 +397,7 @@ function _run_two_node_step!(
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
     snapshot_cache::Union{Dict,Nothing}=nothing,
+    deadline::Float64=Inf,
 )
     isempty(valid_pairs) && return 0.0
     (src, dst) = rand(rng, valid_pairs)
@@ -383,5 +416,6 @@ function _run_two_node_step!(
         workspace,
         buffer_pool,
         snapshot_cache,
+        deadline,
     )
 end

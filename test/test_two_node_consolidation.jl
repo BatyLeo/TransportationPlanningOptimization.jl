@@ -2,6 +2,7 @@ using Test
 using TransportationPlanningOptimization
 using Dates
 using Graphs
+using SparseArrays: SparseArrays
 using MetaGraphsNext: label_for, code_for
 using Random: MersenneTwister
 using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
@@ -267,4 +268,96 @@ end
         @test o.aggregate.stock_cost ===
             sum(x.info.stock_cost for x in o.commodities; init=0.0)
     end
+end
+
+# First arc of the solution traversed by at least two bundles.
+function shared_arc(sol)
+    for path in sol.bundle_paths, k in 1:(length(path) - 1)
+        s, d = path[k], path[k + 1]
+        length(TPO.bundles_through_arc(sol, s, d)) >= 2 && return s, d
+    end
+    return error("no arc with >= 2 bundles")
+end
+
+@testset "precomputed empty-arc FFD counts leave the merged cost matrix unchanged" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    src, dst = shared_arc(sol)
+    lifted = TPO.bundles_through_arc(sol, src, dst)
+    foreach(i -> TPO.remove_bundle_path!(sol, instance, i), lifted)
+    virtual, arcs = TPO.merge_bundles(instance, lifted)
+    nz = SparseArrays.nonzeros(instance.travel_time_graph.cost_matrix)
+
+    for packing in (:frozen, :ffd_union)
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, virtual, arcs, TPO.CheapestMode(); packing
+        )
+        plain = copy(nz)
+        counts = TPO.empty_pack_counts(instance, virtual, arcs)
+        @test all(ec -> !isempty(ec.capacities), counts)
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, virtual, arcs, TPO.CheapestMode(); packing, empty_counts=counts
+        )
+        @test reinterpret(UInt64, nz) == reinterpret(UInt64, plain)
+        @test any(isfinite, plain)
+        # Deliberately wrong counts must change the matrix, so they are really used.
+        bumped = [TPO.EmptyPackCounts(ec.capacities, ec.counts .+ 1) for ec in counts]
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, virtual, arcs, TPO.CheapestMode(); packing, empty_counts=bumped
+        )
+        @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
+    end
+end
+
+@testset "two_node_common_incremental! with a passed deadline restores the solution" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    before = deepcopy(sol)
+    src, dst = shared_arc(sol)
+    @test length(TPO.bundles_through_arc(sol, src, dst)) >= 2
+    saved = TPO.two_node_common_incremental!(sol, instance, src, dst; deadline=0.0)
+    @test saved == 0.0
+    @test sol.bundle_paths == before.bundle_paths
+    @test keys(sol.assignments) == keys(before.assignments)
+    slots(a::TPO.SingleAssignment) = [a]
+    slots(a::TPO.MultiAssignment) = a.per_mode
+    for (edge, a) in sol.assignments,
+        (s, s0) in zip(slots(a), slots(before.assignments[edge]))
+
+        for f in fieldnames(TPO.SingleAssignment)
+            f === :bins && continue
+            @test getfield(s, f) == getfield(s0, f)
+        end
+        @test [(b.commodities, b.remaining_capacity) for b in s.bins] == [(b.commodities, b.remaining_capacity) for b in s0.bins]
+    end
+    # Every slot's `arc_cost` is compared exactly above. The total is only close because
+    # `deepcopy` can change the Dict iteration order, so the sum differs in the last bits.
+    @test cost(sol) ≈ cost(before) rtol = 1e-12
+end
+
+@testset "cost matrix sweep stops at the deadline" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    arcs = instance.travel_time_graph.bundle_arcs[1]
+    @test length(arcs) >= TPO.DEADLINE_CHECK_EVERY
+    bundle = instance.bundles[1]
+    mode = TPO.CheapestMode()
+    pool = TPO.create_buffer_pool()
+    for deadline in (0.0, Inf)
+        expected = deadline == Inf
+        @test TPO.update_bundle_cost_matrix!(sol, instance, bundle, arcs, mode; deadline) ==
+            expected
+        @test TPO.parallel_update_bundle_cost_matrix!(
+            sol, instance, bundle, arcs, mode, pool; deadline
+        ) == expected
+    end
+end
+
+@testset "local_search! with a tiny time limit stops and stays consistent" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    c0 = cost(sol)
+    r = local_search!(sol, instance; time_limit=1e-3, rng=MersenneTwister(1))
+    @test is_feasible(sol, instance; verbose=true)
+    @test isapprox(cost(sol), c0 - r.saved; rtol=1e-9)
 end

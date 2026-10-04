@@ -74,3 +74,30 @@ end
         origin_id="o", destination_id="d", cost=(), travel_time=Day(1)
     )
 end
+
+@testset "SumArcCost slot cost reuses the packed bins and the removal keeps them in sync" begin
+    C = LightCommodity{Nothing}
+    items = C[
+        LightCommodity(; origin_id="o", destination_id="d", size=s, info=nothing) for
+        s in (40.0, 60.0, 35.0, 25.0, 70.0)
+    ]
+    bp = BinPackingArcCost(10.0, 100)
+    for arc_f in (
+        SumArcCost((bp, LinearArcCost(0.3))),
+        SumArcCost((LinearArcCost(0.3), bp)),
+        SumArcCost((LinearArcCost(0.3), bp, LinearArcCost(0.7))),
+    )
+        slot = TPO.SingleAssignment{C}(copy(items), TPO.Bin{C}[], 0.0)
+        slot.total_size = sum(c.size for c in items)
+        TPO._update_single_assignment_cost!(slot, arc_f)
+        @test slot.arc_cost === TPO.evaluate(arc_f, slot.commodities; presorted=true)
+
+        # Removal path: bins updated in place, the bin-packing term counts the kept bins
+        removed = [popfirst!(slot.commodities)]
+        slot.total_size = sum(c.size for c in slot.commodities)
+        TPO._update_cost_after_removal!(slot, arc_f, removed)
+        @test length(slot.bins) == TPO.tentative_bin_count(bp, slot.commodities)
+        @test sum(length(b.commodities) for b in slot.bins) == length(slot.commodities)
+        @test slot.arc_cost === TPO.evaluate(arc_f, slot.commodities; presorted=true)
+    end
+end

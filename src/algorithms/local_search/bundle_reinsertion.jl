@@ -143,18 +143,23 @@ $TYPEDSIGNATURES
 
 Try reinserting a single bundle: snapshot, remove, run Dijkstra, and accept
 the new path only if the cost strictly improves (by more than
-`COST_IMPROVEMENT_EPS`). Returns the cost improvement (non-negative).
+`COST_IMPROVEMENT_EPS`). Otherwise the snapshots of the old and new path edges are
+restored, which is an exact rollback. Returns the cost improvement (non-negative).
 
 When `remove_before_routing=false`, the bundle stays in the solution during
 cost computation (cheaper but less accurate), and is only removed when a
 different path is found.
+
+When the move is accepted and `outer_snapshots` is given, the snapshots of this move
+are merged into it (existing keys are kept), so a caller can still roll back the whole
+move later.
 """
 function _try_reinsert_bundle!(
     sol::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector;
-    packing::Symbol=:ffd_union,
+    packing::Symbol=:frozen,
     cost_packing::Symbol=:frozen,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     bundle_adj::Union{Dict{Int,Vector{Int}},Nothing}=nothing,
@@ -162,6 +167,7 @@ function _try_reinsert_bundle!(
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
     snapshot_cache::Union{Dict,Nothing}=nothing,
+    outer_snapshots::Union{Dict,Nothing}=nothing,
 )
     isempty(sol.bundle_paths[bundle_idx]) && return 0.0
     ttg = instance.travel_time_graph
@@ -170,11 +176,15 @@ function _try_reinsert_bundle!(
 
     old_path = copy(sol.bundle_paths[bundle_idx])
 
-    snapshots = _snapshot_path_assignments(sol, instance, bundle_idx; cache=snapshot_cache)
-    cost_removed = if remove_before_routing
-        remove_bundle_path!(sol, instance, bundle_idx)
-    else
-        0.0
+    # With `remove_before_routing=false` nothing changes before the new path is known,
+    # so the snapshot is taken later.
+    snapshots = nothing
+    cost_removed = 0.0
+    if remove_before_routing
+        snapshots = _snapshot_path_assignments(
+            sol, instance, bundle_idx, old_path; cache=snapshot_cache
+        )
+        cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     end
 
     # When multiple threads are available, pre-compute all arc costs in
@@ -225,30 +235,35 @@ function _try_reinsert_bundle!(
     end
 
     if isempty(new_path) || new_path == old_path
-        if remove_before_routing
+        if !isnothing(snapshots)
             _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
         end
         return 0.0
     end
 
-    # When routing was done with the bundle in place, remove it now before
-    # adding the new path. Re-snapshot to capture the current state.
-    if !remove_before_routing
+    # When routing was done with the bundle in place, snapshot and remove it now before
+    # adding the new path.
+    if isnothing(snapshots)
         snapshots = _snapshot_path_assignments(
-            sol, instance, bundle_idx; cache=snapshot_cache
+            sol, instance, bundle_idx, old_path; cache=snapshot_cache
         )
         cost_removed = remove_bundle_path!(sol, instance, bundle_idx)
     end
+    # Edges only the new path touches, so that rejecting the move can restore them too.
+    _snapshot_path_assignments(
+        sol, instance, bundle_idx, new_path; cache=snapshots, clear=false
+    )
 
     cost_added = add_bundle_path!(
         sol, instance, bundle_idx, new_path; mode_selector, packing
     )
     net_delta = cost_added + cost_removed
     if net_delta < -COST_IMPROVEMENT_EPS
+        isnothing(outer_snapshots) ||
+            mergewith!((old, _) -> old, outer_snapshots, snapshots)
         return -net_delta
     end
 
-    remove_bundle_path!(sol, instance, bundle_idx)
     _restore_path_assignments!(sol, bundle_idx, old_path, snapshots)
     return 0.0
 end
@@ -267,7 +282,7 @@ function bundle_reinsertion_improvement!(
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=Inf,
     cost_threshold::Real=0.0,
-    packing::Symbol=:ffd_union,
+    packing::Symbol=:frozen,
     cost_packing::Symbol=:frozen,
 )
     saved = 0.0

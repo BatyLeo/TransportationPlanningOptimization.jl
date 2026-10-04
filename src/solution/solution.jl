@@ -226,12 +226,11 @@ function _arc_flows(sol::SolutionState, instance::Instance, start, Δ)
     return rows
 end
 
-# Number of bins of `slot`, consistent with its arc cost even when its bins are dirty.
+# Number of bins of `slot`: its bins always hold exactly its commodities, so this matches the arc cost.
 function _n_bins(slot::SingleAssignment, cost::AbstractArcCostFunction)
     bp = _bin_packing_cost_of(cost)
     isnothing(bp) && return 0
-    slot.bins_dirty || return length(slot.bins)
-    return tentative_bin_count(bp, slot.commodities; presorted=slot.sorted)
+    return length(slot.bins)
 end
 
 function _flow_row(slot::SingleAssignment, mode::NetworkArc, start, Δ, t, node_cost)

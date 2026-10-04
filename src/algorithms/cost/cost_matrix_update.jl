@@ -13,6 +13,7 @@ function compute_ttg_edge_incremental_cost(
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
+    empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
 ) where {C}
     cache = instance.index_cache
 
@@ -39,7 +40,7 @@ function compute_ttg_edge_incremental_cost(
     # arc even under wrap_time, so no grouping is needed to combine commodities on
     # a shared edge (verified: zero collisions over ~9.5M projections on medium and
     # large, both wrap_time). The cost is an additive sum over orders.
-    for order in bundle.orders
+    for (k, order) in enumerate(bundle.orders)
         u_tsg = project_to_time_space_graph(u_ttg_code, order, instance)
         v_tsg = project_to_time_space_graph(v_ttg_code, order, instance)
 
@@ -54,6 +55,7 @@ function compute_ttg_edge_incremental_cost(
             mode_selector;
             packing=packing,
             new_total_size=new_total_size,
+            empty_counts=isnothing(empty_counts) ? nothing : empty_counts[k],
         )
         node_part += _node_incremental_cost(
             node_f, existing_assignment, order.commodities, new_total_size
@@ -89,12 +91,14 @@ function compute_ttg_edge_lower_bound_cost(
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
+    empty_counts=nothing,
 )
     # The lower-bound path is a fractional relaxation, not FFD bin packing, so
     # `packing` is accepted only to keep the `cost_fn` call signature uniform
     # with `compute_ttg_edge_incremental_cost`. It has no effect here.
     # The fractional bin counting needs none of `buffer`'s scratch, so `buffer` is
-    # accepted only to keep the `cost_fn` call signature uniform.
+    # accepted only to keep the `cost_fn` call signature uniform. Likewise for
+    # `empty_counts`.
 
     cache = instance.index_cache
     ng = instance.network_graph.graph
@@ -252,6 +256,7 @@ function compute_ttg_edge_filtering_cost(
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
+    empty_counts=nothing,
 ) where {C}
     cache = instance.index_cache
     ng = instance.network_graph.graph
@@ -336,6 +341,14 @@ The `buffer` keyword (defaulting to a fresh `BinPackingBuffer`) is forwarded to
 `cost_fn` so a sweep can create one buffer and reuse it across all bundles and
 arcs, eliminating the per-arc bin-packing allocations. Ad-hoc callers that omit
 it get a fresh buffer and behave exactly as before.
+
+`empty_counts` (one [`EmptyPackCounts`](@ref) per order of `bundle`) replaces the FFD
+repack on empty arcs by a lookup, without changing any value. Returns `false` if the
+absolute time `deadline` had passed at a check (every `DEADLINE_CHECK_EVERY` arcs) or, for
+the parallel version, at the end of the sweep. The matrix may then be incomplete and
+callers must not use it. Otherwise it returns `true`.
+`cost_fn` is always called with an `empty_counts` keyword (possibly `nothing`), so a
+custom `cost_fn` must accept it.
 """
 function update_bundle_cost_matrix!(
     current_solution::SolutionState,
@@ -346,7 +359,10 @@ function update_bundle_cost_matrix!(
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
+    empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
+    deadline::Float64=Inf,
 )
+    isnothing(empty_counts) || @assert length(empty_counts) == length(bundle.orders)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     ng = instance.network_graph.graph
@@ -362,7 +378,8 @@ function update_bundle_cost_matrix!(
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
-    for (u_code, v_code) in bundle_arcs
+    for (i, (u_code, v_code)) in enumerate(bundle_arcs)
+        i % DEADLINE_CHECK_EVERY == 0 && time() > deadline && return false
         su = cache.ttg_code_to_spatial_code[u_code]
         sv = cache.ttg_code_to_spatial_code[v_code]
 
@@ -378,10 +395,11 @@ function update_bundle_cost_matrix!(
                 mode_selector;
                 buffer,
                 packing,
+                empty_counts,
             )
         end
     end
-    return nothing
+    return true
 end
 
 """
@@ -441,6 +459,8 @@ to a distinct structural nonzero in the sparse matrix.
 
 Falls back to sequential `update_bundle_cost_matrix!` when only one thread
 is available.
+
+`empty_counts` and `deadline` behave as in `update_bundle_cost_matrix!`.
 """
 function parallel_update_bundle_cost_matrix!(
     current_solution::SolutionState,
@@ -451,9 +471,11 @@ function parallel_update_bundle_cost_matrix!(
     buffer_pool::Vector{<:BinPackingBuffer};
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     packing::Symbol=:frozen,
+    empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
+    deadline::Float64=Inf,
 )
     if Threads.nthreads() <= 1
-        update_bundle_cost_matrix!(
+        return update_bundle_cost_matrix!(
             current_solution,
             instance,
             bundle,
@@ -462,9 +484,12 @@ function parallel_update_bundle_cost_matrix!(
             cost_fn,
             buffer=buffer_pool[1],
             packing,
+            empty_counts,
+            deadline,
         )
-        return nothing
     end
+
+    isnothing(empty_counts) || @assert length(empty_counts) == length(bundle.orders)
 
     ttg = instance.travel_time_graph
     cache = instance.index_cache
@@ -477,7 +502,7 @@ function parallel_update_bundle_cost_matrix!(
     )
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
-    isempty(bundle_arcs) && return nothing
+    isempty(bundle_arcs) && return true
 
     # Split the arcs into `nchunks` contiguous chunks and give each parallel
     # task its own `BinPackingBuffer` from `buffer_pool`, indexed by the chunk
@@ -491,6 +516,7 @@ function parallel_update_bundle_cost_matrix!(
         @set chunking = false
         buf = buffer_pool[chunk_id]
         for i in arc_indices
+            i % DEADLINE_CHECK_EVERY == 0 && time() > deadline && break
             (u_code, v_code) = bundle_arcs[i]
             su = cache.ttg_code_to_spatial_code[u_code]
             sv = cache.ttg_code_to_spatial_code[v_code]
@@ -507,12 +533,13 @@ function parallel_update_bundle_cost_matrix!(
                     mode_selector;
                     buffer=buf,
                     packing,
+                    empty_counts,
                 )
             end
             ttg.cost_matrix[u_code, v_code] = c
         end
     end
-    return nothing
+    return time() <= deadline
 end
 
 function parallel_update_bundle_cost_matrix!(

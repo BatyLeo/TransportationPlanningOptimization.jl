@@ -90,6 +90,17 @@ end
            _sum_evaluate_with_total_size(Base.tail(terms), comms, total_size)
 end
 
+# Term costs of a slot whose `bins` are freshly packed: the bin-packing term reuses the
+# bins instead of packing again. Same right fold as `_sum_evaluate_with_total_size`.
+@inline _packed_term_cost(slot::SingleAssignment, t::BinPackingArcCost) =
+    t.cost_per_bin * length(slot.bins)
+@inline _packed_term_cost(slot::SingleAssignment, t::AbstractArcCostFunction) =
+    _evaluate_with_total_size(t, slot.commodities, slot.total_size; presorted=true)
+
+@inline _sum_packed_cost(::SingleAssignment, ::Tuple{}) = 0.0
+@inline _sum_packed_cost(slot::SingleAssignment, terms::Tuple) =
+    _packed_term_cost(slot, first(terms)) + _sum_packed_cost(slot, Base.tail(terms))
+
 function _update_single_assignment_cost!(
     slot::SingleAssignment, arc_f::AbstractArcCostFunction
 )
@@ -105,7 +116,6 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_f::BinPacki
     _ensure_sorted!(slot)
     slot.bins = compute_bin_assignments(arc_f, slot.commodities; presorted=true)
     slot.arc_cost = arc_f.cost_per_bin * length(slot.bins)
-    slot.bins_dirty = false
     return nothing
 end
 
@@ -115,43 +125,98 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_f::SumArcCo
     # cached bin count stays consistent with slot.commodities (read by
     # incremental_cost! to skip the FFD-on-existing pass).
     bp = _try_find_bin_packing(arc_f)
-    if bp !== nothing
+    if bp === nothing
+        slot.arc_cost = _sum_evaluate_with_total_size(
+            arc_f.terms, slot.commodities, slot.total_size
+        )
+    else
+        slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
+        slot.arc_cost = _sum_packed_cost(slot, arc_f.terms)
+    end
+    return nothing
+end
+
+# Removal cost update for slots without a bin-packing term: nothing to keep in sync
+# beyond the cost itself.
+function _update_cost_after_removal!(
+    slot::SingleAssignment, arc_f::AbstractArcCostFunction, ::Vector{<:LightCommodity}
+)
+    return _update_single_assignment_cost!(slot, arc_f)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Delete from `pool` one `==`-matching entry per element of `working`, compacting `pool` in
+place (order preserved). Matched elements are also deleted from `working` (multiset semantics,
+first match). Returns whether `pool` changed. Allocation-free for small `working`, larger
+ones go through [`_drain_first_matches!`](@ref).
+"""
+function _remove_from_bin!(pool::Vector{C}, working::Vector{C}) where {C<:LightCommodity}
+    length(working) > 8 && return !isempty(_drain_first_matches!(pool, working))
+    changed = false
+    write_idx = 0
+    @inbounds for c in pool
+        j = findfirst(==(c), working)
+        if j === nothing
+            write_idx += 1
+            pool[write_idx] = c
+        else
+            deleteat!(working, j)
+            changed = true
+        end
+    end
+    changed && resize!(pool, write_idx)
+    return changed
+end
+
+"""
+$TYPEDSIGNATURES
+
+Take `removed` out of the bins of `slot` in place (STP-style). `removed` must already be gone
+from `slot.commodities`, which must be sorted. Drops the bins that become empty. Then
+repacks from scratch only when the bins exceed the lower bound
+`ceil((total_size - EPS) / cap)` and first-fit-decreasing on the remaining commodities is
+strictly better, so a removal never raises the bin count.
+"""
+function _remove_from_bins!(
+    slot::SingleAssignment{C}, bp::BinPackingArcCost, removed::Vector{C}
+) where {C<:LightCommodity}
+    cap = Float64(bp.bin_capacity)
+    working = copy(removed)
+    for bin in slot.bins
+        isempty(working) && break
+        _remove_from_bin!(bin.commodities, working) || continue
+        bin.remaining_capacity = cap - sum(c.size for c in bin.commodities; init=0.0)
+    end
+    @assert isempty(working) "removed commodities not found in the bins"
+    filter!(b -> !isempty(b.commodities), slot.bins)
+    lower_bound = ceil(Int, (slot.total_size - EPS) / cap)
+    # Repacking runs first-fit-decreasing twice (count, then bins), but it is rare.
+    if length(slot.bins) > lower_bound &&
+        tentative_bin_count(bp, slot.commodities; presorted=true) < length(slot.bins)
         slot.bins = compute_bin_assignments(bp, slot.commodities; presorted=true)
     end
-    slot.arc_cost = _sum_evaluate_with_total_size(
-        arc_f.terms, slot.commodities, slot.total_size
-    )
-    slot.bins_dirty = false
     return nothing
 end
 
-# Removal-only cost update: recompute `slot.arc_cost` without materializing bins.
-# Uses "does not refill bins" semantics: the `slot.bins` vector becomes stale,
-# and `bins_dirty` is set so downstream code can fall back to non-frozen cost
-# estimation. The next `_update_single_assignment_cost!` (on add) will recompute
-# bins and clear the flag.
-function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::AbstractArcCostFunction)
+function _update_cost_after_removal!(
+    slot::SingleAssignment{C}, arc_f::BinPackingArcCost, removed::Vector{C}
+) where {C<:LightCommodity}
     _ensure_sorted!(slot)
-    slot.arc_cost = _evaluate_with_total_size(
-        arc_f, slot.commodities, slot.total_size; presorted=true
-    )
+    _remove_from_bins!(slot, arc_f, removed)
+    slot.arc_cost = arc_f.cost_per_bin * length(slot.bins)
     return nothing
 end
 
-function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::BinPackingArcCost)
+function _update_cost_after_removal!(
+    slot::SingleAssignment{C}, arc_f::SumArcCost, removed::Vector{C}
+) where {C<:LightCommodity}
+    bp = _try_find_bin_packing(arc_f)
+    bp === nothing && return _update_single_assignment_cost!(slot, arc_f)
     _ensure_sorted!(slot)
-    slot.arc_cost =
-        arc_f.cost_per_bin * tentative_bin_count(arc_f, slot.commodities; presorted=true)
-    slot.bins_dirty = true
-    return nothing
-end
-
-function _update_cost_skip_bins!(slot::SingleAssignment, arc_f::SumArcCost)
-    _ensure_sorted!(slot)
-    slot.arc_cost = _sum_evaluate_with_total_size(
-        arc_f.terms, slot.commodities, slot.total_size
-    )
-    slot.bins_dirty = true
+    _remove_from_bins!(slot, bp, removed)
+    slot.arc_cost = _sum_packed_cost(slot, arc_f.terms)
     return nothing
 end
 
@@ -198,9 +263,6 @@ end
 function _frozen_commit_single_assignment!(
     slot::SingleAssignment{C}, arc_f::BinPackingArcCost, new_comms::Vector{C}
 ) where {C}
-    if slot.bins_dirty
-        return _update_single_assignment_cost!(slot, arc_f)
-    end
     frozen_first_fit_add!(slot.bins, Float64(arc_f.bin_capacity), new_comms)
     slot.arc_cost = arc_f.cost_per_bin * length(slot.bins)
     return nothing
@@ -209,12 +271,7 @@ end
 @inline function _frozen_term_commit!(
     slot::SingleAssignment, term::BinPackingArcCost, new_comms::Vector
 )
-    if slot.bins_dirty
-        slot.bins = compute_bin_assignments(term, slot.commodities; presorted=true)
-        slot.bins_dirty = false
-    else
-        frozen_first_fit_add!(slot.bins, Float64(term.bin_capacity), new_comms)
-    end
+    frozen_first_fit_add!(slot.bins, Float64(term.bin_capacity), new_comms)
     return term.cost_per_bin * length(slot.bins)
 end
 @inline _frozen_term_commit!(
@@ -494,7 +551,7 @@ function _remove_commodities_from_assignment!(
         )
     end
     assignment.total_size -= sum(c.size for c in removed_comms; init=0.0)
-    _update_cost_skip_bins!(assignment, arc.cost)
+    _update_cost_after_removal!(assignment, arc.cost, removed_comms)
     arc_delta = assignment.arc_cost - before
     node_delta = _refresh_node_cost!(assignment, node_costs[sv])
     return arc_delta + node_delta
@@ -514,7 +571,7 @@ function _remove_commodities_from_assignment!(
         dropped = _drain_first_matches!(slot.commodities, remaining)
         if !isempty(dropped)
             slot.total_size -= sum(c.size for c in dropped; init=0.0)
-            _update_cost_skip_bins!(slot, arc.modes[i].cost)
+            _update_cost_after_removal!(slot, arc.modes[i].cost, dropped)
         end
     end
     if !isempty(remaining)
