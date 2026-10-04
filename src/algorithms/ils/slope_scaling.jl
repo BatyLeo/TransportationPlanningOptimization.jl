@@ -24,7 +24,7 @@ modes with distinct bin capacities. Left as a future extension.
 This is the slope scaling callback for [`iterated_local_search!`](@ref).
 Pass as `cost_update! = slope_scaling_update!`.
 """
-function slope_scaling_update!(instance::Instance, sol::Solution)
+function slope_scaling_update!(instance::Instance, sol::SolutionState)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     empty!(ttg.cost_scaling)

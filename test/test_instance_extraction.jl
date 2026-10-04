@@ -66,10 +66,10 @@ end
             instance.travel_time_graph.destination_codes[i],
         ] for i in eachindex(instance.bundles)
     ]
-    # The origin -> destination edges are not real arcs: the `Solution(bundle_paths, instance)`
+    # The origin -> destination edges are not real arcs: the `SolutionState(bundle_paths, instance)`
     # constructor rejects them, so the paths are set directly.
-    @test_throws ArgumentError Solution(direct_paths, instance)
-    fake_filt = Solution(instance)
+    @test_throws ArgumentError SolutionState(direct_paths, instance)
+    fake_filt = SolutionState(instance)
     fake_filt.bundle_paths .= direct_paths
 
     @test_logs (:info,) match_mode = :any TPO.extract_filtered_instance(instance, fake_filt)
@@ -207,7 +207,7 @@ end
 
 @testset "TPO.preload_filtered_bundles reserves a filtered bundle's capacity before any routing" begin
     # Unit test for the pre-load helper in isolation: build `sub_instance` and a
-    # plain `Solution(sub_instance)`, call the helper, and check the shared
+    # plain `SolutionState(sub_instance)`, call the helper, and check the shared
     # arc's assignment already carries the filtered bundle's size, before any
     # bundle of `sub_instance` is routed.
     instance = fb_shared_arc_instance()
@@ -308,7 +308,7 @@ end
 
     # Only the length of a bundle path matters to the extraction: 2 is dropped, 3 is kept
     function fake_filtering(inst, dropped)
-        sol = Solution(inst)
+        sol = SolutionState(inst)
         sol.bundle_paths .= [
             i in dropped ? Int[1, 2] : Int[1, 2, 3] for i in 1:bundle_count(inst)
         ]

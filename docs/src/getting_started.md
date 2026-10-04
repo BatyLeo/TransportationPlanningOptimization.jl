@@ -107,26 +107,26 @@ After creating an `Instance`, use it to:
 
 1. **Solve** the optimization problem:
    ```julia
-   solution = solve(instance)
+   solution_state = solve(instance)
    ```
    [`solve`](@ref) filters out trivial bundles, builds an initial solution and improves it with local search.
    Calling [`greedy_heuristic`](@ref) directly on a large instance is much slower.
 
 2. **Validate** the solution:
    ```julia
-   is_feasible(solution, instance; verbose=true)
+   is_feasible(solution_state, instance; verbose=true)
    ```
 
 3. **Evaluate** the objective:
    ```julia
-   total_cost = cost(solution)
+   total_cost = cost(solution_state)
    ```
 
 4. **Read** the solution on your input arcs and commodities, with dates:
    ```julia
-   ns = NetworkSolution(solution, instance)
+   solution = Solution(solution_state, instance)
    ```
-   See [Reading a solution on the input network](@ref network_solution_guide).
+   See [Reading a solution on the input network](@ref solution_guide).
 
 ## Next Steps
 

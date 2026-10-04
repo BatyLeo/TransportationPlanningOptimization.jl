@@ -16,7 +16,7 @@ The optional `on_improvement` callback is called each time a new best
 solution is found. It receives `(sol, best_cost, elapsed_seconds)`.
 """
 function iterated_local_search!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     perturbations::Vector{<:AbstractPerturbation};
     config::ILSConfig=ILSConfig(),

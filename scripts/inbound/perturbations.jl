@@ -41,7 +41,7 @@ function _group_bundles_by(bundles, key_fn)
 end
 
 function _perturbate_bundle_group!(
-    sol::TPO.Solution,
+    sol::TPO.SolutionState,
     instance::TPO.Instance,
     bundle_idxs::Vector{Int};
     rng::Random.AbstractRNG=Random.default_rng(),
@@ -73,7 +73,7 @@ function _perturbate_bundle_group!(
 end
 
 function TPO.perturbate!(
-    sol::TPO.Solution,
+    sol::TPO.SolutionState,
     instance::TPO.Instance,
     ::PlantPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
@@ -88,7 +88,7 @@ function TPO.perturbate!(
 end
 
 function TPO.perturbate!(
-    sol::TPO.Solution,
+    sol::TPO.SolutionState,
     instance::TPO.Instance,
     ::SupplierPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
@@ -575,7 +575,7 @@ end
 # ── Main perturbation dispatch ──
 
 function TPO.perturbate!(
-    sol::TPO.Solution,
+    sol::TPO.SolutionState,
     instance::TPO.Instance,
     p::MILPPlantPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),

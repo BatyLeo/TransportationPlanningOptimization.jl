@@ -108,7 +108,7 @@ function _solve_mip(
 end
 
 """
-Solve `data` exactly and return the result as a package `Solution`, see
+Solve `data` exactly and return the result as a package `SolutionState`, see
 [`benchmark_solve`](@ref).
 """
 function _benchmark_solve(
@@ -128,7 +128,7 @@ function _benchmark_solve(
             [code_for(ttg, (string(node), 0)) for node in mip.node_paths[bundle.group]]
             for bundle in instance.bundles
         ]
-        sol = Solution(paths, instance)
+        sol = SolutionState(paths, instance)
         sol_cost = cost(sol)
         gap =
             iszero(sol_cost) ? sol_cost - mip.objective_bound :

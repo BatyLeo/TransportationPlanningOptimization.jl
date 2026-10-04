@@ -34,7 +34,7 @@ const LS_TIME = 180
 
 Read the Hexaly routing from `data_dir/output/result_NDO.csv`, find the
 dominant route per (origin, destination, model) triple, and build a TPO
-`Solution` by assigning each bundle to its dominant route path.
+`SolutionState` by assigning each bundle to its dominant route path.
 
 Returns `(; solution, hexaly_cost, matched, unmatched, path_failed)`.
 `hexaly_cost` is Hexaly's own reported accounting total (hardcoded from the
@@ -95,7 +95,7 @@ function load_hexaly_solution(instance, data_dir::AbstractString)
         return nothing
     end
 
-    sol = TPO.Solution(instance)
+    sol = TPO.SolutionState(instance)
     matched = 0
     unmatched = String[]
     path_failed = String[]

@@ -5,7 +5,9 @@ Cheap proxy for the cost delta of removing `bundle_idx`'s path from `sol`.
 Sums each touched edge's cost weighted by the bundle's commodity share on
 that edge. Used to skip low-potential bundles before running Dijkstra.
 """
-function bundle_estimated_removal_cost(sol::Solution, instance::Instance, bundle_idx::Int)
+function bundle_estimated_removal_cost(
+    sol::SolutionState, instance::Instance, bundle_idx::Int
+)
     path = sol.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
     bundle = instance.bundles[bundle_idx]
@@ -57,7 +59,7 @@ vector (for use with `trace_path`).
 Its path may loop on a physical node, see [`bundle_shortest_path`](@ref).
 """
 function _lazy_bundle_dijkstra!(
-    sol::Solution{C},
+    sol::SolutionState{C},
     instance::Instance,
     bundle_idx::Int,
     origin::Int,
@@ -148,7 +150,7 @@ cost computation (cheaper but less accurate), and is only removed when a
 different path is found.
 """
 function _try_reinsert_bundle!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector;
@@ -260,7 +262,7 @@ improving moves. Bundles below `cost_threshold` (estimated removal cost) are
 skipped. Returns total cost improvement (non-negative).
 """
 function bundle_reinsertion_improvement!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=Inf,
@@ -293,7 +295,7 @@ otherwise delegate to `_try_reinsert_bundle!`. Returns the per-step cost
 improvement (`0.0` if skipped or move rejected).
 """
 function _run_reintro_step!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     mode_selector::AbstractModeSelector,
     rng::Random.AbstractRNG,

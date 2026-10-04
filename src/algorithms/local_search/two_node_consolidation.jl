@@ -5,7 +5,7 @@ Indices of bundles whose stored path contains the arc `(src, dst)` as a
 consecutive pair. Returns indices in bundle insertion order. Bundles with
 empty paths are skipped.
 """
-function bundles_through_arc(sol::Solution, src::Int, dst::Int)
+function bundles_through_arc(sol::SolutionState, src::Int, dst::Int)
     out = Int[]
     for (i, path) in enumerate(sol.bundle_paths)
         for k in 1:(length(path) - 1)
@@ -179,7 +179,7 @@ strictly improves. Returns the cost improvement (`0.0` if reverted or no
 bundles traversed the arc).
 """
 function two_node_common_incremental!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     src::Int,
     dst::Int;
@@ -308,7 +308,7 @@ Random-sampling driver for [`two_node_common_incremental!`](@ref): picks
 improvement.
 """
 function loop_two_nodes!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=60.0,
@@ -351,7 +351,7 @@ re-inserted after the splice). Returns the per-step cost improvement (`0.0`
 if no bundles traversed the arc or the move was rejected).
 """
 function _run_two_node_step!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     valid_pairs::Vector{Tuple{Int,Int}},
     mode_selector::AbstractModeSelector,

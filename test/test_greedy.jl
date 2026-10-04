@@ -146,7 +146,7 @@ end
     @test_throws ArgumentError greedy_heuristic(instance; show_progress=false)
 
     # The non-throwing helper reports failure instead, without touching the solution.
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     @test TransportationPlanningOptimization._try_insert_bundle!(sol, instance, 1) == false
     @test isempty(sol.bundle_paths[1])
 end

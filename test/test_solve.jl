@@ -52,7 +52,7 @@ const LS = (; time_limit=60.0, max_iter=200)
 
     @test all(!isempty, sol.bundle_paths)
     @test TPO.is_feasible(sol, instance; verbose=true)
-    @test TPO.cost(sol) ≈ TPO.cost(TPO.Solution(sol.bundle_paths, instance))
+    @test TPO.cost(sol) ≈ TPO.cost(TPO.SolutionState(sol.bundle_paths, instance))
 
     result = TPO.solve_filtered(instance; show_progress=false)
     chained = TPO.merge_solutions(

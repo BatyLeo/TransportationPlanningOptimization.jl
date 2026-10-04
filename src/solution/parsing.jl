@@ -2,14 +2,14 @@ using CSV
 using DataFrames
 
 """
-    write_solution_csv(filename::String, sol::Solution, instance::Instance)
+    write_solution_csv(filename::String, sol::SolutionState, instance::Instance)
 
 Write the solution to a CSV file in the following format:
 `route_id,origin_id,destination_id,node_id,point_number,point_type`
 
 The paths are written in **reverse order** (from destination to origin) to match the user's requested format.
 """
-function write_solution_csv(filename::String, sol::Solution, instance::Instance)
+function write_solution_csv(filename::String, sol::SolutionState, instance::Instance)
     ttg = instance.travel_time_graph
     df = DataFrame(;
         bundle_idx=Int[],
@@ -63,7 +63,7 @@ end
 """
     read_solution_csv(filename::String, instance::Instance; mode_selector=CheapestMode())
 
-Read a solution from a CSV file and reconstruct the `Solution` object.
+Read a solution from a CSV file and reconstruct the `SolutionState` object.
 Assumes the CSV follows the format: `route_id,origin_id,destination_id,node_id,point_number,point_type`.
 
 The `mode_selector` keyword argument controls how commodities are distributed
@@ -194,5 +194,5 @@ function read_solution_csv(
         bundle_paths[bidx] = ttg_path
     end
 
-    return Solution(bundle_paths, instance; mode_selector)
+    return SolutionState(bundle_paths, instance; mode_selector)
 end

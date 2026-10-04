@@ -6,7 +6,7 @@ and BFD. Only materializes new bins when at least one heuristic strictly
 improves on the current bin count. Returns the total cost improvement
 (non-negative).
 """
-function bin_packing_improvement!(sol::Solution, instance::Instance)
+function bin_packing_improvement!(sol::SolutionState, instance::Instance)
     cache = instance.index_cache
     saved = 0.0
     for (edge, assignment) in sol.assignments

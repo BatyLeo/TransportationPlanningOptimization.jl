@@ -229,7 +229,7 @@ end
     bundle_paths = Vector{Vector{Int}}(undef, 2)
     bundle_paths[idx_b] = [code("A"), code("H"), code("C"), code("B")]
     bundle_paths[idx_d] = [code("A"), code("H"), code("C"), code("D")]
-    sol = Solution(bundle_paths, instance)
+    sol = SolutionState(bundle_paths, instance)
     @test is_feasible(sol, instance; verbose=true)
 
     src, dst = code("H"), code("C")

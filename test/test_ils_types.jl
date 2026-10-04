@@ -43,6 +43,6 @@ end
         joinpath(datadir, "small_commodities.csv"),
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    sol = Solution(instance)
+    sol = SolutionState(instance)
     @test_throws ErrorException perturbate!(sol, instance, DummyPerturbation())
 end

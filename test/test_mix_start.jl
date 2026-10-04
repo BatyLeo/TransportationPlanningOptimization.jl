@@ -71,6 +71,6 @@ end
 @testset "choose_best_feasible errors when no candidate is feasible" begin
     instance = TestFixtures.tiny_instance()
 
-    empty_sol = TPO.Solution(instance)  # all empty paths, infeasible
+    empty_sol = TPO.SolutionState(instance)  # all empty paths, infeasible
     @test_throws ArgumentError TPO.choose_best_feasible([empty_sol], instance)
 end

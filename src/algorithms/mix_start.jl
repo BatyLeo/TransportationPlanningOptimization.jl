@@ -6,7 +6,7 @@ solution whose Dijkstra cost matrix blends the two strategies with weights
 that shift toward greedy as more bundles are placed.
 
 Returns `(; mixed, greedy, lower_bound)`. All three solutions are independent
-`Solution` objects, suitable for `cost`, `is_feasible`, and downstream local
+`SolutionState` objects, suitable for `cost`, `is_feasible`, and downstream local
 search.
 
 ```
@@ -16,7 +16,7 @@ where `i` is the 1-indexed iteration and `B` is the total bundle count. This
 is a convex blend: the first bundles are placed almost purely on lower-bound
 costs, and the greedy share grows linearly to dominate the last bundles.
 
-`start` seeds all three candidates via `deepcopy` (default `Solution(instance)`,
+`start` seeds all three candidates via `deepcopy` (default `SolutionState(instance)`,
 i.e. empty), so a caller can pre-load a capacity and cost floor (see
 [`preload_filtered_bundles`](@ref)) that every candidate then builds on top of.
 Set `show_progress=false` to hide the progress bar.
@@ -25,7 +25,7 @@ function mix_greedy_and_lower_bound(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
-    start::Solution=Solution(instance),
+    start::SolutionState=SolutionState(instance),
     show_progress::Bool=true,
 )
     ttg = instance.travel_time_graph
@@ -133,7 +133,9 @@ Return the minimum-`cost` solution among `candidates` that satisfies
 Used by [`mix_greedy_heuristic`](@ref) to pick among the three solutions returned by
 `mix_greedy_and_lower_bound`.
 """
-function choose_best_feasible(candidates::AbstractVector{<:Solution}, instance::Instance)
+function choose_best_feasible(
+    candidates::AbstractVector{<:SolutionState}, instance::Instance
+)
     feasible = filter(s -> is_feasible(s, instance), candidates)
     if isempty(feasible)
         throw(ArgumentError("no feasible candidate among $(length(candidates)) solutions"))
@@ -153,7 +155,7 @@ function mix_greedy_heuristic(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
     packing::Symbol=:frozen,
-    start::Solution=Solution(instance),
+    start::SolutionState=SolutionState(instance),
     show_progress::Bool=true,
 )
     candidates = mix_greedy_and_lower_bound(

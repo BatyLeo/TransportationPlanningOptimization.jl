@@ -36,7 +36,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Solve `instance` and return a feasible [`Solution`](@ref) on it. This is the
+Solve `instance` and return a feasible [`SolutionState`](@ref) on it. This is the
 recommended way to solve an instance.
 
 With `filtering=true` (default):

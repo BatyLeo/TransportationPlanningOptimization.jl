@@ -18,7 +18,7 @@ If the perturbation degrades cost beyond an internal tolerance, the
 implementation must revert `sol` and return `(0.0, 0)`.
 """
 function perturbate!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     p::AbstractPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),

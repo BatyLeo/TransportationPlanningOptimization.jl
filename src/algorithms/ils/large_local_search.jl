@@ -20,7 +20,7 @@ and step 3 is skipped, instead of throwing or leaving `sol` half-routed.
 Step 4 always runs.
 """
 function large_local_search!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance;
     is_forbidden=Returns(false),
     mode_selector::AbstractModeSelector=CheapestMode(),
@@ -101,7 +101,7 @@ reinsertion (via [`_try_insert_bundle!`](@ref)). Returns `false`, without
 modifying `sol`, if no feasible path exists at all (forbidden or not).
 """
 function _reinsert_with_filter!(
-    sol::Solution,
+    sol::SolutionState,
     instance::Instance,
     bundle_idx::Int,
     is_forbidden,
