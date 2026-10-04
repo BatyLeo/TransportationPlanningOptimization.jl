@@ -59,6 +59,7 @@ end
         nodes_file, legs_file, commodities_file
     )
     instance = Instance(nodes, arcs, commodities, Week(1))
+    @test fieldtype(typeof(instance), :time_step) === Week
     nb_bundles = length(instance.bundles)
     nb_orders = sum(length(bundle.orders) for bundle in instance.bundles)
     nb_commodities = sum(
@@ -634,6 +635,7 @@ end
     @test dates[steps[2]] == DateTime(2024, 1, 1, 12)
     @test all(diff(dates) .== Hour(6))
     @test instance.network_graph.graph["1", "2"].travel_time_steps == 1
+    @test fieldtype(typeof(instance), :time_step) === Hour
 end
 
 @testset "Non-midnight dates keep Day, Week and 30-day order steps" begin

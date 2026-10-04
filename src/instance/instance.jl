@@ -34,6 +34,7 @@ $TYPEDFIELDS
     TTG<:TravelTimeGraph,
     IC<:IndexCache,
     IN<:InstanceInput,
+    P<:Period,
 }
     "list of bundles in the instance"
     bundles::Vector{B}
@@ -42,7 +43,7 @@ $TYPEDFIELDS
     "length of the time horizon in discrete time steps"
     time_horizon_length::Int
     "discretization time step for the instance"
-    time_step::Period
+    time_step::P
     "mapping from time step index to the date and time at which the step starts"
     time_step_to_date::Vector{Dates.DateTime}
     "time expanded graph (for order paths)"
