@@ -58,7 +58,6 @@ function _copy_assignment(a::SingleAssignment{C}) where {C}
         a.node_cost,
         a.sorted,
         a.total_size,
-        a.bins_dirty, # drop this line after the rebase onto main (field removed there)
     )
 end
 
