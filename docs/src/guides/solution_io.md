@@ -2,11 +2,12 @@
 
 ## [Reading a solution on the input network](@id solution_guide)
 
-[`Solution`](@ref) expresses a [`SolutionState`](@ref) on your own input: the arcs and commodities you gave to the [`Instance`](@ref), by their position in the input vectors.
-It is built on demand and holds two vectors of plain structs, `Leg` and `ArcFlow`, with the fields listed below.
+[`Solution`](@ref) is what [`solve`](@ref) returns: the plan expressed on your own input, the arcs and commodities you gave to the [`Instance`](@ref), by their position in the input vectors.
+It holds two vectors of plain structs, `Leg` and `ArcFlow`, with the fields listed below.
+For a [`SolutionState`](@ref) coming from a building block such as [`greedy_heuristic`](@ref), build a `Solution` with `Solution(solution_state, instance)`.
 
 ```julia
-solution = Solution(solution_state, instance)
+solution = solve(instance)
 solution.routes[k]   # legs of the k-th input commodity, in travel order
 solution.arc_flows   # load per input arc and departure date
 ```
@@ -14,8 +15,11 @@ solution.arc_flows   # load per input arc and departure date
 - Each leg of `routes[k]` is a `Leg` with fields `(arc, departure, arrival, quantity)`, where `arc` is the index of the input arc.
   The `quantity` copies of a commodity share one route, but a leg only counts the copies using that input arc, since a multi-modal edge can split them across modes.
 - Each row of `arc_flows` is an `ArcFlow` with fields `(arc, departure, arrival, volume, n_bins, arc_cost, node_cost)`, sorted by `(arc, departure)`.
-  The sum of `arc_cost + node_cost` over the rows is `cost(solution_state)`.
+  The sum of `arc_cost + node_cost` over the rows is `cost(solution)`, which equals the cost of the state it was built from (up to floating point summation order).
   The node cost of a multi-modal edge is charged once, on its first non-empty mode row.
+
+To check an edited plan, call `is_feasible(solution, instance)`, which rebuilds the plan from the routes and ignores `arc_flows`.
+To continue improving it, call `solve(instance; start=solution)` (see [Working with SolutionState (advanced)](@ref solution_state_guide)).
 
 Date conventions:
 
@@ -41,7 +45,7 @@ routes = DataFrame([
 flows = DataFrame(solution.arc_flows)
 ```
 
-## Building a SolutionState from a Solution
+## [Building a SolutionState from a Solution](@id solution_state_from_solution)
 
 A plan written on the input network, such as a [`Solution`](@ref) edited by hand or produced by another tool, can be turned back into a [`SolutionState`](@ref).
 
@@ -54,7 +58,7 @@ is_feasible(solution_state, instance; verbose=true)
 - Every slot is repacked from scratch by first-fit decreasing, so bins and costs only match the original state for linear costs (up to floating point summation order).
 - Capacity is not checked, so call [`is_feasible`](@ref) on the result.
 - Several legs on the same arc at the same position (same departure and arrival) are merged.
-- Plans that cannot be represented throw an `ArgumentError` naming the commodity (and the leg when relevant), such as partial routes, off-grid dates, waiting anywhere but before the first leg (arrival dates) or after the last leg (departure dates), legs that overlap, routes longer than the maximum delivery time of their commodity group, routes that leave the time horizon when `wrap_time` is off or pass through an origin or destination node that routes cannot cross at that date, and commodities with the same origin, destination and group key that do not follow the same path (same nodes and transit times) at the same offsets from their order date.
+- Plans that cannot be represented throw an `ArgumentError` naming the commodity (and the leg when relevant), such as partial routes, commodities larger than the bin capacity of their arc, off-grid dates, waiting anywhere but before the first leg (arrival dates) or after the last leg (departure dates), legs that overlap, routes longer than the maximum delivery time of their commodity group, routes that leave the time horizon when `wrap_time` is off or pass through an origin or destination node that routes cannot cross at that date, and commodities with the same origin, destination and group key that do not follow the same path (same nodes and transit times) at the same offsets from their order date.
 - A route is pinned to the order date: its arrival (arrival-date mode) or its departure (departure-date mode) must equal the order date.
 - The solution-level round trip `Solution(SolutionState(solution, instance), instance) == solution` only holds for solutions produced by `Solution(solution_state, instance)`.
   Other plans come back normalized, with the legs of one leg position merged and in slot order and identical copies attributed by count.
@@ -108,7 +112,7 @@ using Dates
 
 # Build instance and solve
 instance = Instance(nodes, arcs, commodities, Day(1))
-solution_state = solve(instance)
+solution_state = solve_state(instance)
 
 # Save
 write_solution_csv("my_solution.csv", solution_state, instance)

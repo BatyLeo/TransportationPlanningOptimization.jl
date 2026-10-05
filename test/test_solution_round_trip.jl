@@ -91,7 +91,7 @@ end
     @test isempty(state.bundle_paths) && isempty(state.assignments)
 
     # The arcs of tiny pack bins, but first-fit decreasing reproduces the packing of greedy here.
-    state = TPO.solve(instance; local_search=false, show_progress=false)
+    state = TPO.solve_state(instance; local_search=false, show_progress=false)
     check_round_trip(state, instance; same_cost=true)
 end
 
@@ -254,6 +254,25 @@ end
     end
 end
 
+@testset "Rejected plans, commodity larger than the bin capacity" begin
+    # A plan through the second arc of size-6 commodities, built on a linear twin of the instance.
+    modes(second) = [(10.0, 1, 100), (second, 1, 100)]
+    linear = TestFixtures._leg_instance(modes(20.0), 3; quantity=1, size=6.0)
+    instance = TestFixtures._leg_instance(
+        modes(BinPackingArcCost(1.0, 5.0)), 3; quantity=1, size=6.0
+    )
+    solution = TPO.solve(linear; local_search=false, show_progress=false)
+    @test only(only(solution.routes)).arc == 1
+    edited = Solution(
+        [[edit(only(route); arc=2) for route in solution.routes]], solution.arc_flows
+    )
+    @test !is_feasible(edited, instance)
+    @test_throws rejects("size 6.0 exceeds the bin capacity 5.0 of input arc 2") SolutionState(
+        edited, instance
+    )
+    @test_throws ArgumentError TPO.solve(instance; start=edited, show_progress=false)
+end
+
 @testset "Rejected plans, node that routes cannot cross" begin
     # Arcs: 1 A -> B, 2 B -> D, 3 D -> B (1 day each), the route 1, 2, 3, 2 is within the 4 allowed
     # days but crosses the destination D two days before its arrival date.
@@ -397,8 +416,8 @@ end
 
 @testset "Rejected plans, sub-instance" begin
     instance = TestFixtures.shared_arc_instance(; b_type=:destination)
-    (; solution, sub_instance) = solve_filtered(instance; show_progress=false)
-    routes = Solution(solution, sub_instance).routes
+    (; solution_state, sub_instance) = solve_filtered(instance; show_progress=false)
+    routes = Solution(solution_state, sub_instance).routes
     dropped = findfirst(==((0, 0)), sub_instance.commodity_to_order)
     kept = findfirst(!=((0, 0)), sub_instance.commodity_to_order)
     @test isempty(routes[dropped]) && !isempty(routes[kept])
