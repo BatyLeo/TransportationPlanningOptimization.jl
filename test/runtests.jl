@@ -90,6 +90,9 @@ using .TestFixtures
         @testset "Solution" begin
             include("test_solution.jl")
         end
+        @testset "Solution round trip" begin
+            include("test_solution_round_trip.jl")
+        end
         @testset "Solution parsing" begin
             include("test_solution_parsing.jl")
         end

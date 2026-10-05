@@ -91,10 +91,11 @@ small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 # Four-node instance where F (A->B, size 3) is filtered out as a direct path and
 # K (A->D2, size 4) is kept: K's cheap route through B shares the capacity-5
 # arc A->B with F, so it must route around it through C.
-function shared_arc_instance()
+# With `b_type=:destination`, B belongs to F alone and the filtering drops it with its arcs.
+function shared_arc_instance(; b_type::Symbol=:other)
     nodes = [
         Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
+        Node(; id="B", node_type=b_type),
         Node(; id="C", node_type=:other),
         Node(; id="D2", node_type=:destination),
     ]
@@ -193,6 +194,7 @@ end
 
 # Leg A -> B with `modes` given as (cost per unit or arc cost, travel days, capacity) tuples.
 # `departure_days` are spread so that a wrapped horizon exceeds every transit time.
+# The commodity dates are departure dates, or arrival dates with `arrival=true`.
 # `node_cost` is the node cost of B.
 function _leg_instance(
     modes,
@@ -201,6 +203,7 @@ function _leg_instance(
     departure_days=(1,),
     wrap_time=false,
     node_cost=NoNodeCost(),
+    arrival::Bool=false,
 )
     nodes = [
         Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination, node_cost)
@@ -219,7 +222,7 @@ function _leg_instance(
             origin_id="A",
             destination_id="B",
             quantity=quantity,
-            departure_date=DateTime(2024, 1, d),
+            (arrival ? :arrival_date : :departure_date) => DateTime(2024, 1, d),
             max_delivery_time=Day(max_delivery_days),
             size=1.0,
         ) for d in departure_days
@@ -339,6 +342,59 @@ function check_routes(ns, sol, instance; reservations::Bool=false)
         @test (:load => [k for (k, v) in load if !(flows[k] ≈ v)]) == (:load => [])
     end
     return nothing
+end
+
+# Extend every path with the chain of shortcut nodes that the travel-time graph allows.
+function add_shortcuts!(sol, instance)
+    g = instance.travel_time_graph.graph
+    arrival = TransportationPlanningOptimization.is_date_arrival(instance.travel_time_graph)
+    added = 0
+    for path in sol.bundle_paths
+        id, τ = MetaGraphsNext.label_for(g, arrival ? first(path) : last(path))
+        while haskey(g, (id, τ + 1))
+            τ += 1
+            code = MetaGraphsNext.code_for(g, (id, τ))
+            arrival ? pushfirst!(path, code) : push!(path, code)
+            added += 1
+        end
+    end
+    return added
+end
+
+# Whether two lists of arc flows agree on dates, bins and (up to rounding) volumes and costs.
+function flows_match(a, b)
+    return length(a) == length(b) && all(
+        x.arc == y.arc &&
+        x.departure == y.departure &&
+        x.arrival == y.arrival &&
+        x.n_bins == y.n_bins &&
+        x.volume ≈ y.volume &&
+        x.arc_cost ≈ y.arc_cost &&
+        x.node_cost ≈ y.node_cost for (x, y) in zip(a, b)
+    )
+end
+
+# Project `state` onto the input and rebuild it, then check the rebuilt state.
+# `same_cost` is true when the repack is known to reproduce the packing of `state` (linear costs,
+# or instances where first-fit decreasing coincides with it, like tiny), then bins and costs must match too.
+function check_round_trip(state, instance; same_cost::Bool)
+    TPO = TransportationPlanningOptimization
+    solution = Solution(state, instance)
+    rebuilt = SolutionState(solution, instance)
+    @test is_feasible(rebuilt, instance; verbose=true)
+    stripped = map(state.bundle_paths) do path
+        path = copy(path)
+        TPO._remove_shortcuts_from_path!(path, instance.travel_time_graph)
+        return path
+    end
+    @test rebuilt.bundle_paths == stripped
+    again = Solution(rebuilt, instance)
+    @test again.routes == solution.routes
+    if same_cost
+        @test cost(rebuilt) ≈ cost(state)
+        @test flows_match(again.arc_flows, solution.arc_flows)
+    end
+    return rebuilt
 end
 
 # Clear any cost_scaling mutations left on the shared instances.
