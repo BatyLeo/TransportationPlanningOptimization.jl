@@ -428,4 +428,29 @@ end
     @test state.bundle_paths == paths
     @test cost(state) == state_cost
     @test Dict(edge => a.commodities for (edge, a) in state.assignments) == assignments
+
+    @testset "copy does not share bins" begin
+        modes = [
+            (TPO.BinPackingArcCost(10.0, 2.0), 1, 3),
+            (TPO.BinPackingArcCost(5.0, 2.0), 1, 3),
+        ]
+        instance = TestFixtures._leg_instance(modes, 3; quantity=5)
+        state = greedy_heuristic(
+            instance; mode_selector=FillThenSpillMode(), show_progress=false
+        )
+        slots(a) = a isa TPO.MultiAssignment ? a.per_mode : [a]
+        snapshot(s) = Dict(
+            (edge, k) =>
+                [(copy(b.commodities), b.remaining_capacity) for b in slot.bins] for
+            (edge, a) in s.assignments for (k, slot) in enumerate(slots(a))
+        )
+        before = snapshot(state)
+        @test any(a -> a isa TPO.MultiAssignment, values(state.assignments))
+        @test any(!isempty(bins) for bins in values(before))
+
+        duplicate = copy(state)
+        TPO.remove_bundle_path!(duplicate, instance, 1)
+        @test is_feasible(state, instance)
+        @test snapshot(state) == before
+    end
 end

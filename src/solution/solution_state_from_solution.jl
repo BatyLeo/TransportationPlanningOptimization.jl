@@ -86,7 +86,7 @@ function SolutionState(
 end
 
 # Input arc `index` as `(origin, destination, transit, slot, bin_capacity)`: spatial codes of its ends, transit steps,
-# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros if the arc is not in the instance.
+# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros (and an infinite bin capacity) if the arc is not in the instance.
 function _arc_locations(instance::Instance)
     ng = instance.network_graph.graph
     locations = fill(
@@ -167,7 +167,7 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
             i,
             "quantity $(leg.quantity) exceeds the commodity quantity $(commodity.quantity)",
         )
-        commodity.size <= location.bin_capacity || fail(
+        commodity.size <= location.bin_capacity + EPS || fail(
             i,
             "size $(commodity.size) exceeds the bin capacity $(location.bin_capacity) " *
             "of input arc $(leg.arc)",

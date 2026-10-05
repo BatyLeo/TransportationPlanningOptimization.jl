@@ -171,6 +171,7 @@ end
         instance; max_iter=500, rng=MersenneTwister(1), show_progress=false
     )
     start = Solution(start_state, instance)
+    # Relies on 500 local search iterations with seed 1 changing at least one route on small.
     @test start.routes !=
         TPO.solve(instance; local_search=false, show_progress=false).routes
     start_cost = cost(SolutionState(start, instance))
@@ -189,6 +190,7 @@ end
     @test result.bundle_paths !== state.bundle_paths
     @test result.assignments !== state.assignments
     @test is_feasible(result, instance)
+    @test is_feasible(state, instance)
     @test state.bundle_paths == paths
     @test cost(state) == state_cost
     @test cost(result) <= state_cost + 1e-6
