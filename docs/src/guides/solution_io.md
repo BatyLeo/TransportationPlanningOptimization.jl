@@ -64,45 +64,53 @@ is_feasible(solution_state, instance; verbose=true)
   Other plans come back normalized, with the legs of one leg position merged and in slot order and identical copies attributed by count.
 - Commodities dropped by an extraction must have an empty route, and the load reserved for them is not rebuilt.
 
+To get a full [`Solution`](@ref) back from edited routes, with `arc_flows` and cost rebuilt, use `Solution(routes, instance)`.
+It validates the routes like `SolutionState(solution, instance)` does, then converts the state back.
+
+```julia
+solution = Solution(edited_routes, instance)
+cost(solution)
+```
+
 ## CSV files
 
-Solutions can be saved to and loaded from CSV files using [`write_solution_csv`](@ref) and [`read_solution_csv`](@ref).
+The routes of a [`Solution`](@ref) can be saved to and loaded from a CSV file with [`write_solution_csv`](@ref) and [`read_solution_csv`](@ref).
 
 ## Writing a solution
 
 ```julia
-write_solution_csv("solution.csv", solution_state, instance)
+write_solution_csv("solution.csv", solution)
 ```
 
-The CSV contains one row per node in each bundle's path, with columns:
+The file has one row per leg, with columns:
 
 | Column | Description |
 |--------|-------------|
-| `bundle_idx` | 1-based bundle index |
-| `origin_id` | bundle origin node ID |
-| `destination_id` | bundle destination node ID |
-| `node_id` | spatial node ID at this path point |
-| `point_number` | position in the path (1 = destination, last = origin) |
-| `point_type` | `:destination`, `:other`, or `:origin` |
+| `commodity` | index of the input commodity |
+| `leg` | 1-based position of the leg in the route of the commodity |
+| `arc` | index of the input arc |
+| `departure` | departure date of the leg |
+| `arrival` | arrival date of the leg |
+| `quantity` | number of copies carried on the leg |
 
-Paths are written in **reverse order** (destination to origin).
+Commodities with an empty route have no rows, and the file holds the routes only, not `arc_flows`.
+To export the flows too, use `CSV.write("flows.csv", solution.arc_flows)`.
 
 ## Reading a solution
 
 ```julia
-solution_state = read_solution_csv("solution.csv", instance)
+solution = read_solution_csv("solution.csv", instance)
 ```
 
-The reader reconstructs full time-expanded paths from the spatial node sequence using BFS in the [`TravelTimeGraph`](@ref).
-It validates that all node IDs and bundle indices exist in the instance.
+The reader gets the routes from the file and returns `Solution(routes, instance)`, so the plan is validated like in [`SolutionState(solution, instance)`](@ref solution_state_from_solution) and its `arc_flows` and cost are rebuilt.
+Bins are repacked, so the cost only equals the original one for linear costs.
+Rows can come in any order, since legs are placed by their `leg` number, and commodities without rows get an empty route.
 
-For instances with [`MultiModalArc`](@ref) edges, pass a `mode_selector` to control how commodities are distributed across modes during reconstruction:
-
-```julia
-solution_state = read_solution_csv("solution.csv", instance; mode_selector=FillThenSpillMode())
-```
-
-The default is [`CheapestMode()`](@ref).
+A missing column throws an `ArgumentError` naming it.
+An `ArgumentError` with the row number (the non-empty rows after the header are counted, the first being row 1) is thrown for a missing or unparsable value, a commodity outside the input commodities, or leg numbers of a commodity that are not exactly `1:n` (duplicates or gaps).
+A file whose routes are not a valid plan on the instance is rejected by `Solution(routes, instance)` with an `ArgumentError`.
+Capacity is not checked, so call [`is_feasible`](@ref) on the result.
+Extra fields in a row are ignored with a CSV warning.
 
 ## Round-trip example
 
@@ -112,16 +120,17 @@ using Dates
 
 # Build instance and solve
 instance = Instance(nodes, arcs, commodities, Day(1))
-solution_state = solve_state(instance)
+solution = solve(instance)
 
 # Save
-write_solution_csv("my_solution.csv", solution_state, instance)
+write_solution_csv("my_solution.csv", solution)
 
 # Load back
 reloaded = read_solution_csv("my_solution.csv", instance)
 
 # Verify
-println("Original cost:  ", cost(solution_state))
+println("Same routes:    ", reloaded.routes == solution.routes)
+println("Original cost:  ", cost(solution))
 println("Reloaded cost:  ", cost(reloaded))
 println("Feasible:       ", is_feasible(reloaded, instance))
 ```

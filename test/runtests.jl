@@ -93,8 +93,8 @@ using .TestFixtures
         @testset "Solution round trip" begin
             include("test_solution_round_trip.jl")
         end
-        @testset "Solution parsing" begin
-            include("test_solution_parsing.jl")
+        @testset "Solution CSV" begin
+            include("test_solution_csv.jl")
         end
         @testset "Solution removal" begin
             include("test_solution_removal.jl")
