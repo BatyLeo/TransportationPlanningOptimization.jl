@@ -38,6 +38,37 @@ end
 """
 $TYPEDSIGNATURES
 
+Independent copy of `sol`: new paths and assignments with copied commodity vectors and bins.
+The commodity objects are shared, so commodity equality still holds, unlike with `deepcopy` when the commodity `info` is mutable.
+"""
+function Base.copy(sol::SolutionState{C}) where {C}
+    return SolutionState{C}(
+        [copy(path) for path in sol.bundle_paths],
+        Dict{Tuple{Int,Int},Union{SingleAssignment{C},MultiAssignment{C}}}(
+            edge => _copy_assignment(a) for (edge, a) in sol.assignments
+        ),
+    )
+end
+
+function _copy_assignment(a::SingleAssignment{C}) where {C}
+    return SingleAssignment{C}(
+        copy(a.commodities),
+        [Bin{C}(copy(bin.commodities), bin.remaining_capacity) for bin in a.bins],
+        a.arc_cost,
+        a.node_cost,
+        a.sorted,
+        a.total_size,
+        a.bins_dirty, # drop this line after the rebase onto main (field removed there)
+    )
+end
+
+function _copy_assignment(a::MultiAssignment{C}) where {C}
+    return MultiAssignment{C}([_copy_assignment(slot) for slot in a.per_mode], a.node_cost)
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute the total cost of the solution: the sum, over every edge assignment, of the
 arc cost plus the head node's cost (see [`cost_of`](@ref)).
 """

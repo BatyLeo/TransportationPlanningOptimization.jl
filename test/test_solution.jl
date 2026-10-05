@@ -18,6 +18,7 @@ function check_projection(sol, instance; reservations::Bool=false, same_cost::Bo
     TestFixtures.check_flows(ns, sol)
     TestFixtures.check_routes(ns, sol, instance; reservations)
     TestFixtures.check_round_trip(sol, instance; same_cost=same_cost && !reservations)
+    @test is_feasible(ns, instance) == is_feasible(sol, instance)
     return ns
 end
 
@@ -117,11 +118,9 @@ end
 
 @testset "Sub-instance: dropped commodities, reservations only in flows" begin
     instance = TestFixtures.shared_arc_instance()
-    (; solution, sub_instance, filtering_solution) = solve_filtered(
-        instance; show_progress=false
-    )
+    (; solution_state, sub_instance) = solve_filtered(instance; show_progress=false)
     @test any(==((0, 0)), sub_instance.commodity_to_order)
-    ns = check_projection(solution, sub_instance; reservations=true)
+    ns = check_projection(solution_state, sub_instance; reservations=true)
     dropped = findall(==((0, 0)), sub_instance.commodity_to_order)
     @test all(k -> isempty(ns.routes[k]), dropped)
     @test any(!isempty, ns.routes)
@@ -236,4 +235,19 @@ end
     io = IOBuffer()
     CSV.write(io, ns.arc_flows)
     @test nrow(CSV.read(IOBuffer(take!(io)), DataFrame)) == length(ns.arc_flows)
+end
+
+@testset "is_feasible(::Solution) is false without throwing on bad plans" begin
+    instance = TestFixtures.shared_arc_instance()
+    solution = TPO.solve(instance; local_search=false, show_progress=false)
+    @test is_feasible(solution, instance)
+
+    (; empty_route, overloaded) = TestFixtures.shared_arc_bad_plans(solution)
+    @test !is_feasible(empty_route, instance)
+    @test !(@test_logs (:warn, r"cannot be represented") is_feasible(
+        empty_route, instance; verbose=true
+    ))
+
+    @test !is_feasible(SolutionState(overloaded, instance), instance)
+    @test !is_feasible(overloaded, instance)
 end

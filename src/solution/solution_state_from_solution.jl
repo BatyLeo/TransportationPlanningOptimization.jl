@@ -11,7 +11,7 @@ Other plans come back normalized, with the legs of one leg position merged and i
 
 An `ArgumentError` is thrown for the first rule a route breaks, checked in this order:
 - a wrong number of routes, a route for a dropped commodity or an empty route for a kept one,
-- an arc index out of range or absent from `instance`, a non-positive quantity or a leg quantity above the commodity quantity, dates off the time grid or a transit time different from the arc one,
+- an arc index out of range or absent from `instance`, a non-positive quantity or a leg quantity above the commodity quantity, a commodity size above the bin capacity of the arc, dates off the time grid or a transit time different from the arc one,
 - copies not adding up to the commodity quantity (also when they are split across legs between two nodes that differ in dates or are not consecutive),
 - a route that does not start at the commodity origin, legs that are not connected, wait anywhere but before the first leg (arrival-date instances) or after the last leg (departure-date instances), or overlap,
 - a route that does not end at the commodity destination,
@@ -85,12 +85,13 @@ function SolutionState(
     return SolutionState{C}(paths, assignments)
 end
 
-# Input arc `index` as `(origin, destination, transit, slot)`: spatial codes of its ends, transit steps
-# and slot in the `modes` of its per-transit-time sub-arc. All zeros if the arc is not in the instance.
+# Input arc `index` as `(origin, destination, transit, slot, bin_capacity)`: spatial codes of its ends, transit steps,
+# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros if the arc is not in the instance.
 function _arc_locations(instance::Instance)
     ng = instance.network_graph.graph
     locations = fill(
-        (; origin=0, destination=0, transit=0, slot=0), length(instance.input.arcs)
+        (; origin=0, destination=0, transit=0, slot=0, bin_capacity=Inf),
+        length(instance.input.arcs),
     )
     for (u, v) in MetaGraphsNext.edge_labels(ng)
         origin, destination = MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)
@@ -100,7 +101,9 @@ function _arc_locations(instance::Instance)
                 iszero(index) && continue
                 iszero(locations[index].origin) ||
                     error("input arc $index is used by several arcs of the network graph")
-                locations[index] = (; origin, destination, transit, slot)
+                bp = _bin_packing_cost_of((arc isa NetworkArc ? arc : arc.modes[slot]).cost)
+                bin_capacity = isnothing(bp) ? Inf : Float64(bp.bin_capacity)
+                locations[index] = (; origin, destination, transit, slot, bin_capacity)
             end
         end
     end
@@ -163,6 +166,11 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
         leg.quantity <= commodity.quantity || fail(
             i,
             "quantity $(leg.quantity) exceeds the commodity quantity $(commodity.quantity)",
+        )
+        commodity.size <= location.bin_capacity || fail(
+            i,
+            "size $(commodity.size) exceeds the bin capacity $(location.bin_capacity) " *
+            "of input arc $(leg.arc)",
         )
         departure = _date_step(leg.departure, start, Δ)
         arrival = _date_step(leg.arrival, start, Δ)

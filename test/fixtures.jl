@@ -138,6 +138,20 @@ function shared_arc_instance(; b_type::Symbol=:other)
     return Instance(nodes, arcs, commodities, Day(1))
 end
 
+# Two bad plans on `shared_arc_instance`, built from its feasible `solution`: an empty route
+# for the first commodity, and both commodities (sizes 3 and 4) on arc 1 of capacity 5.
+function shared_arc_bad_plans(solution::Solution)
+    empty_route = Solution(
+        [TransportationPlanningOptimization.Leg[], solution.routes[2]], solution.arc_flows
+    )
+    d(n) = DateTime(2021, 1, n)
+    leg(arc, n) = TransportationPlanningOptimization.Leg(;
+        arc, departure=d(n), arrival=d(n + 1), quantity=1
+    )
+    overloaded = Solution([[leg(1, 1)], [leg(1, 1), leg(2, 2)]], solution.arc_flows)
+    return (; empty_route, overloaded)
+end
+
 # Origin id, destination id and transit steps of an input arc.
 function _input_arc_leg(a::Arc, time_step)
     return (
@@ -204,6 +218,7 @@ function _leg_instance(
     wrap_time=false,
     node_cost=NoNodeCost(),
     arrival::Bool=false,
+    size=1.0,
 )
     nodes = [
         Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination, node_cost)
@@ -224,7 +239,7 @@ function _leg_instance(
             quantity=quantity,
             (arrival ? :arrival_date : :departure_date) => DateTime(2024, 1, d),
             max_delivery_time=Day(max_delivery_days),
-            size=1.0,
+            size,
         ) for d in departure_days
     ]
     return Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true, wrap_time)
@@ -235,9 +250,9 @@ const _TRUCK_TRAIN_MODES = [(10.0, 1, 10), (5.0, 2, 10)]
 # Check the arc flows of `ns` against `sol`: costs, volume, bins and unique rows.
 function check_flows(ns, sol)
     flows = ns.arc_flows
-    @test sum(f -> f.arc_cost + f.node_cost, flows; init=0.0) ≈ cost(sol)
-    @test sum(f -> f.arc_cost, flows; init=0.0) ≈ total_arc_cost(sol)
-    @test sum(f -> f.node_cost, flows; init=0.0) ≈ total_node_cost(sol)
+    @test cost(ns) ≈ cost(sol)
+    @test total_arc_cost(ns) ≈ total_arc_cost(sol)
+    @test total_node_cost(ns) ≈ total_node_cost(sol)
     @test sum(f -> f.volume, flows; init=0.0) ≈
         sum(total_size_of(a) for a in values(sol.assignments); init=0.0)
     @test allunique((f.arc, f.departure) for f in flows)

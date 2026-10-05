@@ -58,12 +58,12 @@ end
 
     # Phase 1: initial solution
     sol_data = solve_filtered(instance; show_progress=false)
-    local_search!(sol_data.solution, sol_data.sub_instance; time_limit=2.0)
-    post_ls_cost = cost(sol_data.solution)
+    local_search!(sol_data.solution_state, sol_data.sub_instance; time_limit=2.0)
+    post_ls_cost = cost(sol_data.solution_state)
 
     # Phase 2: ILS with slope scaling
     result = iterated_local_search!(
-        sol_data.solution,
+        sol_data.solution_state,
         sol_data.sub_instance,
         [IntegrationReinsertPerturbation()];
         config=ILSConfig(;
@@ -81,7 +81,7 @@ end
     @test result isa ILSResult
     @test result.improvement >= 0.0
     @test result.best_cost <= post_ls_cost + 1e-6
-    @test is_feasible(sol_data.solution, sol_data.sub_instance)
+    @test is_feasible(sol_data.solution_state, sol_data.sub_instance)
 
     # Verify cost_scaling was populated by slope scaling on the sub-instance
     # that ILS actually ran on (solve_filtered builds a fresh sub-instance

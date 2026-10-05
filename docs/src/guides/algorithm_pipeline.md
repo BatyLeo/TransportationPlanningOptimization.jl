@@ -26,11 +26,13 @@ mix_greedy_and_lower_bound   (on the sub-instance, seeded with the pre-load)
 ```
 
 The function [`solve`](@ref) runs this whole pipeline and is the recommended entry point.
+It returns a [`Solution`](@ref), and [`solve_state`](@ref) returns the internal [`SolutionState`](@ref) instead.
 The function [`solve_filtered`](@ref) wraps everything up to (but not including) local search, for workflows that need control over the local search step.
 
 ## Construction Heuristics
 
 Three construction strategies are available.
+They return a [`SolutionState`](@ref).
 All of them process bundles one at a time (sorted by largest order size), compute a cost matrix on the [`TravelTimeGraph`](@ref), run Dijkstra to find the cheapest path, and commit the bundle to that path.
 Bundle paths must be elementary (they never revisit a physical node, though waiting on one is allowed).
 Dijkstra runs first, and a label-setting search runs only when its path loops.
@@ -41,7 +43,7 @@ Dijkstra runs first, and a label-setting search runs only when its path loops.
 This produces good solutions but is order-dependent.
 
 ```julia
-solution = greedy_heuristic(instance)
+solution_state = greedy_heuristic(instance)
 ```
 
 ### Lower bound
@@ -51,7 +53,7 @@ For [`BinPackingArcCost`](@ref) arcs, this means fractional bin counts instead o
 The result is a cost lower bound (when costs are linear in volume) that can be used to estimate solution quality.
 
 ```julia
-lb_solution = lower_bound(instance)
+lb_state = lower_bound(instance)
 ```
 
 ### Mixed start
@@ -59,7 +61,7 @@ lb_solution = lower_bound(instance)
 [`mix_greedy_heuristic`](@ref) is the convenience wrapper: it builds three candidate solutions internally and returns the cheapest feasible one.
 
 ```julia
-solution = mix_greedy_heuristic(instance)
+solution_state = mix_greedy_heuristic(instance)
 ```
 
 Under the hood, [`mix_greedy_and_lower_bound`](@ref TransportationPlanningOptimization.mix_greedy_and_lower_bound) builds three solutions simultaneously in a single pass: pure greedy, pure lower bound, and a **blended** solution whose cost matrix interpolates between greedy and lower-bound costs.
@@ -84,14 +86,13 @@ The filtering pipeline pre-routes those trivial bundles so the heavier algorithm
 
 ```julia
 result = solve_filtered(instance)
-# result.solution lives on result.sub_instance
-# result.filtering_solution is the full-instance solution of step 1
+# result.solution_state lives on result.sub_instance
+# result.filtering_state is the full-instance state of step 1
 ```
 
-`cost(result.solution)` already includes the reserved load of filtered
-bundles whose direct arc is still in `result.sub_instance`, so it is neither
-the sub-instance cost nor the full-instance cost.
-The full-instance cost is `cost(merge_solutions(result.filtering_solution, result.solution, instance, result.sub_instance))`.
+`cost(result.solution_state)` already includes the reserved load of filtered bundles whose direct arc is still in `result.sub_instance`.
+It is therefore neither the sub-instance cost nor the full-instance cost.
+The full-instance cost is `cost(merge_solutions(result.filtering_state, result.solution_state, instance, result.sub_instance))`.
 
 ## Local Search
 
@@ -106,7 +107,7 @@ The loop stops when any of three conditions is met: `time_limit` seconds elapsed
 A final [`bin_packing_improvement!`](@ref TransportationPlanningOptimization.bin_packing_improvement!) pass runs at the end when `allow_repack=true` (the default).
 
 ```julia
-stats = local_search!(solution, instance; time_limit=60.0)
+stats = local_search!(solution_state, instance; time_limit=60.0)
 # stats.saved, stats.final_cost, stats.n_iter
 ```
 
@@ -141,16 +142,48 @@ Use the building blocks when you need another local search, such as [`iterated_l
 result = solve_filtered(instance)
 
 # Improve the sub-instance solution (or use iterated_local_search!)
-stats = local_search!(result.solution, result.sub_instance; time_limit=300.0)
+stats = local_search!(result.solution_state, result.sub_instance; time_limit=300.0)
 
 # Stitch back onto the full instance
-final_solution = merge_solutions(
-    result.filtering_solution, result.solution, instance, result.sub_instance
+solution_state = merge_solutions(
+    result.filtering_state, result.solution_state, instance, result.sub_instance
 )
+solution = Solution(solution_state, instance)
 
-is_feasible(final_solution, instance; verbose=true)
-println("Cost: ", cost(final_solution))
+is_feasible(solution, instance; verbose=true)
+println("Cost: ", cost(solution))
 ```
+
+## [Working with SolutionState (advanced)](@id solution_state_guide)
+
+A [`SolutionState`](@ref) is the mutable internal state of the algorithms: the path of every bundle and the load packed on every time-space edge.
+The construction heuristics, [`local_search!`](@ref) and [`merge_solutions`](@ref) work on it, whereas [`Solution`](@ref) is a plain read-only view on your input arcs and commodities.
+
+[`solve_state`](@ref) runs the same pipeline as [`solve`](@ref) and returns the state.
+Use it when you need a state, for example for [`local_search!`](@ref), [`iterated_local_search!`](@ref) or `write_solution_csv` (which take a state), or for the content of each bin.
+The bins of a state are the ones packed by the algorithms, while those of a `Solution` are repacked when it is converted back.
+
+```julia
+solution_state = solve_state(instance)
+solution = Solution(solution_state, instance)       # state -> Solution
+solution_state = SolutionState(solution, instance)  # Solution -> state
+```
+
+The conversion back is described in [Building a SolutionState from a Solution](@ref solution_state_from_solution).
+
+### Warm start
+
+Pass an existing plan, for example an edited `Solution`, to continue from it:
+
+```julia
+solution = solve(instance; start=solution, time_limit=30.0)
+```
+
+Filtering and construction are skipped (the `filtering` keyword is ignored) and local search runs on the full instance.
+The start must be feasible on the instance, including capacities, otherwise an `ArgumentError` is thrown.
+A `Solution` start is converted by `SolutionState(solution, instance)`, so its bins are repacked by first-fit decreasing.
+The result costs at most the converted start, which can differ from `cost(start)` for [`BinPackingArcCost`](@ref) arcs.
+A `SolutionState` start is copied and left untouched.
 
 ## Keyword Options
 
@@ -164,7 +197,7 @@ When arcs carry a [`MultiModalArc`](@ref) (multiple transport modes on the same 
 Pass via the `mode_selector` keyword (the function [`solve`](@ref) always uses `CheapestMode()`):
 
 ```julia
-solution = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
+solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 ```
 
 ### Packing semantics
@@ -178,6 +211,6 @@ In `greedy_heuristic`, `packing` applies to both insertion cost evaluation and c
 In `local_search!`, `packing` sets only the commit of accepted moves and `cost_packing` sets the move evaluation (both `:frozen` by default).
 
 ```julia
-solution = greedy_heuristic(instance; packing=:ffd_union)
-stats = local_search!(solution, instance; packing=:ffd_union, cost_packing=:frozen)
+solution_state = greedy_heuristic(instance; packing=:ffd_union)
+stats = local_search!(solution_state, instance; packing=:ffd_union, cost_packing=:frozen)
 ```

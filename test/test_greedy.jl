@@ -162,5 +162,5 @@ end
         cost(lower_bound(instance; show_progress=false))
     @test is_feasible(mix_greedy_heuristic(instance; show_progress=false), instance)
     res = solve_filtered(instance; show_progress=false)
-    @test is_feasible(res.solution, res.sub_instance)
+    @test is_feasible(res.solution_state, res.sub_instance)
 end

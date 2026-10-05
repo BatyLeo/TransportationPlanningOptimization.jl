@@ -53,7 +53,7 @@ Arcs and commodities are identified by their index in the input vectors, and dat
 - `routes[k]` lists the legs of input commodity `k` in travel order.
   An order split across the modes of a multi-modal arc gives one leg per mode, each with the copies it carries.
   Waiting is the gap before the first leg or after the last one.
-- `arc_flows` gives the load and costs per input arc and departure, and sums to `cost(solution_state)`.
+- `arc_flows` gives the load and costs per input arc and departure, and sums to `cost(solution_state)` (up to floating point summation order).
   With `wrap_time`, its departures are cyclic while route dates are not.
 
 See [Reading a solution on the input network](@ref solution_guide) for the date
@@ -71,12 +71,58 @@ end
 
 function Base.show(io::IO, solution::Solution)
     n_legs = sum(length, solution.routes; init=0)
-    total = sum(f -> f.arc_cost + f.node_cost, solution.arc_flows; init=0.0)
     return print(
         io,
         "Solution(commodities=$(length(solution.routes)), legs=$(n_legs), ",
-        "flows=$(length(solution.arc_flows)), cost=$(total))",
+        "flows=$(length(solution.arc_flows)), cost=$(cost(solution)))",
     )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Total arc cost of `solution`, the sum of `arc_cost` over its `arc_flows`.
+"""
+function total_arc_cost(solution::Solution)
+    return sum(f -> f.arc_cost, solution.arc_flows; init=0.0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Total node cost of `solution`, the sum of `node_cost` over its `arc_flows`.
+"""
+function total_node_cost(solution::Solution)
+    return sum(f -> f.node_cost, solution.arc_flows; init=0.0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Total cost of `solution`, the sum of `arc_cost + node_cost` over its `arc_flows`.
+The costs are read from `arc_flows`, so after editing `routes` refresh them with `Solution(SolutionState(solution, instance), instance)`.
+"""
+function cost(solution::Solution)
+    return sum(f -> f.arc_cost + f.node_cost, solution.arc_flows; init=0.0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Check that `solution` is feasible on `instance`.
+The `arc_flows` are ignored: the plan is rebuilt from the routes by `SolutionState(solution, instance)`, with bins repacked by first-fit decreasing.
+Returns `false` (with a warning if `verbose`) when the routes cannot be represented on `instance`, otherwise the result of [`is_feasible`](@ref) on the rebuilt [`SolutionState`](@ref).
+On a sub-instance the reserved load of dropped bundles is not rebuilt, so capacity is checked without it.
+"""
+function is_feasible(solution::Solution, instance::Instance; verbose::Bool=false, tol=EPS)
+    solution_state = try
+        SolutionState(solution, instance)
+    catch err
+        err isa ArgumentError || rethrow()
+        verbose && @warn "Solution cannot be represented on the instance: $(err.msg)"
+        return false
+    end
+    return is_feasible(solution_state, instance; verbose, tol)
 end
 
 """

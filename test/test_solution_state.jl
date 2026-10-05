@@ -384,3 +384,48 @@ end
         end
     end
 end
+
+mutable struct MInfo
+    x::Float64
+end
+
+@testset "copy of a SolutionState" begin
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=2,
+            departure_date=DateTime(2024, 1, 1),
+            max_delivery_time=Day(2),
+            size=1.0,
+            info=MInfo(1.0),
+        ),
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1))
+    state = greedy_heuristic(instance; show_progress=false)
+    paths, state_cost = deepcopy(state.bundle_paths), cost(state)
+    assignments = Dict(edge => copy(a.commodities) for (edge, a) in state.assignments)
+
+    result = TPO.solve_state(instance; start=state, show_progress=false)
+    @test is_feasible(result, instance)
+    @test state.bundle_paths == paths
+    @test cost(state) == state_cost
+    @test Dict(edge => a.commodities for (edge, a) in state.assignments) == assignments
+
+    duplicate = copy(state)
+    @test duplicate.bundle_paths == state.bundle_paths
+    @test duplicate.bundle_paths !== state.bundle_paths
+    @test cost(duplicate) == state_cost
+    @test is_feasible(duplicate, instance)
+    TPO.remove_bundle_path!(duplicate, instance, 1)
+    @test cost(duplicate) ≈ 0.0 atol = 1e-9
+    @test state.bundle_paths == paths
+    @test cost(state) == state_cost
+    @test Dict(edge => a.commodities for (edge, a) in state.assignments) == assignments
+end

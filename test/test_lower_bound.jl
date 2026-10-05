@@ -95,7 +95,7 @@ end
     res = TransportationPlanningOptimization.solve_filtered(instance; show_progress=false)
     @test length(res.sub_instance.bundles) == 1
     merged = TransportationPlanningOptimization.merge_solutions(
-        filt, res.solution, instance, res.sub_instance
+        filt, res.solution_state, instance, res.sub_instance
     )
     @test is_feasible(merged, instance)
     @test cost(merged) == 9.0
@@ -183,7 +183,7 @@ end
     res = TransportationPlanningOptimization.solve_filtered(instance; show_progress=false)
     @test length(res.sub_instance.bundles) == 1
     merged = TransportationPlanningOptimization.merge_solutions(
-        filt, res.solution, instance, res.sub_instance
+        filt, res.solution_state, instance, res.sub_instance
     )
     @test is_feasible(merged, instance)
 end
