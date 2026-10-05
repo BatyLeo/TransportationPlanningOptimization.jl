@@ -3,7 +3,8 @@ $TYPEDSIGNATURES
 
 Find the cheapest path for a bundle in the TravelTimeGraph and add it to the current
 solution. Returns `false` without modifying `current_solution` if Dijkstra finds no
-feasible path, `true` otherwise.
+feasible path, `true` otherwise. When `snapshots` is given, the edges of the new path are
+snapshotted into it before the insertion (see `_snapshot_path_assignments`).
 """
 function _try_insert_bundle!(
     current_solution::SolutionState,
@@ -12,6 +13,7 @@ function _try_insert_bundle!(
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
     packing::Symbol=:frozen,
+    snapshots::Union{Dict,Nothing}=nothing,
 )
     ttg = instance.travel_time_graph
     update_bundle_cost_matrix!(
@@ -30,6 +32,13 @@ function _try_insert_bundle!(
 
     isempty(path) && return false
 
+    # Optionally snapshot the edges of the new path first, so the caller can roll back.
+    if !isnothing(snapshots)
+        _remove_shortcuts_from_path!(path, ttg)
+        _snapshot_path_assignments(
+            current_solution, instance, bundle_idx, path; cache=snapshots, clear=false
+        )
+    end
     add_bundle_path!(current_solution, instance, bundle_idx, path; mode_selector, packing)
     return true
 end

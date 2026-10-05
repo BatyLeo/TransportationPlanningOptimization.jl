@@ -1,6 +1,7 @@
 using Test
 using TransportationPlanningOptimization
 using Dates
+using Random
 
 const TPO = TransportationPlanningOptimization
 
@@ -52,5 +53,125 @@ end
 
     # SolutionState must still be usable after restore
     local_search!(sol, instance; time_limit=2.0)
+    @test is_feasible(sol, instance)
+end
+
+slots(a::TPO.SingleAssignment) = [a]
+slots(a::TPO.MultiAssignment) = a.per_mode
+
+function same_state(sol, sol0)
+    ok =
+        sol.bundle_paths == sol0.bundle_paths &&
+        keys(sol.assignments) == keys(sol0.assignments)
+    ok || return false
+    for (edge, a) in sol.assignments,
+        (s, s0) in zip(slots(a), slots(sol0.assignments[edge]))
+
+        for f in fieldnames(TPO.SingleAssignment)
+            f === :bins && continue
+            ok &= getfield(s, f) == getfield(s0, f)
+        end
+        ok &=
+            [(bin.commodities, bin.remaining_capacity) for bin in s.bins] == [(bin.commodities, bin.remaining_capacity) for bin in s0.bins]
+    end
+    return ok
+end
+
+# Shortest path of bundle `b` once the arcs of its current path are forbidden.
+function alternative_path(sol, instance, b)
+    ttg = instance.travel_time_graph
+    old = sol.bundle_paths[b]
+    TPO.update_bundle_cost_matrix!(sol, instance, b)
+    for k in 1:(length(old) - 1)
+        ttg.cost_matrix[old[k], old[k + 1]] = Inf
+    end
+    path = TPO.bundle_shortest_path(instance, ttg.origin_codes[b], ttg.destination_codes[b])
+    isempty(path) || TPO._remove_shortcuts_from_path!(path, ttg)
+    return path
+end
+
+@testset "rollback restores the exact state, including edges the move created" begin
+    instance = TestFixtures.small_instance()
+    sol0 = TestFixtures.small_greedy()
+    # first bundle whose alternative path differs and uses an edge without assignment
+    b, new_path = 0, Int[]
+    for i in eachindex(sol0.bundle_paths)
+        isempty(sol0.bundle_paths[i]) && continue
+        p = alternative_path(deepcopy(sol0), instance, i)
+        (isempty(p) || p == sol0.bundle_paths[i]) && continue
+        snaps = TPO._snapshot_path_assignments(sol0, instance, i, p)
+        if any(isnothing, values(snaps))
+            b, new_path = i, p
+            break
+        end
+    end
+    @test b != 0
+    old_path = copy(sol0.bundle_paths[b])
+
+    sol = deepcopy(sol0)
+    snapshots = TPO._snapshot_path_assignments(sol, instance, b, old_path)
+    TPO.remove_bundle_path!(sol, instance, b)
+    TPO._snapshot_path_assignments(sol, instance, b, new_path; cache=snapshots, clear=false)
+    TPO.add_bundle_path!(sol, instance, b, copy(new_path))
+    @test !same_state(sol, sol0)
+    @test length(sol.assignments) > length(sol0.assignments)
+    TPO._restore_path_assignments!(sol, b, old_path, snapshots)
+    @test same_state(sol, sol0)
+
+    # Two bundles: the second one is re-added along its old path
+    b2 = findfirst(
+        i -> i != b && !isempty(sol0.bundle_paths[i]), eachindex(sol0.bundle_paths)
+    )
+    idxs = [b, b2]
+    old_paths = [copy(sol0.bundle_paths[i]) for i in idxs]
+    new_paths = [copy(new_path), copy(old_paths[2])]
+    sol = deepcopy(sol0)
+    snapshots = TPO._snapshot_multi_bundle_assignments(sol, instance, idxs)
+    foreach(i -> TPO.remove_bundle_path!(sol, instance, i), idxs)
+    for (i, p) in zip(idxs, new_paths)
+        TPO._snapshot_path_assignments(sol, instance, i, p; cache=snapshots, clear=false)
+    end
+    for (i, p) in zip(idxs, new_paths)
+        TPO.add_bundle_path!(sol, instance, i, p)
+    end
+    TPO._restore_multi_bundle_assignments!(sol, idxs, old_paths, snapshots)
+    @test same_state(sol, sol0)
+end
+
+@testset "a snapshot stays intact when its slot changes in place" begin
+    sol = TestFixtures.small_greedy()
+    slot = first(
+        a for a in values(sol.assignments) if a isa TPO.SingleAssignment && !isempty(a.bins)
+    )
+    contents(s) = [(copy(bin.commodities), bin.remaining_capacity) for bin in s.bins]
+    before = contents(slot)
+    snap = TPO._snapshot_assignment(slot)
+    push!(slot.bins[1].commodities, slot.bins[1].commodities[1])
+    slot.bins[1].remaining_capacity -= 1.0
+    push!(slot.bins, TPO.Bin([slot.commodities[1]], 0.0))
+    @test [(bin.commodities, bin.remaining_capacity) for bin in snap.bins] == before
+end
+
+@testset "refine=true two-node moves keep cost(sol) equal to start minus saved" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    rng = MersenneTwister(3)
+    Random.seed!(3)
+    pairs = TPO.compute_candidate_nodes(instance.travel_time_graph)
+    n_accepted = 0
+    for _ in 1:150
+        src, dst = rand(rng, pairs)
+        before = deepcopy(sol)
+        c0 = cost(sol)
+        saved = TPO.two_node_common_incremental!(sol, instance, src, dst; refine=true)
+        @test cost(sol) ≈ c0 - saved rtol = 1e-9
+        if saved == 0.0
+            @test same_state(sol, before)
+        else
+            n_accepted += 1
+            @test saved > 0
+        end
+    end
+    @test n_accepted > 0
     @test is_feasible(sol, instance)
 end

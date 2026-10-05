@@ -44,6 +44,10 @@ iterations is reached. A final [`bin_packing_improvement!`](@ref) pass runs when
 
 Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type.
 
+`packing` selects how accepted moves are committed on bin-packing arcs (`:frozen` by
+default packs new commodities onto the existing bins, `:ffd_union` re-packs the union of
+existing and new commodities). `cost_packing` does the same for move evaluation.
+
 Returns a [`LocalSearchResult`](@ref) with cost improvement, iteration counts,
 and time-series samples for convergence analysis.
 """
@@ -59,7 +63,7 @@ function local_search!(
     allow_consolidate::Bool=true,
     allow_repack::Bool=true,
     refine_two_node::Bool=false,
-    packing::Symbol=:ffd_union,
+    packing::Symbol=:frozen,
     cost_packing::Symbol=:frozen,
     rng::Random.AbstractRNG=Random.default_rng(),
     sample_every::Int=1000,
@@ -139,6 +143,7 @@ function local_search!(
                     workspace,
                     buffer_pool,
                     snapshot_cache,
+                    deadline=Float64(t_start + time_limit),
                 )
             else
                 0.0

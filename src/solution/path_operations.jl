@@ -134,7 +134,10 @@ This updates the `bundle_paths` and the `assignments` for all arcs along the pat
 
 Returns the cost increase produced by adding `path` (a non-negative `Float64`).
 The increase is the sum, over every path edge, of the arc-cost change (via
-`_update_single_assignment_cost!`) plus the change in the head node's cost.
+`_commit_new_to_slot!`, which commits onto the cached bins under `:frozen` and
+recomputes the slot cost otherwise) plus the change in the head node's cost.
+Multimodal `FillThenSpillMode` edges are the exception: they always repack through
+`_fill_then_spill_assign!`, whatever `packing` is.
 """
 function add_bundle_path!(
     current_solution::SolutionState{C},
@@ -198,10 +201,11 @@ cost contribution of the bundle on its path). Returns `0.0` when the bundle
 path is already empty.
 
 Per-edge details:
-- On `BinPackingArcCost` edges, bins are recomputed from scratch via
-  `compute_bin_assignments`, so the stored `bins` and `cost` reflect the
-  reduced commodity set.
-- On `LinearArcCost` edges, `cost` is recomputed via `evaluate`.
+- On edges with a bin-packing cost term, the commodities are taken out of their bins in
+  place and emptied bins are dropped. The bins are repacked from scratch only when
+  first-fit-decreasing on the remaining commodities needs strictly fewer bins, so a removal
+  never raises the bin count. The stored `bins` and `cost` reflect the reduced commodity set.
+- On `LinearArcCost` edges, `cost` is recomputed from the reduced `total_size`.
 - Commodities are matched by `==`. By construction (see
   `build_instance`), two bundles with different `(origin_id, destination_id,
   group_key)` cannot share `==`-equal commodities, so the match is
@@ -214,7 +218,7 @@ Per-edge details:
 Assignment dict entries are kept even when their commodity vector goes to
 zero, so subsequent reinsertion can reuse them without re-keying. An entry
 whose commodities are empty contributes `0` to `cost(sol)` via
-`_update_single_assignment_cost!`.
+`_update_cost_after_removal!`.
 
 Throws `ArgumentError` if any of the bundle's commodities are not found on
 the expected TSG edges. That should never happen when the bundle's stored

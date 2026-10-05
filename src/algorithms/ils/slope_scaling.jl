@@ -54,11 +54,7 @@ function _slope_scaling_update_edge!(
     n_bins_continuous = ceil(Int, total_volume / bp_cost.bin_capacity)
     n_bins_continuous <= 0 && return nothing
 
-    n_bins = if assignment.bins_dirty
-        tentative_bin_count(bp_cost, assignment.commodities; presorted=assignment.sorted)
-    else
-        length(assignment.bins)
-    end
+    n_bins = length(assignment.bins)
     n_bins == 0 && return nothing
 
     factor = clamp(n_bins / n_bins_continuous, 0.0, 2.0)

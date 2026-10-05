@@ -3,10 +3,9 @@
 """
 $TYPEDSIGNATURES
 
-Frozen-bin per-edge increment for a single-mode assignment. When bins are clean,
-dispatches to `frozen_incremental_cost!` (bin-packing terms reuse committed bins,
-others fall back to `incremental_cost_with_size` or `incremental_cost!`).
-When bins are dirty, falls back to the standard `incremental_cost!`.
+Frozen-bin per-edge increment for a single-mode assignment. Dispatches to
+`frozen_incremental_cost!` (bin-packing terms reuse committed bins, others fall back to
+`incremental_cost_with_size` or `incremental_cost!`).
 
 Shared by both the `NetworkArc` and per-mode `MultiModalArc` frozen paths (and
 reused by `assignment_operations.jl`).
@@ -18,10 +17,6 @@ function _frozen_edge_incremental_cost(
     new_comms::Vector{C},
     new_total_size::Float64=NaN,
 ) where {C<:LightCommodity}
-    if existing.bins_dirty
-        return incremental_cost!(buffer, arc_f, existing.commodities, new_comms)
-    end
-    # else
     return frozen_incremental_cost!(
         buffer, arc_f, existing.bins, existing.commodities, new_comms, new_total_size
     )
@@ -45,9 +40,10 @@ function _edge_incremental_cost(
     ::AbstractModeSelector;
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
+    empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     _mode_has_capacity(arc, 0.0, new_comms) || return Inf
-    return incremental_cost!(buffer, arc.cost, nothing, new_comms)
+    return empty_incremental_cost!(buffer, arc.cost, new_comms, empty_counts)
 end
 
 """
@@ -66,6 +62,7 @@ function _edge_incremental_cost(
     ::AbstractModeSelector;
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
+    empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     _mode_has_capacity(arc, existing.total_size, new_comms) || return Inf
     if packing === :frozen
@@ -73,9 +70,8 @@ function _edge_incremental_cost(
             buffer, arc.cost, existing, new_comms, new_total_size
         )
     end
-    n_ex = existing.bins_dirty ? -1 : length(existing.bins)
     return incremental_cost!(
-        buffer, arc.cost, existing.commodities, new_comms; n_existing=n_ex
+        buffer, arc.cost, existing.commodities, new_comms; n_existing=length(existing.bins)
     )
 end
 
@@ -97,10 +93,11 @@ function _edge_incremental_cost(
     ::CheapestMode;
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
+    empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     return minimum(
         if _mode_has_capacity(mode, 0.0, new_comms)
-            incremental_cost!(buffer, mode.cost, nothing, new_comms)
+            empty_incremental_cost!(buffer, mode.cost, new_comms, empty_counts)
         else
             Inf
         end for mode in arc.modes
@@ -122,6 +119,7 @@ function _edge_incremental_cost(
     ::CheapestMode;
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
+    empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     return minimum(
         if _mode_has_capacity(arc.modes[i], existing.per_mode[i].total_size, new_comms)
@@ -134,17 +132,12 @@ function _edge_incremental_cost(
                     new_total_size,
                 )
             else
-                n_ex = if existing.per_mode[i].bins_dirty
-                    -1
-                else
-                    length(existing.per_mode[i].bins)
-                end
                 incremental_cost!(
                     buffer,
                     arc.modes[i].cost,
                     existing.per_mode[i].commodities,
                     new_comms;
-                    n_existing=n_ex,
+                    n_existing=length(existing.per_mode[i].bins),
                 )
             end
         else
@@ -173,6 +166,7 @@ function _edge_incremental_cost(
     ::FillThenSpillMode;
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
+    empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     empty_existing = [C[] for _ in eachindex(arc.modes)]
     partition, overflow = _fill_then_spill_partition(arc, empty_existing, new_comms)
@@ -202,6 +196,7 @@ function _edge_incremental_cost(
     ::FillThenSpillMode;
     packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
+    empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     existing_per_mode = [slot.commodities for slot in existing.per_mode]
     cached_sizes = [slot.total_size for slot in existing.per_mode]
@@ -212,9 +207,12 @@ function _edge_incremental_cost(
     total = 0.0
     for i in eachindex(arc.modes)
         isempty(partition[i]) && continue
-        n_ex = existing.per_mode[i].bins_dirty ? -1 : length(existing.per_mode[i].bins)
         total += incremental_cost!(
-            buffer, arc.modes[i].cost, existing_per_mode[i], partition[i]; n_existing=n_ex
+            buffer,
+            arc.modes[i].cost,
+            existing_per_mode[i],
+            partition[i];
+            n_existing=length(existing.per_mode[i].bins),
         )
     end
     return total

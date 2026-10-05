@@ -247,10 +247,7 @@ function check_flows(ns, sol)
         (a isa TransportationPlanningOptimization.MultiAssignment ? a.per_mode : [a]) if
         !isempty(slot.commodities)
     ]
-    if !any(slot -> slot.bins_dirty, slots)
-        @test sum(f -> f.n_bins, flows; init=0) ==
-            sum(slot -> length(slot.bins), slots; init=0)
-    end
+    @test sum(f -> f.n_bins, flows; init=0) == sum(slot -> length(slot.bins), slots; init=0)
     return nothing
 end
 

@@ -9,6 +9,7 @@ using Graphs
 using MetaGraphsNext
 using Dates
 using Random
+using SparseArrays: SparseArrays
 using TransportationPlanningOptimization
 
 const TPO = TransportationPlanningOptimization
@@ -679,7 +680,45 @@ end
     pop!(single.commodities)
 end
 
-@testset "is_feasible checks bin contents unless the bins are dirty" begin
+@testset "in-place removal on a MultiAssignment keeps every mode's bins exact" begin
+    modes = [(BinPackingArcCost(10.0, 2), 1, 3), (BinPackingArcCost(7.0, 2), 1, 10)]
+    instance = TestFixtures._leg_instance(modes, 1; quantity=5)
+    sol = greedy_heuristic(instance; mode_selector=FillThenSpillMode(), show_progress=false)
+    edge, assignment = only(sol.assignments)
+    @test assignment isa TPO.MultiAssignment
+    cache = instance.index_cache
+    arc = TPO.tsg_edge_arc(cache, edge...)
+    # Greedy fills one mode, so move two commodities to the other one to populate both.
+    slot1, slot2 = assignment.per_mode
+    for _ in 1:2
+        moved = [pop!(slot2.commodities)]
+        slot2.total_size -= 1.0
+        TPO._merge_sorted_into_slot!(slot1, moved)
+    end
+    TPO._update_single_assignment_cost!(slot1, arc.modes[1].cost)
+    TPO._update_single_assignment_cost!(slot2, arc.modes[2].cost)
+    @test all(!isempty(slot.commodities) for slot in assignment.per_mode)
+    removed = [first(slot.commodities) for slot in assignment.per_mode]
+    TPO._remove_commodities_from_assignment!(
+        assignment,
+        arc,
+        removed,
+        cache.spatial_code_to_node_cost,
+        cache.tsg_code_to_spatial_code[edge[2]],
+    )
+    for (slot, mode) in zip(assignment.per_mode, arc.modes)
+        bp = mode.cost
+        @test sort([c.size for b in slot.bins for c in b.commodities]) == sort([c.size for c in slot.commodities])
+        @test all(!isempty(b.commodities) for b in slot.bins)
+        @test all(
+            b.remaining_capacity ≈ bp.bin_capacity - sum(c.size for c in b.commodities) for
+            b in slot.bins
+        )
+        @test slot.arc_cost ≈ bp.cost_per_bin * length(slot.bins)
+    end
+end
+
+@testset "is_feasible checks bin contents" begin
     modes = [(BinPackingArcCost(10.0, 2), 1, 10)]
     instance = TestFixtures._leg_instance(modes, 1; quantity=4)
     sol = greedy_heuristic(instance; show_progress=false)
@@ -691,8 +730,6 @@ end
     @test_logs (:warn, r"do not hold exactly") match_mode = :any !is_feasible(
         sol, instance; verbose=true
     )
-    slot.bins_dirty = true
-    @test is_feasible(sol, instance)
 end
 
 @testset "is_feasible tolerates shortcut nodes in stored paths and checks path count" begin
@@ -772,5 +809,39 @@ end
             @test TPO.input_arc_index(found[2], 1) == 2
             @test_throws BoundsError TPO.input_arc_index(found[2], 2)
         end
+    end
+end
+
+@testset "precomputed empty-arc counts leave the cost matrix unchanged on bin-packing legs" begin
+    setups = (
+        # Plain BinPackingArcCost arc.
+        [(BinPackingArcCost(10.0, 2), 1, 10)],
+        # Multimodal CheapestMode empty path, with a capacity-limited mode.
+        [(BinPackingArcCost(10.0, 2), 1, 3), (BinPackingArcCost(7.0, 3), 1, 10)],
+    )
+    for modes in setups
+        instance = TestFixtures._leg_instance(modes, 1; quantity=5)
+        sol = SolutionState(instance)
+        bundle = instance.bundles[1]
+        arcs = instance.travel_time_graph.bundle_arcs[1]
+        @test isempty(sol.assignments)
+        nz = SparseArrays.nonzeros(instance.travel_time_graph.cost_matrix)
+        TPO.update_bundle_cost_matrix!(sol, instance, bundle, arcs, CheapestMode())
+        plain = copy(nz)
+        counts = TPO.empty_pack_counts(instance, bundle, arcs)
+        @test all(ec -> !isempty(ec.capacities), counts)
+        # 5 unit commodities packed 3 per bin (capacity 3) take 2 bins.
+        length(modes) == 2 && @test TPO._empty_bin_count(counts[1], 3.0) == 2
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, bundle, arcs, CheapestMode(); empty_counts=counts
+        )
+        @test reinterpret(UInt64, nz) == reinterpret(UInt64, plain)
+        @test any(isfinite, plain)
+        # Deliberately wrong counts must change the matrix, so they are really used.
+        bumped = [TPO.EmptyPackCounts(ec.capacities, ec.counts .+ 1) for ec in counts]
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, bundle, arcs, CheapestMode(); empty_counts=bumped
+        )
+        @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
     end
 end

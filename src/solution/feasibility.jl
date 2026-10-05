@@ -11,8 +11,8 @@ Feasibility requires:
 5. Every path must end at the bundle's designated exit node (`destination_codes`).
 6. Every stored assignment sits on an existing arc and respects its capacity (per mode
    on multi-modal arcs).
-7. Every bin respects the bin capacity of its arc cost, and the bins hold exactly the
-   commodities of their assignment (unless the bins are marked dirty).
+7. Every bin is non-empty, respects the bin capacity of its arc cost, and the bins hold
+   exactly the commodities of their assignment.
 8. The assignments carry exactly the load of the bundle paths, plus any commodity
    belonging to no bundle of the instance (capacity reservations, see
    [`preload_filtered_bundles`](@ref)).
@@ -205,14 +205,18 @@ end
 """
 $TYPEDSIGNATURES
 
-Check the bins of `slot` against the bin capacity of `arc_cost`: no bin is overloaded,
-and unless `slot.bins_dirty`, the bins hold exactly the commodities of the slot.
+Check the bins of `slot` against the bin capacity of `arc_cost`: no bin is overloaded
+or empty, and the bins hold exactly the commodities of the slot.
 Always true when `arc_cost` has no bin-packing component.
 """
 function _bins_feasible(slot::SingleAssignment, arc_cost, arc_labels; tol, verbose::Bool)
     bp = _bin_packing_cost_of(arc_cost)
     isnothing(bp) && return true
     for b in slot.bins
+        if isempty(b.commodities)
+            verbose && @warn "Arc $(arc_labels) has an empty bin"
+            return false
+        end
         load = sum(c.size for c in b.commodities; init=0.0)
         if load > bp.bin_capacity + tol
             verbose &&
@@ -220,24 +224,22 @@ function _bins_feasible(slot::SingleAssignment, arc_cost, arc_labels; tol, verbo
             return false
         end
     end
-    if !slot.bins_dirty
-        if sum(length(b.commodities) for b in slot.bins; init=0) != length(slot.commodities)
-            verbose &&
-                @warn "Arc $(arc_labels) has bins that do not hold exactly its commodities"
-            return false
-        end
-        binned = Dict{eltype(slot.commodities),Int}()
-        for b in slot.bins, c in b.commodities
-            binned[c] = get(binned, c, 0) + 1
-        end
-        for c in slot.commodities
-            binned[c] = get(binned, c, 0) - 1
-        end
-        if any(!iszero, values(binned))
-            verbose &&
-                @warn "Arc $(arc_labels) has bins that do not hold exactly its commodities"
-            return false
-        end
+    if sum(length(b.commodities) for b in slot.bins; init=0) != length(slot.commodities)
+        verbose &&
+            @warn "Arc $(arc_labels) has bins that do not hold exactly its commodities"
+        return false
+    end
+    binned = Dict{eltype(slot.commodities),Int}()
+    for b in slot.bins, c in b.commodities
+        binned[c] = get(binned, c, 0) + 1
+    end
+    for c in slot.commodities
+        binned[c] = get(binned, c, 0) - 1
+    end
+    if any(!iszero, values(binned))
+        verbose &&
+            @warn "Arc $(arc_labels) has bins that do not hold exactly its commodities"
+        return false
     end
     return true
 end

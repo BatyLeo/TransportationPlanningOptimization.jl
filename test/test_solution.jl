@@ -130,24 +130,24 @@ end
     @test sum(length, ns.routes) == 2
 end
 
-@testset "Dirty bins keep n_bins consistent with the arc cost" begin
+@testset "n_bins stays consistent with the arc cost after in-place removal" begin
     modes = [(BinPackingArcCost(10.0, 2), 1, 10)]
     instance = TestFixtures._leg_instance(modes, 1; quantity=4)
     sol = greedy_heuristic(instance; show_progress=false)
     flow = only(Solution(sol, instance).arc_flows)
     @test (flow.n_bins, flow.volume) == (2, 4.0)
 
-    slot = only(values(sol.assignments))
-    pop!(slot.commodities)
-    pop!(slot.commodities)
+    edge, slot = only(sol.assignments)
+    cache = instance.index_cache
+    arc = TPO.tsg_edge_arc(cache, edge...)
+    removed = [pop!(slot.commodities), pop!(slot.commodities)]
     slot.total_size -= 2
-    TPO._update_cost_skip_bins!(slot, only(instance.input.arcs).cost)
-    @test slot.bins_dirty
-    @test length(slot.bins) == 2
+    TPO._update_cost_after_removal!(slot, arc.cost, removed)
+    @test length(slot.bins) == 1
     ns = Solution(sol, instance)
     TestFixtures.check_flows(ns, sol)
     flow = only(ns.arc_flows)
-    @test flow.n_bins == 1
+    @test flow.n_bins == length(slot.bins) == 1
     @test flow.n_bins * 10.0 ≈ flow.arc_cost
 end
 

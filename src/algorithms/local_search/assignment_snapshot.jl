@@ -2,6 +2,11 @@
 # tentatively mutate the assignments along a bundle's path, then either keep
 # the change (when it improves cost) or roll back to the snapshot. Used by
 # `_try_reinsert_bundle!` and `two_node_common_incremental!`.
+#
+# A move snapshots every edge it can touch (the edges of the old and of the new
+# paths), including edges that do not exist yet (stored as `nothing`, restoring
+# them deletes the edge). Rolling back is then restore-only. Snapshots are used
+# once: they deep-copy the bins, and restoring hands the copies to the solution.
 
 struct _SingleAssignmentSnapshot{C<:LightCommodity}
     commodities::Vector{C}
@@ -10,18 +15,16 @@ struct _SingleAssignmentSnapshot{C<:LightCommodity}
     node_cost::Float64
     sorted::Bool
     total_size::Float64
-    bins_dirty::Bool
 end
 
 function _snapshot_assignment(a::SingleAssignment{C}) where {C}
     return _SingleAssignmentSnapshot{C}(
         copy(a.commodities),
-        a.bins,
+        [Bin(copy(b.commodities), b.remaining_capacity) for b in a.bins],
         a.arc_cost,
         a.node_cost,
         a.sorted,
         a.total_size,
-        a.bins_dirty,
     )
 end
 
@@ -32,7 +35,6 @@ function _restore_assignment!(a::SingleAssignment, snap::_SingleAssignmentSnapsh
     a.node_cost = snap.node_cost
     a.sorted = snap.sorted
     a.total_size = snap.total_size
-    a.bins_dirty = snap.bins_dirty
     return nothing
 end
 
@@ -55,16 +57,26 @@ function _restore_assignment!(a::MultiAssignment, snap::_MultiAssignmentSnapshot
     return nothing
 end
 
-const _SnapshotUnion{C} = Union{_SingleAssignmentSnapshot{C},_MultiAssignmentSnapshot{C}}
+# `nothing` marks an edge that had no assignment when the snapshot was taken.
+const _SnapshotUnion{C} = Union{
+    _SingleAssignmentSnapshot{C},_MultiAssignmentSnapshot{C},Nothing
+}
 
+"""
+$TYPEDSIGNATURES
+
+Snapshot the assignments of the edges of `path` for `bundle_idx` into `cache` (a fresh
+dictionary when `nothing`, emptied first when `clear`). Edges already in the dictionary are
+kept, so the earliest state wins. Edges without an assignment are stored as `nothing`.
+"""
 function _snapshot_path_assignments(
     sol::SolutionState{C},
     instance::Instance,
-    bundle_idx::Int;
+    bundle_idx::Int,
+    path::Vector{Int};
     cache::Union{Dict{Tuple{Int,Int},_SnapshotUnion{C}},Nothing}=nothing,
     clear::Bool=true,
 ) where {C}
-    path = sol.bundle_paths[bundle_idx]
     bundle = instance.bundles[bundle_idx]
     snapshots = if cache !== nothing
         clear && empty!(cache)
@@ -78,19 +90,34 @@ function _snapshot_path_assignments(
             v_tsg = project_to_time_space_graph(path[k + 1], order, instance)
             edge = (u_tsg, v_tsg)
             haskey(snapshots, edge) && continue
-            haskey(sol.assignments, edge) || continue
-            snapshots[edge] = _snapshot_assignment(sol.assignments[edge])
+            assignment = get(sol.assignments, edge, nothing)
+            snapshots[edge] =
+                assignment === nothing ? nothing : _snapshot_assignment(assignment)
         end
     end
     return snapshots
 end
 
+"""
+$TYPEDSIGNATURES
+
+Restore `snapshots` and set the path of `bundle_idx` back to `old_path`.
+"""
 function _restore_path_assignments!(
     sol::SolutionState, bundle_idx::Int, old_path::Vector{Int}, snapshots::Dict
 )
     sol.bundle_paths[bundle_idx] = old_path
+    _restore_snapshots!(sol, snapshots)
+    return nothing
+end
+
+function _restore_snapshots!(sol::SolutionState, snapshots::Dict)
     for (edge, snap) in snapshots
-        _restore_assignment!(sol.assignments[edge], snap)
+        if snap === nothing
+            delete!(sol.assignments, edge)
+        else
+            _restore_assignment!(sol.assignments[edge], snap)
+        end
     end
     return nothing
 end
@@ -100,28 +127,11 @@ function _snapshot_multi_bundle_assignments(
 ) where {C}
     snapshots = Dict{Tuple{Int,Int},_SnapshotUnion{C}}()
     for bi in bundle_idxs
-        _snapshot_path_assignments(sol, instance, bi; cache=snapshots, clear=false)
+        _snapshot_path_assignments(
+            sol, instance, bi, sol.bundle_paths[bi]; cache=snapshots, clear=false
+        )
     end
     return snapshots
-end
-
-function _refresh_dirty_assignments!(sol::SolutionState, instance::Instance, edges)
-    cache = instance.index_cache
-    for edge in edges
-        assignment = get(sol.assignments, edge, nothing)
-        assignment === nothing && continue
-        arc = tsg_edge_arc(cache, edge[1], edge[2])
-        if assignment isa SingleAssignment
-            assignment.bins_dirty || continue
-            _update_single_assignment_cost!(assignment, arc.cost)
-        else
-            for (i, slot) in enumerate(assignment.per_mode)
-                slot.bins_dirty || continue
-                _update_single_assignment_cost!(slot, arc.modes[i].cost)
-            end
-        end
-    end
-    return nothing
 end
 
 function _restore_multi_bundle_assignments!(
@@ -133,8 +143,6 @@ function _restore_multi_bundle_assignments!(
     for (k, bi) in enumerate(bundle_idxs)
         sol.bundle_paths[bi] = old_paths[k]
     end
-    for (edge, snap) in snapshots
-        _restore_assignment!(sol.assignments[edge], snap)
-    end
+    _restore_snapshots!(sol, snapshots)
     return nothing
 end

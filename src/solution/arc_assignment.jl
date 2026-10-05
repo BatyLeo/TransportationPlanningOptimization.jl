@@ -19,7 +19,9 @@ $TYPEDFIELDS
 mutable struct SingleAssignment{C<:LightCommodity} <: AbstractArcAssignment{C}
     "commodities routed across this edge"
     commodities::Vector{C}
-    "bin assignments (populated only for `BinPackingArcCost` edges)"
+    "bin assignments (populated only for edges whose cost has a bin-packing term).
+    Invariant: the bins hold exactly `commodities`, no bin is empty, and the bin-packing
+    cost term is `cost_per_bin * length(bins)`."
     bins::Vector{Bin{C}}
     "arc cost of routing the stored commodities across this edge"
     arc_cost::Float64
@@ -31,12 +33,10 @@ mutable struct SingleAssignment{C<:LightCommodity} <: AbstractArcAssignment{C}
     sorted::Bool
     "cached `sum(c.size for c in commodities)`, maintained incrementally"
     total_size::Float64
-    "true when `bins` may not reflect `commodities` (skipped repack on removal)"
-    bins_dirty::Bool
 end
 
 function SingleAssignment{C}() where {C<:LightCommodity}
-    return SingleAssignment{C}(C[], Bin{C}[], 0.0, 0.0, true, 0.0, false)
+    return SingleAssignment{C}(C[], Bin{C}[], 0.0, 0.0, true, 0.0)
 end
 
 """
@@ -44,12 +44,13 @@ $TYPEDSIGNATURES
 
 3-arg convenience constructor for callers with `sorted=false`. `node_cost` defaults
 to `0.0` (see the field docstring for the multi-modal-slot invariant).
+On a bin-packing arc, `bins` must already hold exactly `commodities`.
 """
 function SingleAssignment{C}(
     commodities::Vector{C}, bins::Vector{Bin{C}}, arc_cost::Float64
 ) where {C<:LightCommodity}
     ts = sum(c.size for c in commodities; init=0.0)
-    return SingleAssignment{C}(commodities, bins, arc_cost, 0.0, false, ts, false)
+    return SingleAssignment{C}(commodities, bins, arc_cost, 0.0, false, ts)
 end
 
 """
