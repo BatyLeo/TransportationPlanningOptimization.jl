@@ -51,6 +51,7 @@ include("solution/path_operations.jl")
 include("solution/feasibility.jl")
 include("solution/parsing.jl")
 include("solution/solution.jl")
+include("solution/solution_state_from_solution.jl")
 
 include("algorithms/shortest_path.jl")
 include("algorithms/cost/edge_cost.jl")

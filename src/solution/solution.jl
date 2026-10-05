@@ -99,18 +99,34 @@ end
 # Date at the start of the (possibly unwrapped) time step `t`.
 _step_date(start, Δ, t::Int) = start + (t - 1) * Δ
 
+# Exact inverse of `_step_date`, `nothing` if `date` is not the start of a time step.
+function _date_step(date, start, Δ)
+    n = period_steps(date - start, Δ)
+    return start + n * Δ == date ? n + 1 : nothing
+end
+
 # Unwrapped time step of a travel-time node with budget `τ` for `order`.
 _order_step(order::Order{true}, τ::Int) = order.time_step - τ
 _order_step(order::Order{false}, τ::Int) = order.time_step + τ
+
+# Travel-time budget of the unwrapped time step `t` for `order`, inverse of `_order_step`.
+_order_tau(order::Order{true}, t::Int) = order.time_step - t
+_order_tau(order::Order{false}, t::Int) = t - order.time_step
+
+# Input commodity indices of each order: `by_order[b][o]` for order `o` of bundle `b`.
+function _commodities_by_order(instance::Instance)
+    by_order = [[Int[] for _ in bundle.orders] for bundle in instance.bundles]
+    for (k, (b, o)) in enumerate(instance.commodity_to_order)
+        b == 0 || push!(by_order[b][o], k)
+    end
+    return by_order
+end
 
 function _routes(sol::SolutionState{C}, instance::Instance, start, Δ) where {C}
     cache = instance.index_cache
     input_commodities = instance.input.commodities
     routes = [Leg[] for _ in input_commodities]
-    by_order = [[Int[] for _ in bundle.orders] for bundle in instance.bundles]
-    for (k, (b, o)) in enumerate(instance.commodity_to_order)
-        b == 0 || push!(by_order[b][o], k)
-    end
+    by_order = _commodities_by_order(instance)
     # Per multi-modal edge, the copies left to attribute in each slot. Orders, bundles and
     # reservations on the same time-space edge draw from the same counts.
     edge_counts = Dict{Tuple{Int,Int},Vector{Dict{C,Int}}}()

@@ -12,6 +12,8 @@ struct IndexCache{ARC,NC}
     ttg_code_to_spatial_code::Vector{Int}
     "travel-time node code to its time budget tau"
     ttg_code_to_tau::Vector{Int}
+    "(spatial code, time budget tau + 1) to travel-time node code (0 means absent)"
+    spatial_code_and_tau_to_ttg_code::Matrix{Int}
     "(spatial code, time step) to time-space node code (0 means absent)"
     spatial_code_and_time_to_tsg_code::Matrix{Int}
     "time-space node code to network (spatial) node code"
@@ -26,6 +28,16 @@ struct IndexCache{ARC,NC}
     time_horizon_length::Int
     "whether transit times wrap around the time horizon"
     wrap_time::Bool
+end
+
+"""
+$TYPEDSIGNATURES
+
+Travel-time node code at spatial code `s` and time budget `τ`, or `0` if there is none (including `τ` out of range).
+"""
+@inline function ttg_code_at(cache::IndexCache, s::Int, τ::Int)
+    codes = cache.spatial_code_and_tau_to_ttg_code
+    return 1 <= τ + 1 <= size(codes, 2) ? codes[s, τ + 1] : 0
 end
 
 """
@@ -109,6 +121,14 @@ function build_index_cache(
         ttg_code_to_spatial_code[code] = MetaGraphsNext.code_for(ng, loc)
         ttg_code_to_tau[code] = τ
     end
+    spatial_code_and_tau_to_ttg_code = zeros(
+        Int, n_net, maximum(ttg_code_to_tau; init=0) + 1
+    )  # 0 encodes "no TTG node at this (spatial, τ) pair"
+    for code in 1:n_ttg
+        spatial_code_and_tau_to_ttg_code[
+            ttg_code_to_spatial_code[code], ttg_code_to_tau[code] + 1
+        ] = code
+    end
 
     n_tsg = Graphs.nv(tsg)
     tsg_code_to_spatial_code = Vector{Int}(undef, n_tsg)
@@ -147,6 +167,7 @@ function build_index_cache(
     return IndexCache(
         ttg_code_to_spatial_code,
         ttg_code_to_tau,
+        spatial_code_and_tau_to_ttg_code,
         spatial_code_and_time_to_tsg_code,
         tsg_code_to_spatial_code,
         tsg_code_to_time,

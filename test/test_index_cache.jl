@@ -23,6 +23,16 @@ const TPO = TransportationPlanningOptimization
         code in 1:Graphs.nv(ttg)
     )
     @test all(
+        cache.spatial_code_and_tau_to_ttg_code[
+            cache.ttg_code_to_spatial_code[code], cache.ttg_code_to_tau[code] + 1
+        ] == code &&
+            TPO.ttg_code_at(
+                cache, cache.ttg_code_to_spatial_code[code], cache.ttg_code_to_tau[code]
+            ) == code for code in 1:Graphs.nv(ttg)
+    )
+    @test TPO.ttg_code_at(cache, 1, -1) == 0
+    @test TPO.ttg_code_at(cache, 1, maximum(cache.ttg_code_to_tau) + 1) == 0
+    @test all(
         let (nid, t) = MetaGraphsNext.label_for(tsg, code),
             s = MetaGraphsNext.code_for(ng, nid)
 

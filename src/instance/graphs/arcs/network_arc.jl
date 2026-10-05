@@ -111,6 +111,10 @@ function input_arc_index(arc::NetworkArc, slot::Int)
 end
 input_arc_index(arc::MultiModalArc, slot::Int) = arc.modes[slot].input_index
 
+# Number of assignment slots of an arc: one per mode.
+_slot_count(::NetworkArc) = 1
+_slot_count(arc::MultiModalArc) = length(arc.modes)
+
 """
 $TYPEDSIGNATURES
 

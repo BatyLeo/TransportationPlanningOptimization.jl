@@ -2,7 +2,6 @@ using Test
 using CSV
 using DataFrames
 using Dates
-using MetaGraphsNext
 using TransportationPlanningOptimization
 using TransportationPlanningOptimization.Problems.MultiCommodityFlow
 
@@ -11,11 +10,14 @@ const TPO = TransportationPlanningOptimization
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
 
-# Project `sol` and run both checks.
-function check_projection(sol, instance; reservations::Bool=false)
+# Project `sol`, run both checks and rebuild the state from the projection.
+# `same_cost` is true when the repack is known to reproduce the packing of `sol` (linear costs,
+# or instances where first-fit decreasing coincides with it, like tiny), false with other bin packing or reservations.
+function check_projection(sol, instance; reservations::Bool=false, same_cost::Bool=true)
     ns = Solution(sol, instance)
     TestFixtures.check_flows(ns, sol)
     TestFixtures.check_routes(ns, sol, instance; reservations)
+    TestFixtures.check_round_trip(sol, instance; same_cost=same_cost && !reservations)
     return ns
 end
 
@@ -23,7 +25,7 @@ end
     for name in ("tiny", "small"), wrap_time in (true, false)
         instance = TestFixtures._instance(name, wrap_time)
         sol = TestFixtures._greedy(name, wrap_time)
-        ns = check_projection(sol, instance)
+        ns = check_projection(sol, instance; same_cost=name == "tiny")
         name == "small" && @test any(f -> f.node_cost > 0, ns.arc_flows)
         @test any(c -> c.quantity > 1, instance.input.commodities)
         @test sum(length, ns.routes) >= length(instance.input.commodities)
@@ -79,7 +81,7 @@ end
     for network_design in (true, false)
         instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow); network_design)
         sol = greedy_heuristic(instance; show_progress=false)
-        ns = check_projection(sol, instance)
+        ns = check_projection(sol, instance; same_cost=(!network_design))
         @test length(ns.routes[1]) == 2
     end
 end
@@ -149,23 +151,6 @@ end
     @test flow.n_bins * 10.0 ≈ flow.arc_cost
 end
 
-# Extend every path with the chain of shortcut nodes that the travel-time graph allows.
-function add_shortcuts!(sol, instance)
-    g = instance.travel_time_graph.graph
-    arrival = TPO.is_date_arrival(instance.travel_time_graph)
-    added = 0
-    for path in sol.bundle_paths
-        id, τ = MetaGraphsNext.label_for(g, arrival ? first(path) : last(path))
-        while haskey(g, (id, τ + 1))
-            τ += 1
-            code = MetaGraphsNext.code_for(g, (id, τ))
-            arrival ? pushfirst!(path, code) : push!(path, code)
-            added += 1
-        end
-    end
-    return added
-end
-
 @testset "Stored paths with shortcut nodes give the same projection" begin
     for (instance, sol) in (
         (TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 3), nothing),
@@ -173,7 +158,7 @@ end
     )
         sol = something(sol, greedy_heuristic(instance; show_progress=false))
         expected = Solution(sol, instance)
-        @test add_shortcuts!(sol, instance) > 0
+        @test TestFixtures.add_shortcuts!(sol, instance) > 0
         ns = Solution(sol, instance)
         @test ns.routes == expected.routes
         @test ns.arc_flows == expected.arc_flows

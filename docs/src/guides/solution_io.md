@@ -41,6 +41,25 @@ routes = DataFrame([
 flows = DataFrame(solution.arc_flows)
 ```
 
+## Building a SolutionState from a Solution
+
+A plan written on the input network, such as a [`Solution`](@ref) edited by hand or produced by another tool, can be turned back into a [`SolutionState`](@ref).
+
+```julia
+solution_state = SolutionState(solution, instance)
+is_feasible(solution_state, instance; verbose=true)
+```
+
+- The routes are the source of truth and the input arcs they use (modes) are kept, while `arc_flows` is ignored.
+- Every slot is repacked from scratch by first-fit decreasing, so bins and costs only match the original state for linear costs (up to floating point summation order).
+- Capacity is not checked, so call [`is_feasible`](@ref) on the result.
+- Several legs on the same arc at the same position (same departure and arrival) are merged.
+- Plans that cannot be represented throw an `ArgumentError` naming the commodity (and the leg when relevant), such as partial routes, off-grid dates, waiting anywhere but before the first leg (arrival dates) or after the last leg (departure dates), legs that overlap, routes longer than the maximum delivery time of their commodity group, routes that leave the time horizon when `wrap_time` is off or pass through an origin or destination node that routes cannot cross at that date, and commodities with the same origin, destination and group key that do not follow the same path (same nodes and transit times) at the same offsets from their order date.
+- A route is pinned to the order date: its arrival (arrival-date mode) or its departure (departure-date mode) must equal the order date.
+- The solution-level round trip `Solution(SolutionState(solution, instance), instance) == solution` only holds for solutions produced by `Solution(solution_state, instance)`.
+  Other plans come back normalized, with the legs of one leg position merged and in slot order and identical copies attributed by count.
+- Commodities dropped by an extraction must have an empty route, and the load reserved for them is not rebuilt.
+
 ## CSV files
 
 Solutions can be saved to and loaded from CSV files using [`write_solution_csv`](@ref) and [`read_solution_csv`](@ref).

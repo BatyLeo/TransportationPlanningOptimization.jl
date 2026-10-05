@@ -739,3 +739,45 @@ function _drain_first_matches_dict!(
 
     return dropped
 end
+
+"""
+$TYPEDSIGNATURES
+
+Fill `slot` with `commodities` and repack it from scratch under `arc_f`.
+The vector `commodities` is owned by the slot afterwards and sorted by the cost update.
+"""
+function _fill_slot!(
+    slot::SingleAssignment{C}, commodities::Vector{C}, arc_f::AbstractArcCostFunction
+) where {C<:LightCommodity}
+    slot.commodities = commodities
+    slot.total_size = sum(c.size for c in commodities; init=0.0)
+    slot.sorted = false
+    _update_single_assignment_cost!(slot, arc_f)
+    return slot
+end
+
+"""
+$TYPEDSIGNATURES
+
+Build the assignment of an edge from scratch, with a full repack of every slot.
+`loads[i]` holds the commodities of slot `i`, a single-mode `arc` has the single slot `1`.
+The head-node cost is computed with `node_f`.
+"""
+function _filled_assignment(
+    arc::NetworkArc, loads::Vector{Vector{C}}, node_f::AbstractNodeCostFunction
+) where {C<:LightCommodity}
+    assignment = _fill_slot!(SingleAssignment{C}(), only(loads), arc.cost)
+    _refresh_node_cost!(assignment, node_f)
+    return assignment
+end
+
+function _filled_assignment(
+    arc::MultiModalArc, loads::Vector{Vector{C}}, node_f::AbstractNodeCostFunction
+) where {C<:LightCommodity}
+    assignment = MultiAssignment{C}(length(arc.modes))
+    for (slot, load, mode) in zip(assignment.per_mode, loads, arc.modes)
+        _fill_slot!(slot, load, mode.cost)
+    end
+    _refresh_node_cost!(assignment, node_f)
+    return assignment
+end
