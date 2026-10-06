@@ -7,7 +7,7 @@ const TPO = TransportationPlanningOptimization
 
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
-using .TestFixtures: check_round_trip
+using .TestFixtures: check_round_trip, rejects
 
 # Content of every non-empty slot, per time-space edge and slot.
 function slot_contents(state)
@@ -170,11 +170,6 @@ end
 
 function rebuild(instance, routes)
     return SolutionState(TPO.Solution(routes, TPO.ArcFlow[]), instance)
-end
-
-# Matcher of `@test_throws` for an `ArgumentError` whose message mentions `fragment`.
-function rejects(fragment)
-    return message -> startswith(message, "ArgumentError") && occursin(fragment, message)
 end
 
 function edit(leg; kwargs...)

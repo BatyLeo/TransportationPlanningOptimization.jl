@@ -33,7 +33,7 @@ $TYPEDSIGNATURES
 
 Solve `instance` and return a feasible [`SolutionState`](@ref) on it.
 Most users want [`solve`](@ref), which returns the user-facing [`Solution`](@ref).
-Use `solve_state` when the state is needed, for example for [`local_search!`](@ref), [`iterated_local_search!`](@ref) or `write_solution_csv`.
+Use `solve_state` when the state is needed, for example for [`local_search!`](@ref) or [`iterated_local_search!`](@ref).
 
 With `filtering=true` (default):
 

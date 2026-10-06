@@ -100,7 +100,7 @@ end
 $TYPEDSIGNATURES
 
 Total cost of `solution`, the sum of `arc_cost + node_cost` over its `arc_flows`.
-The costs are read from `arc_flows`, so after editing `routes` refresh them with `Solution(SolutionState(solution, instance), instance)`.
+The costs are read from `arc_flows`, so after editing `routes` refresh them with `Solution(solution.routes, instance)`.
 """
 function cost(solution::Solution)
     return sum(f -> f.arc_cost + f.node_cost, solution.arc_flows; init=0.0)

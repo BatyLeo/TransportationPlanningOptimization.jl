@@ -358,3 +358,16 @@ function _place_copies!(
     end
     return nothing
 end
+
+"""
+$TYPEDSIGNATURES
+
+Build the full [`Solution`](@ref) of the `routes` on `instance`, with `arc_flows` and [`cost`](@ref) rebuilt from the routes.
+The routes are the source of truth and are validated like in `SolutionState(solution, instance)`, which this function calls before converting back.
+The bins are repacked deterministically, so the cost only equals that of the original plan for linear costs (up to floating point summation order).
+Throws an `ArgumentError` if the routes are not a valid plan, see [`SolutionState`](@ref).
+Capacity is not checked, run [`is_feasible`](@ref) on the result.
+"""
+function Solution(routes::Vector{Vector{Leg}}, instance::Instance)
+    return Solution(SolutionState(Solution(routes, ArcFlow[]), instance), instance)
+end

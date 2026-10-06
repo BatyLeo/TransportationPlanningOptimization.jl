@@ -160,7 +160,7 @@ A [`SolutionState`](@ref) is the mutable internal state of the algorithms: the p
 The construction heuristics, [`local_search!`](@ref) and [`merge_solutions`](@ref) work on it, whereas [`Solution`](@ref) is a plain read-only view on your input arcs and commodities.
 
 [`solve_state`](@ref) runs the same pipeline as [`solve`](@ref) and returns the state.
-Use it when you need a state, for example for [`local_search!`](@ref), [`iterated_local_search!`](@ref) or `write_solution_csv` (which take a state), or for the content of each bin.
+Use it when you need a state, for example for [`local_search!`](@ref) or [`iterated_local_search!`](@ref), or for the content of each bin.
 The bins of a state are the ones packed by the algorithms, while those of a `Solution` are repacked when it is converted back.
 
 ```julia

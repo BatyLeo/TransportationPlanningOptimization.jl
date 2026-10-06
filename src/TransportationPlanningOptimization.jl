@@ -1,7 +1,6 @@
 module TransportationPlanningOptimization
 
 using CSV: CSV
-using DataFrames: DataFrame, names
 using DataStructures: DataStructures
 using Dates: Dates, DateTime, Period
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
@@ -49,9 +48,9 @@ include("solution/assignment_operations.jl")
 include("solution/solution_state.jl")
 include("solution/path_operations.jl")
 include("solution/feasibility.jl")
-include("solution/parsing.jl")
 include("solution/solution.jl")
 include("solution/solution_state_from_solution.jl")
+include("solution/solution_csv.jl")
 
 include("algorithms/shortest_path.jl")
 include("algorithms/cost/empty_pack_counts.jl")

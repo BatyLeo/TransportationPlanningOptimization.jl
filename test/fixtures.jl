@@ -373,6 +373,11 @@ function add_shortcuts!(sol, instance)
     return added
 end
 
+# Matcher of `@test_throws` for an `ArgumentError` whose message mentions `fragment`.
+function rejects(fragment)
+    return message -> startswith(message, "ArgumentError") && occursin(fragment, message)
+end
+
 # Whether two lists of arc flows agree on dates, bins and (up to rounding) volumes and costs.
 function flows_match(a, b)
     return length(a) == length(b) && all(
