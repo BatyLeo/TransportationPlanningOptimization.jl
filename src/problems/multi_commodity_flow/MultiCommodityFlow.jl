@@ -25,7 +25,6 @@ using JuMP:
     FEASIBLE_POINT,
     value,
     objective_bound,
-    objective_value,
     termination_status,
     INFEASIBLE,
     INFEASIBLE_OR_UNBOUNDED,

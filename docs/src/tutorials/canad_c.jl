@@ -49,7 +49,8 @@ list_instances(CanadC())
 # We load the `c33` data (nominal size `20-230-40`) with the default
 # `network_design=false`, giving the UMCF version of the data: each arc only carries a
 # [`LinearArcCost`](@ref) on the routed volume, with a hard capacity.
-# Each commodity forms its own bundle.
+# Each commodity forms its own bundle, so commodities with the same endpoints can take
+# different paths.
 # The instance is generated randomly, so its realized size (20 nodes, 228 arcs, 39
 # commodities) differs slightly from the nominal name.
 

@@ -150,6 +150,8 @@ Problem (UMCF): each arc has a [`LinearArcCost`](@ref) and a hard `capacity`.
 With `network_design=true`, this is the Multicommodity Flow Network Design Problem
 (MCFND): each arc also gets a [`BinPackingArcCost`](@ref) charging its fixed cost once
 per used arc.
+Each commodity forms its own bundle, so commodities with the same endpoints can take
+different paths.
 """
 function load_instance(c::CanadC, name::AbstractString; network_design::Bool=false)
     return _to_instance(_load_data(c, name; network_design))

@@ -3,13 +3,12 @@ $TYPEDSIGNATURES
 
 Solve the exact MIP for `data` with JuMP.
 
-Returns a `NamedTuple` with fields `arc_paths`, `objective`, `objective_bound`,
-`termination_status` and `solve_time`.
+Returns a `NamedTuple` with fields `arc_paths`, `objective_bound`, `termination_status`
+and `solve_time`.
 `arc_paths[k]` is the vector of arc indices of the path of commodity `k` in travel order,
 or `arc_paths` is `nothing` if no incumbent was found.
-The arc indices refer to the input arcs (`instance.input.arcs`, built by `_to_instance` in
-`eachindex(data.tails)` order).
-`objective` is the solver objective of the incumbent, or `Inf` without incumbent.
+The arc indices are the indices of the input arcs of the `Instance` built by
+`_to_instance`, in `eachindex(data.tails)` order.
 """
 function _solve_mip(
     data::_MCFData;
@@ -102,11 +101,8 @@ function _solve_mip(
         nothing
     end
 
-    objective = isnothing(arc_paths) ? Inf : objective_value(model)
-
     return (;
         arc_paths,
-        objective,
         objective_bound=obj_bound,
         termination_status=status,
         solve_time=solve_time(model),
