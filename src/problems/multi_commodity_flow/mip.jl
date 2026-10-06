@@ -3,10 +3,13 @@ $TYPEDSIGNATURES
 
 Solve the exact MIP for `data` with JuMP.
 
-Returns a `NamedTuple` with fields `node_paths`, `objective_bound`, `termination_status`
-and `solve_time`.
-`node_paths[k]` is the node path of commodity `k`, or `node_paths` is `nothing` if no
-incumbent was found.
+Returns a `NamedTuple` with fields `arc_paths`, `objective`, `objective_bound`,
+`termination_status` and `solve_time`.
+`arc_paths[k]` is the vector of arc indices of the path of commodity `k` in travel order,
+or `arc_paths` is `nothing` if no incumbent was found.
+The arc indices refer to the input arcs (`instance.input.arcs`, built by `_to_instance` in
+`eachindex(data.tails)` order).
+`objective` is the solver objective of the incumbent, or `Inf` without incumbent.
 """
 function _solve_mip(
     data::_MCFData;
@@ -84,14 +87,14 @@ function _solve_mip(
         objective_bound(model)::Float64
     end
 
-    node_paths = if primal_status(model) == FEASIBLE_POINT
+    arc_paths = if primal_status(model) == FEASIBLE_POINT
         map(1:n_commodities) do k
-            path = [data.origins[k]]
+            path = Int[]
             v = data.origins[k]
             while v != data.destinations[k]
                 a = only(a for a in out_arcs[v] if value(x[a, k]) > 0.5)
                 v = data.heads[a]
-                push!(path, v)
+                push!(path, a)
             end
             return path
         end
@@ -99,8 +102,11 @@ function _solve_mip(
         nothing
     end
 
+    objective = isnothing(arc_paths) ? Inf : objective_value(model)
+
     return (;
-        node_paths,
+        arc_paths,
+        objective,
         objective_bound=obj_bound,
         termination_status=status,
         solve_time=solve_time(model),
@@ -108,7 +114,9 @@ function _solve_mip(
 end
 
 """
-Solve `data` exactly and return the result as a package `SolutionState`, see
+$TYPEDSIGNATURES
+
+Solve `data` exactly and return the result, containing a package `Solution`, see
 [`benchmark_solve`](@ref).
 """
 function _benchmark_solve(
@@ -120,15 +128,17 @@ function _benchmark_solve(
     instance = _to_instance(data)
     mip = _solve_mip(data; optimizer, time_limit, silent)
 
-    solution, objective_value, relative_gap = if isnothing(mip.node_paths)
+    solution, objective_value, relative_gap = if isnothing(mip.arc_paths)
         (nothing, Inf, Inf)
     else
-        ttg = instance.travel_time_graph.graph
-        paths = [
-            [code_for(ttg, (string(node), 0)) for node in mip.node_paths[bundle.group]]
-            for bundle in instance.bundles
+        # `_to_instance` guarantees zero travel time on every arc, a single-step time grid
+        # equal to the commodity date, and unit quantities.
+        date = instance.time_step_to_date[1]
+        routes = [
+            [Leg(; arc=a, departure=date, arrival=date, quantity=1) for a in arc_path]
+            for arc_path in mip.arc_paths
         ]
-        sol = SolutionState(paths, instance)
+        sol = Solution(SolutionState(Solution(routes, ArcFlow[]), instance), instance)
         sol_cost = cost(sol)
         gap =
             iszero(sol_cost) ? sol_cost - mip.objective_bound :

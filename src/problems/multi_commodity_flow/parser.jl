@@ -100,10 +100,12 @@ function _to_instance(data::_MCFData)
             quantity=1,
             arrival_date=DateTime(2000, 1, 1), # no time dimension, any date works
             max_delivery_time=Day(0),
-            info=k,
+            info=k, # key for `group_by` below
         )
     end
 
+    # One bundle per commodity: unsplittable flow routes each commodity on its own path,
+    # so two commodities with the same endpoints can take different paths.
     return Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.info)
 end
 
