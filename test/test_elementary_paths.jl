@@ -180,14 +180,26 @@ function test_raw_segment_premise(instance)
     sol, h, c = splice_solution(instance)
     old_path = copy(sol.bundle_paths[1])
     TPO.remove_bundle_path!(sol, instance, 1)
-    virtual_bundle, virtual_arcs = TPO.merge_bundles(instance, [1])
+    virtual_bundle = TPO.merge_bundles(instance, [1])
+    virtual_arcs = ttg.bundle_arcs[1]
     TPO.update_bundle_cost_matrix!(
         sol, instance, virtual_bundle, virtual_arcs, CheapestMode()
     )
     parents, _ = TPO.bundle_dijkstra(ttg.graph, h, ttg.cost_matrix; dst=c)
     segment = TPO.trace_path(parents, h, c)
     @test TPO.is_elementary_path(segment, spatial)
-    @test !TPO.is_elementary_path(TPO.splice_path(old_path, h, c, segment), spatial)
+    @test !TPO.is_elementary_path(
+        first(
+            TPO.splice_path(
+                old_path,
+                findfirst(==(h), old_path),
+                findfirst(==(c), old_path),
+                segment,
+                ttg,
+            ),
+        ),
+        spatial,
+    )
     return nothing
 end
 
@@ -238,6 +250,63 @@ end
         @test sol.bundle_paths == old_paths
         @test cost(sol) ≈ old_cost
     end
+end
+
+@testset "two-node fallback avoids the prefix but reuses the old slice interior" begin
+    # Old path O -> P -> H -> M -> N -> C -> D with the slice H..C. The raw cheapest H -> C
+    # segment H -> P -> C (cost 0) loops on P. The fallback must avoid P (prefix) and
+    # may reuse M (old interior): H -> M -> C (2) beats H -> C (10).
+    nodes = [
+        Node(; id="O", node_type=:origin),
+        [Node(; id=id, node_type=:other) for id in ("P", "H", "M", "N", "C")]...,
+        Node(; id="D", node_type=:destination),
+    ]
+    arc(o, d, c, t=Day(1)) =
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(c), travel_time=t)
+    arcs = [
+        arc("O", "P", 1),
+        arc("P", "H", 1),
+        arc("H", "M", 1, Hour(1)),
+        arc("M", "N", 5, Hour(1)),
+        arc("N", "C", 5),
+        arc("M", "C", 1),
+        arc("H", "C", 10),
+        arc("C", "D", 1),
+        arc("H", "P", 0, Hour(1)),
+        arc("P", "C", 0),
+    ]
+    commodity = Commodity(;
+        origin_id="O",
+        destination_id="D",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(4),
+        size=1.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1))
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    code(id, τ) = MetaGraphsNext.code_for(ttg.graph, (id, τ))
+    path = [
+        code("O", 0),
+        code("P", 1),
+        code("H", 2),
+        code("M", 2),
+        code("N", 2),
+        code("C", 3),
+        ttg.destination_codes[1],
+    ]
+    sol = SolutionState([path], instance)
+    c0 = cost(sol)
+    @test TPO.bundles_through_nodes(sol, path[3], path[6]) == [(1, 3, 6)]
+
+    saved = TPO.two_node_common_incremental!(sol, instance, path[3], path[6]; refine=false)
+    @test saved ≈ 9.0  # H -> M -> N -> C (11) replaced by H -> M -> C (2)
+    @test cost(sol) ≈ c0 - 9.0
+    ids = [label_for(ttg.graph, v)[1] for v in sol.bundle_paths[1]]
+    @test ids == ["O", "P", "H", "M", "C", "D"]
+    @test all(p -> TPO.is_elementary_path(p, spatial), sol.bundle_paths)
+    @test is_feasible(sol, instance; verbose=true)
 end
 
 @testset "elementary_shortest_path on a hand-built graph" begin

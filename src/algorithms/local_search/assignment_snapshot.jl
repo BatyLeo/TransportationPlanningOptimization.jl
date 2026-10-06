@@ -3,14 +3,14 @@
 # the change (when it improves cost) or roll back to the snapshot. Used by
 # `_try_reinsert_bundle!` and `two_node_common_incremental!`.
 #
-# A move snapshots every edge it can touch (the edges of the old and of the new
-# paths), including edges that do not exist yet (stored as `nothing`, restoring
+# A move snapshots every edge it can touch (the edges of the old and new paths
+# or path slices), including edges that do not exist yet (stored as `nothing`, restoring
 # them deletes the edge). Rolling back is then restore-only. Snapshots are used
 # once: they deep-copy the bins, and restoring hands the copies to the solution.
 
 struct _SingleAssignmentSnapshot{C<:LightCommodity}
     commodities::Vector{C}
-    bins::Vector{Bin{C}}
+    bins::Union{Nothing,Vector{Bin{C}}}
     arc_cost::Float64
     node_cost::Float64
     sorted::Bool
@@ -20,6 +20,7 @@ end
 function _snapshot_assignment(a::SingleAssignment{C}) where {C}
     return _SingleAssignmentSnapshot{C}(
         copy(a.commodities),
+        isempty(a.bins) ? nothing :
         [Bin(copy(b.commodities), b.remaining_capacity) for b in a.bins],
         a.arc_cost,
         a.node_cost,
@@ -30,7 +31,11 @@ end
 
 function _restore_assignment!(a::SingleAssignment, snap::_SingleAssignmentSnapshot)
     a.commodities = snap.commodities
-    a.bins = snap.bins
+    if snap.bins === nothing
+        empty!(a.bins)
+    else
+        a.bins = snap.bins
+    end
     a.arc_cost = snap.arc_cost
     a.node_cost = snap.node_cost
     a.sorted = snap.sorted
@@ -73,7 +78,7 @@ function _snapshot_path_assignments(
     sol::SolutionState{C},
     instance::Instance,
     bundle_idx::Int,
-    path::Vector{Int};
+    path::AbstractVector{Int};
     cache::Union{Dict{Tuple{Int,Int},_SnapshotUnion{C}},Nothing}=nothing,
     clear::Bool=true,
 ) where {C}

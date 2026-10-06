@@ -149,11 +149,9 @@ $TYPEDSIGNATURES
 
 Delete from `pool` one `==`-matching entry per element of `working`, compacting `pool` in
 place (order preserved). Matched elements are also deleted from `working` (multiset semantics,
-first match). Returns whether `pool` changed. Allocation-free for small `working`, larger
-ones go through [`_drain_first_matches!`](@ref).
+first match). Returns whether `pool` changed. Allocation-free, meant for small `working`.
 """
 function _remove_from_bin!(pool::Vector{C}, working::Vector{C}) where {C<:LightCommodity}
-    length(working) > 8 && return !isempty(_drain_first_matches!(pool, working))
     changed = false
     write_idx = 0
     @inbounds for c in pool
@@ -173,6 +171,44 @@ end
 """
 $TYPEDSIGNATURES
 
+Large-removal variant of the per-bin removal of `_remove_from_bins!`: the multiset of
+`removed` is built once, then the bins are walked in order, dropping the first matches
+and compacting each bin in place. Same result as calling `_remove_from_bin!` bin by bin.
+"""
+function _remove_from_bins_multiset!(
+    bins::Vector{Bin{C}}, removed::Vector{C}, cap::Float64
+) where {C<:LightCommodity}
+    counts = Dict{C,Int}()
+    sizehint!(counts, length(removed))
+    for c in removed
+        counts[c] = get(counts, c, 0) + 1
+    end
+    left = length(removed)
+    for bin in bins
+        left == 0 && break
+        pool = bin.commodities
+        write_idx = 0
+        for c in pool
+            ct = get(counts, c, 0)
+            if ct > 0
+                counts[c] = ct - 1
+                left -= 1
+            else
+                write_idx += 1
+                pool[write_idx] = c
+            end
+        end
+        write_idx < length(pool) || continue
+        resize!(pool, write_idx)
+        bin.remaining_capacity = cap - sum(c.size for c in pool; init=0.0)
+    end
+    @assert left == 0 "removed commodities not found in the bins"
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
 Take `removed` out of the bins of `slot` in place (STP-style). `removed` must already be gone
 from `slot.commodities`, which must be sorted. Drops the bins that become empty. Then
 repacks from scratch only when the bins exceed the lower bound
@@ -183,13 +219,17 @@ function _remove_from_bins!(
     slot::SingleAssignment{C}, bp::BinPackingArcCost, removed::Vector{C}
 ) where {C<:LightCommodity}
     cap = Float64(bp.bin_capacity)
-    working = copy(removed)
-    for bin in slot.bins
-        isempty(working) && break
-        _remove_from_bin!(bin.commodities, working) || continue
-        bin.remaining_capacity = cap - sum(c.size for c in bin.commodities; init=0.0)
+    if length(removed) > LINEAR_REMOVAL_MAX
+        _remove_from_bins_multiset!(slot.bins, removed, cap)
+    else
+        working = copy(removed)
+        for bin in slot.bins
+            isempty(working) && break
+            _remove_from_bin!(bin.commodities, working) || continue
+            bin.remaining_capacity = cap - sum(c.size for c in bin.commodities; init=0.0)
+        end
+        @assert isempty(working) "removed commodities not found in the bins"
     end
-    @assert isempty(working) "removed commodities not found in the bins"
     filter!(b -> !isempty(b.commodities), slot.bins)
     lower_bound = ceil(Int, (slot.total_size - EPS) / cap)
     # Repacking runs first-fit-decreasing twice (count, then bins), but it is rare.
@@ -546,11 +586,12 @@ function _remove_commodities_from_assignment!(
         n_missing = length(removed_comms) - n_removed
         throw(
             ArgumentError(
-                "remove_bundle_path!: $(n_missing) commodities not found in single-mode assignment",
+                "commodity removal: $(n_missing) commodities not found in single-mode assignment",
             ),
         )
     end
     assignment.total_size -= sum(c.size for c in removed_comms; init=0.0)
+    isempty(assignment.commodities) && (assignment.total_size = 0.0)
     _update_cost_after_removal!(assignment, arc.cost, removed_comms)
     arc_delta = assignment.arc_cost - before
     node_delta = _refresh_node_cost!(assignment, node_costs[sv])
@@ -571,13 +612,14 @@ function _remove_commodities_from_assignment!(
         dropped = _drain_first_matches!(slot.commodities, remaining)
         if !isempty(dropped)
             slot.total_size -= sum(c.size for c in dropped; init=0.0)
+            isempty(slot.commodities) && (slot.total_size = 0.0)
             _update_cost_after_removal!(slot, arc.modes[i].cost, dropped)
         end
     end
     if !isempty(remaining)
         throw(
             ArgumentError(
-                "remove_bundle_path!: $(length(remaining)) commodities not found across modes for this edge",
+                "commodity removal: $(length(remaining)) commodities not found across modes for this edge",
             ),
         )
     end
@@ -603,7 +645,7 @@ function _remove_all_from_pool!(
 ) where {C<:LightCommodity}
     n_to_remove = length(to_remove)
     n_to_remove == 0 && return 0
-    if n_to_remove <= 8
+    if n_to_remove <= LINEAR_REMOVAL_MAX
         return _remove_all_from_pool_linear!(pool, to_remove)
     end
     return _remove_all_from_pool_dict!(pool, to_remove)
@@ -696,7 +738,7 @@ function _drain_first_matches!(
     pool::Vector{C}, to_remove::Vector{C}
 ) where {C<:LightCommodity}
     isempty(to_remove) && return C[]
-    if length(to_remove) <= 8
+    if length(to_remove) <= LINEAR_REMOVAL_MAX
         return _drain_first_matches_linear!(pool, to_remove)
     end
     return _drain_first_matches_dict!(pool, to_remove)

@@ -46,6 +46,11 @@ function compute_ttg_edge_incremental_cost(
 
         edge = (u_tsg, v_tsg)
         existing_assignment = get(current_solution.assignments, edge, nothing)
+        # A vacated edge keeps its emptied entry: treat it as unused to reuse the empty counts.
+        if existing_assignment !== nothing &&
+            _assignment_commodity_count(existing_assignment) == 0
+            existing_assignment = nothing
+        end
         new_total_size = order.total_size
         arc_part += _edge_incremental_cost(
             buffer,

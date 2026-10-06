@@ -93,7 +93,9 @@ $TYPEDSIGNATURES
 Walk each `(order, path-edge)` pair of `bundle` along `path`, resolve the
 time-space edge `(u_tsg, v_tsg)` and its network `arc`, and accumulate the
 `Float64` deltas returned by `f(edge, arc, order)`. Shared by
-[`add_bundle_path!`](@ref) and [`remove_bundle_path!`](@ref).
+[`add_bundle_path!`](@ref) and [`remove_bundle_path!`](@ref). A projected edge depends
+only on the two node codes and the order, so a view of a sub-range of a path visits exactly
+the edges of that sub-range, in every time semantics.
 
 Each `(order, path-edge)` pair is visited once and `f` is called per pair, so
 commits and removals stay one-for-one. Under `wrap_time` a cyclic spatial path
@@ -101,7 +103,9 @@ can make one order, or two orders of the bundle, project onto the same TSG edge:
 the deltas are still a plain additive sum, with no per-edge grouping. Such paths
 are infeasible for [`is_feasible`](@ref) but remain valid for accounting.
 """
-function _foreach_path_edge(f, instance::Instance, bundle::Bundle, path::Vector{Int})
+function _foreach_path_edge(
+    f, instance::Instance, bundle::Bundle, path::AbstractVector{Int}
+)
     cache = instance.index_cache
     delta = 0.0
     for order in bundle.orders
@@ -170,7 +174,7 @@ function _commit_bundle_path!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment},
     instance::Instance,
     bundle::Bundle,
-    path::Vector{Int},
+    path::AbstractVector{Int},
     mode_selector::AbstractModeSelector,
     packing::Symbol,
 )
@@ -225,23 +229,126 @@ the expected TSG edges. That should never happen when the bundle's stored
 path is consistent with how it was added.
 """
 function remove_bundle_path!(
-    current_solution::SolutionState{C}, instance::Instance, bundle_idx::Int
-) where {C}
+    current_solution::SolutionState, instance::Instance, bundle_idx::Int
+)
     path = current_solution.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
-    bundle = instance.bundles[bundle_idx]
-    cache = instance.index_cache
+    cost_delta = _remove_bundle_edges!(
+        current_solution, instance, instance.bundles[bundle_idx], path
+    )
+    current_solution.bundle_paths[bundle_idx] = Int[]
+    return cost_delta
+end
 
-    cost_delta = _foreach_path_edge(instance, bundle, path) do edge, arc, order
+"""
+$TYPEDSIGNATURES
+
+Drop the bundle's commodities from the edges of `path` and return the cost change.
+Shared by [`remove_bundle_path!`](@ref) and [`remove_bundle_subpath!`](@ref).
+"""
+function _remove_bundle_edges!(
+    current_solution::SolutionState,
+    instance::Instance,
+    bundle::Bundle,
+    path::AbstractVector{Int},
+)
+    cache = instance.index_cache
+    return _foreach_path_edge(instance, bundle, path) do edge, arc, order
         assignment = current_solution.assignments[edge]
         sv = cache.tsg_code_to_spatial_code[edge[2]]
         return _remove_commodities_from_assignment!(
             assignment, arc, order.commodities, cache.spatial_code_to_node_cost, sv
         )
     end
+end
 
-    current_solution.bundle_paths[bundle_idx] = Int[]
+"""
+$TYPEDSIGNATURES
+
+Remove the bundle's commodities from the edges of the sub-path `lo:hi` of its stored path
+(see [`remove_bundle_path!`](@ref) for the per-edge details) and return the cost decrease.
+`bundle_paths` is left untouched, so this is one half of a transaction: it must be
+followed by [`add_bundle_subpath!`](@ref) or by a restore of the snapshots.
+Node costs are charged on each edge's head, so the slice carries its interior nodes and
+the node at `hi`, never the node at `lo`.
+
+This is the single-slice reference used to check the batched
+[`remove_bundle_subpaths!`](@ref), which the two-node move calls.
+"""
+function remove_bundle_subpath!(
+    current_solution::SolutionState, instance::Instance, bundle_idx::Int, lo::Int, hi::Int
+)
+    path = view(current_solution.bundle_paths[bundle_idx], lo:hi)
+    return _remove_bundle_edges!(
+        current_solution, instance, instance.bundles[bundle_idx], path
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Batched [`remove_bundle_subpath!`](@ref): remove the slices `(bundle_idx, lo, hi)` of several
+bundles at once and return the total cost decrease. The commodities of all slices are
+grouped by time-space edge and taken out of each edge assignment in a single pass, so the
+bin repacking check and the cost refresh run once per edge instead of once per slice.
+The returned delta is exact for the resulting state and the per-edge commodity multisets
+equal those of sequential removal. The bins and the bin-packing cost can differ from
+sequential removal, because the repack decision is taken once on the final commodity set.
+"""
+function remove_bundle_subpaths!(
+    current_solution::SolutionState{C}, instance::Instance, slices::Vector{NTuple{3,Int}}
+) where {C}
+    cache = instance.index_cache
+    grouped = Dict{Tuple{Int,Int},Tuple{AbstractNetworkArc,Vector{C}}}()
+    for (i, lo, hi) in slices
+        path = view(current_solution.bundle_paths[i], lo:hi)
+        _foreach_path_edge(instance, instance.bundles[i], path) do edge, arc, order
+            _, commodities = get!(() -> (arc, C[]), grouped, edge)
+            append!(commodities, order.commodities)
+            return 0.0
+        end
+    end
+    cost_delta = 0.0
+    for (edge, (arc, commodities)) in grouped
+        sv = cache.tsg_code_to_spatial_code[edge[2]]
+        cost_delta += _remove_commodities_from_assignment!(
+            current_solution.assignments[edge],
+            arc,
+            commodities,
+            cache.spatial_code_to_node_cost,
+            sv,
+        )
+    end
     return cost_delta
+end
+
+"""
+$TYPEDSIGNATURES
+
+Store `new_path` as the path of `bundle_idx` and commit the bundle along its sub-path
+`lo:hi` only, returning the cost increase. `new_path` must already be cleaned of shortcut
+nodes and equal the previous path outside `lo:hi`, whose edges are still committed.
+Counterpart of [`remove_bundle_subpaths!`](@ref).
+"""
+function add_bundle_subpath!(
+    current_solution::SolutionState,
+    instance::Instance,
+    bundle_idx::Int,
+    new_path::Vector{Int},
+    lo::Int,
+    hi::Int;
+    mode_selector::AbstractModeSelector=CheapestMode(),
+    packing::Symbol=:frozen,
+)
+    current_solution.bundle_paths[bundle_idx] = new_path
+    return _commit_bundle_path!(
+        current_solution.assignments,
+        instance,
+        instance.bundles[bundle_idx],
+        view(new_path, lo:hi),
+        mode_selector,
+        packing,
+    )
 end
 
 """

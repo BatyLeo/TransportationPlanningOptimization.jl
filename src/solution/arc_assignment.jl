@@ -182,6 +182,12 @@ function _node_load(a::MultiAssignment{C}) where {C<:LightCommodity}
     return collect(C, commodities_of(a))
 end
 
-# Internal helper for counting commodities on an edge assignment, used in cost calculations.
+# Number of cached bins on an edge assignment (summed over modes).
 _bin_count(a::SingleAssignment) = length(a.bins)
 _bin_count(a::MultiAssignment) = sum(length(slot.bins) for slot in a.per_mode; init=0)
+
+# Number of commodities currently on an edge assignment (summed over modes).
+_assignment_commodity_count(a::SingleAssignment) = length(a.commodities)
+function _assignment_commodity_count(a::MultiAssignment)
+    return sum(length(slot.commodities) for slot in a.per_mode; init=0)
+end

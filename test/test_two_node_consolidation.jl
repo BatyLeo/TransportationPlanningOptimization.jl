@@ -11,35 +11,16 @@ const TPO = TransportationPlanningOptimization
 
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
+using .TestFixtures: same_state, edge_multisets
 
-@testset "bundles_through_arc returns matching bundles" begin
-    instance = TestFixtures.small_instance()
-    sol = TestFixtures.small_greedy()
-
-    first_with_arc = findfirst(p -> length(p) >= 2, sol.bundle_paths)
-    @assert first_with_arc !== nothing "no bundle has a length-2+ path on small"
-    path = sol.bundle_paths[first_with_arc]
-    src, dst = path[1], path[2]
-
-    matched = TPO.bundles_through_arc(sol, src, dst)
-    @test first_with_arc in matched
-    expected = Int[]
-    for i in 1:bundle_count(instance)
-        p = sol.bundle_paths[i]
-        if any(k -> p[k] == src && p[k + 1] == dst, 1:(length(p) - 1))
-            push!(expected, i)
-        end
-    end
-    @test matched == expected
-
-    @test isempty(TPO.bundles_through_arc(sol, src, src))
-end
+# Indices of the bundles visiting `src` then `dst`.
+through_idxs(sol, src, dst) = [i for (i, _, _) in TPO.bundles_through_nodes(sol, src, dst)]
 
 @testset "merge_bundles unions orders + forbidden, picks max-transit donor" begin
     instance = TestFixtures.small_instance()
 
     lifted_idxs = [1, 2]
-    virtual, virtual_arcs = TPO.merge_bundles(instance, lifted_idxs)
+    virtual = TPO.merge_bundles(instance, lifted_idxs)
 
     all_lifted_orders = vcat(instance.bundles[1].orders, instance.bundles[2].orders)
     expected_order_count = length(Set(o.time_step for o in all_lifted_orders))
@@ -63,7 +44,7 @@ end
     @test virtual.destination_id ==
         instance.bundles[lifted_idxs[donor_local]].destination_id
 
-    @test virtual_arcs === instance.travel_time_graph.bundle_arcs[lifted_idxs[donor_local]]
+    @test TPO._donor_index(instance, lifted_idxs) == lifted_idxs[donor_local]
 
     @test_throws ArgumentError TPO.merge_bundles(instance, Int[])
 end
@@ -71,7 +52,7 @@ end
 @testset "merge_bundles merges orders sharing a time step" begin
     instance = TestFixtures.small_instance()
     lifted_idxs = [1, 2]
-    virtual, _ = TPO.merge_bundles(instance, lifted_idxs)
+    virtual = TPO.merge_bundles(instance, lifted_idxs)
 
     all_orders_flat = vcat(instance.bundles[1].orders, instance.bundles[2].orders)
     distinct_steps = Set(o.time_step for o in all_orders_flat)
@@ -93,16 +74,60 @@ end
     @test merged_order.max_transit_steps == minimum(o.max_transit_steps for o in sources)
 end
 
-@testset "splice_path replaces (src, dst) sub-segment" begin
-    @test TPO.splice_path([1, 2, 3, 4], 2, 3, [2, 99, 100, 3]) == [1, 2, 99, 100, 3, 4]
-    @test TPO.splice_path([1, 2, 3], 2, 3, [2, 3]) == [1, 2, 3]
-    @test TPO.splice_path([2, 3, 4], 2, 3, [2, 99, 3]) == [2, 99, 3, 4]
-    @test TPO.splice_path([1, 2, 3], 2, 3, [2, 99, 3]) == [1, 2, 99, 3]
+@testset "splice_path replaces the lo:hi sub-segment" begin
+    instance = TestFixtures.small_instance()
+    ttg = instance.travel_time_graph
+    sol = TestFixtures.small_greedy()
+    path = copy(sol.bundle_paths[findfirst(p -> length(p) >= 5, sol.bundle_paths)])
+    # Two node codes absent from the path, used as detour nodes of the spliced sub-paths.
+    x, y = setdiff(1:Graphs.nv(ttg.graph), path)[1:2]
+    a, b, c, d, e = path[1:5]
 
-    @test_throws ArgumentError TPO.splice_path([1, 2, 3], 5, 6, [5, 6])
-    @test_throws ArgumentError TPO.splice_path([1, 2, 3], 2, 3, [2, 99, 4])
-    @test_throws ArgumentError TPO.splice_path([1, 2, 3], 2, 3, [99, 2, 3])
-    @test_throws ArgumentError TPO.splice_path([1, 2, 3], 2, 3, Int[])
+    @test TPO.splice_path(path, 2, 3, [b, x, y, c], ttg) ==
+        (vcat(path[1:2], [x, y], path[3:end]), 5)
+    @test TPO.splice_path(path, 2, 3, [b, c], ttg) == (path, 3)
+    @test TPO.splice_path(path, 2, 4, [b, x, d], ttg) ==
+        (vcat(path[1:2], [x], path[4:end]), 4)
+    @test TPO.splice_path(path[1:3], 1, 2, [a, x, b], ttg) == (vcat([a, x], path[2:3]), 3)
+    new, _ = TPO.splice_path(path, 2, 3, [b, c], ttg)
+    @test new !== path
+
+    @test_throws ArgumentError TPO.splice_path(path, 99, 100, [a, b], ttg)
+    @test_throws ArgumentError TPO.splice_path(path, 3, 2, [c, b], ttg)
+    @test_throws ArgumentError TPO.splice_path(path, 2, 3, [b, x, d], ttg)
+    @test_throws ArgumentError TPO.splice_path(path, 2, 3, [x, b, c], ttg)
+    @test_throws ArgumentError TPO.splice_path(path, 2, 3, Int[], ttg)
+end
+
+@testset "splice_path strips the shortcut nodes of the new sub-path only" begin
+    # Arrival mode: the origin node of the TTG is followed by a shortcut to the first
+    # timed node, which a splice at lo == 1 removes and the suffix keeps its length.
+    nodes = [
+        Node(; id="O", node_type=:origin),
+        Node(; id="H", node_type=:other),
+        Node(; id="D", node_type=:destination),
+    ]
+    arc(o, d) =
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
+    commodity = Commodity(;
+        origin_id="O",
+        destination_id="D",
+        quantity=1,
+        arrival_date=DateTime(2021, 1, 5),
+        max_delivery_time=Day(3),
+        size=1.0,
+    )
+    instance = Instance(nodes, [arc("O", "H"), arc("H", "D")], [commodity], Day(1))
+    ttg = instance.travel_time_graph
+    clean = copy(greedy_heuristic(instance; show_progress=false).bundle_paths[1])
+    old = vcat(ttg.origin_codes[1], clean)
+    @test old[1] != clean[1]
+    path, new_hi = TPO.splice_path(old, 1, 2, old[1:2], ttg)
+    @test path == clean
+    @test new_hi == 1
+    @test length(path) - new_hi == length(old) - 2
+    # Stored paths are already clean, so splicing one back strips nothing.
+    @test TPO.splice_path(clean, 1, 2, clean[1:2], ttg) == (clean, 2)
 end
 
 @testset "compute_candidate_nodes filters by node_type" begin
@@ -128,7 +153,7 @@ end
     matched_src, matched_dst = 0, 0
     for (i, path) in enumerate(sol.bundle_paths), k in 1:(length(path) - 1)
         s, d = path[k], path[k + 1]
-        if length(TPO.bundles_through_arc(sol, s, d)) >= 2
+        if length(TPO.bundles_through_nodes(sol, s, d)) >= 2
             matched_src, matched_dst = s, d
             break
         end
@@ -149,7 +174,7 @@ end
     matched_src, matched_dst = 0, 0
     for (i, path) in enumerate(sol.bundle_paths), k in 1:(length(path) - 1)
         s, d = path[k], path[k + 1]
-        if length(TPO.bundles_through_arc(sol, s, d)) >= 2
+        if length(TPO.bundles_through_nodes(sol, s, d)) >= 2
             matched_src, matched_dst = s, d
             break
         end
@@ -234,7 +259,7 @@ end
     @test is_feasible(sol, instance; verbose=true)
 
     src, dst = code("H"), code("C")
-    @test TPO.bundles_through_arc(sol, src, dst) == sort([idx_b, idx_d])
+    @test through_idxs(sol, src, dst) == sort([idx_b, idx_d])
 
     old_paths = deepcopy(sol.bundle_paths)
     saved = TPO.two_node_common_incremental!(sol, instance, src, dst; refine=false)
@@ -262,7 +287,7 @@ end
         (joinpath(datadir, "small_$(f).csv") for f in ("nodes", "legs", "commodities"))...
     )
     instance = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
-    virtual, _ = TPO.merge_bundles(instance, [1, 2])
+    virtual = TPO.merge_bundles(instance, [1, 2])
     @test length(virtual.orders) < sum(length(instance.bundles[i].orders) for i in (1, 2))
     for o in virtual.orders
         @test o.aggregate.stock_cost ===
@@ -274,7 +299,7 @@ end
 function shared_arc(sol)
     for path in sol.bundle_paths, k in 1:(length(path) - 1)
         s, d = path[k], path[k + 1]
-        length(TPO.bundles_through_arc(sol, s, d)) >= 2 && return s, d
+        length(TPO.bundles_through_nodes(sol, s, d)) >= 2 && return s, d
     end
     return error("no arc with >= 2 bundles")
 end
@@ -283,9 +308,10 @@ end
     instance = TestFixtures.small_instance()
     sol = TestFixtures.small_greedy()
     src, dst = shared_arc(sol)
-    lifted = TPO.bundles_through_arc(sol, src, dst)
+    lifted = through_idxs(sol, src, dst)
     foreach(i -> TPO.remove_bundle_path!(sol, instance, i), lifted)
-    virtual, arcs = TPO.merge_bundles(instance, lifted)
+    virtual = TPO.merge_bundles(instance, lifted)
+    arcs = instance.travel_time_graph.bundle_arcs[TPO._donor_index(instance, lifted)]
     nz = SparseArrays.nonzeros(instance.travel_time_graph.cost_matrix)
 
     for packing in (:frozen, :ffd_union)
@@ -314,7 +340,7 @@ end
     sol = TestFixtures.small_greedy()
     before = deepcopy(sol)
     src, dst = shared_arc(sol)
-    @test length(TPO.bundles_through_arc(sol, src, dst)) >= 2
+    @test length(TPO.bundles_through_nodes(sol, src, dst)) >= 2
     saved = TPO.two_node_common_incremental!(sol, instance, src, dst; deadline=0.0)
     @test saved == 0.0
     @test sol.bundle_paths == before.bundle_paths
@@ -360,4 +386,266 @@ end
     r = local_search!(sol, instance; time_limit=1e-3, rng=MersenneTwister(1))
     @test is_feasible(sol, instance; verbose=true)
     @test isapprox(cost(sol), c0 - r.saved; rtol=1e-9)
+end
+
+# Chain O1/O2 -> H1 -> H2 -> H3 -> D1/D2 with a cheap detour H1 -> X -> H3, plus a third
+# bundle O3 -> H1 -> H2 -> D3 that shares only H1 -> H2. All arcs take no time, so every
+# TTG node of the chain has the same code for the three bundles.
+function chain_instance(; arrival::Bool, bin_packing::Bool)
+    arc_cost(c) = bin_packing ? BinPackingArcCost(c, 10) : LinearArcCost(c)
+    nodes = [
+        [Node(; id="O$k", node_type=:origin) for k in 1:3]
+        [Node(; id=id, node_type=:other) for id in ("H1", "H2", "H3", "X")]
+        [Node(; id="D$k", node_type=:destination) for k in 1:3]
+    ]
+    legs = [
+        ("O1", "H1", 1),
+        ("O2", "H1", 1),
+        ("O3", "H1", 1),
+        ("H1", "H2", 8),
+        ("H2", "H3", 8),
+        ("H1", "X", 1),
+        ("X", "H3", 1),
+        ("H3", "D1", 1),
+        ("H3", "D2", 1),
+        ("H2", "D3", 1),
+    ]
+    arcs = [
+        Arc(; origin_id=o, destination_id=d, cost=arc_cost(c), travel_time=Day(0)) for
+        (o, d, c) in legs
+    ]
+    date_key = arrival ? :arrival_date : :departure_date
+    commodities = [
+        Commodity(;
+            origin_id="O$k",
+            destination_id="D$k",
+            quantity=1,
+            (date_key => DateTime(2021, 1, 1)),
+            max_delivery_time=Day(0),
+            size=sz,
+        ) for (k, sz) in ((1, 1.0), (2, 2.0), (3, 1.0))
+    ]
+    return Instance(nodes, arcs, commodities, Day(1))
+end
+
+function chain_solution(instance)
+    ttg = instance.travel_time_graph
+    code(id) = code_for(ttg.graph, (id, 0))
+    routes = Dict(
+        "O1" => ["O1", "H1", "H2", "H3", "D1"],
+        "O2" => ["O2", "H1", "H2", "H3", "D2"],
+        "O3" => ["O3", "H1", "H2", "D3"],
+    )
+    paths = [map(code, routes[b.origin_id]) for b in instance.bundles]
+    return SolutionState(paths, instance), code
+end
+
+@testset "two-node move reroutes only the slice of the lifted bundles" begin
+    for arrival in (true, false),
+        bin_packing in (false, true),
+        packing in (:frozen, :ffd_union)
+
+        instance = chain_instance(; arrival, bin_packing)
+        ttg = instance.travel_time_graph
+        sol, code = chain_solution(instance)
+        @test is_feasible(sol, instance; verbose=true)
+        b3 = findfirst(b -> b.origin_id == "O3", instance.bundles)
+        lifted = TPO.bundles_through_nodes(sol, code("H1"), code("H3"))
+        @test sort([i for (i, _, _) in lifted]) == sort(setdiff(1:3, b3))
+        @test all(t -> t[2:3] == (2, 4), lifted)
+
+        before = deepcopy(sol)
+        c0 = cost(sol)
+        # Linear: 3 units leave both 8 arcs and use two 1 arcs. Bins: the H1 -> H2 bin is
+        # kept by the third bundle, so only the 8 of H2 -> H3 is replaced by two bins of 1.
+        expected = bin_packing ? 6.0 : 42.0
+        saved = TPO.two_node_common_incremental!(
+            sol,
+            instance,
+            code("H1"),
+            code("H3");
+            refine=false,
+            packing,
+            cost_packing=packing,
+        )
+        @test saved ≈ expected
+        @test cost(sol) ≈ c0 - expected
+        for (i, b) in enumerate(instance.bundles)
+            ids = [label_for(ttg.graph, v)[1] for v in sol.bundle_paths[i]]
+            if b.origin_id == "O3"
+                @test ids == ["O3", "H1", "H2", "D3"]
+            else
+                @test ids[2:4] == ["H1", "X", "H3"]
+            end
+        end
+        @test sol.bundle_paths[b3] == before.bundle_paths[b3]
+        @test is_feasible(sol, instance; verbose=true)
+
+        # Prefix and suffix edges (origin legs, H3 -> D, H2 -> D3) are untouched.
+        bundle_of(o) = findfirst(b -> b.origin_id == o, instance.bundles)
+        tsg_edge(o, u, v) = map(
+            n -> TPO.project_to_time_space_graph(
+                code(n), instance.bundles[bundle_of(o)].orders[1], instance
+            ),
+            (u, v),
+        )
+        untouched = [
+            tsg_edge("O1", "O1", "H1"),
+            tsg_edge("O2", "O2", "H1"),
+            tsg_edge("O3", "O3", "H1"),
+            tsg_edge("O1", "H3", "D1"),
+            tsg_edge("O2", "H3", "D2"),
+            tsg_edge("O3", "H2", "D3"),
+        ]
+        for edge in untouched
+            a, a0 = sol.assignments[edge], before.assignments[edge]
+            @test !isempty(a.commodities)
+            @test a.commodities == a0.commodities
+            @test a.arc_cost == a0.arc_cost
+        end
+        @test !isempty(sol.assignments[tsg_edge("O1", "H1", "H2")].commodities)
+        @test isempty(sol.assignments[tsg_edge("O1", "H2", "H3")].commodities)
+
+        # Running the same move again changes nothing (Dijkstra returns the current slices).
+        after = deepcopy(sol)
+        @test TPO.two_node_common_incremental!(
+            sol,
+            instance,
+            code("H1"),
+            code("H3");
+            refine=false,
+            packing,
+            cost_packing=packing,
+        ) == 0.0
+        @test same_state(sol, after)
+        rebuilt = SolutionState(sol.bundle_paths, instance)
+        @test cost(rebuilt) ≈ cost(sol)
+    end
+end
+
+@testset "two-node move to a destination reached early commits no shortcut edges" begin
+    # H -> D takes 3 days but H -> Y -> D takes 2. In departure mode the destination is then
+    # reached early and the shortcut arcs ride on to the old arrival time, which the
+    # stored path and the assignments must not contain.
+    nodes = [
+        Node(; id="O", node_type=:origin),
+        Node(; id="H", node_type=:other),
+        Node(; id="Y", node_type=:other),
+        Node(; id="D", node_type=:destination),
+    ]
+    arc(o, d, c, days) =
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(c), travel_time=Day(days))
+    arcs = [
+        arc("O", "H", 1, 0), arc("H", "D", 10, 3), arc("H", "Y", 1, 1), arc("Y", "D", 1, 1)
+    ]
+    commodity = Commodity(;
+        origin_id="O",
+        destination_id="D",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(4),
+        size=1.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1))
+    ttg = instance.travel_time_graph
+    code(id, τ) = code_for(ttg.graph, (id, τ))
+    sol = SolutionState([[code("O", 0), code("H", 0), code("D", 3)]], instance)
+    @test TPO.bundles_through_nodes(sol, code("H", 0), code("D", 3)) == [(1, 2, 3)]
+    c0 = cost(sol)
+
+    saved = TPO.two_node_common_incremental!(
+        sol, instance, code("H", 0), code("D", 3); refine=false
+    )
+    @test saved ≈ 8.0
+    @test sol.bundle_paths[1] == [code("O", 0), code("H", 0), code("Y", 1), code("D", 2)]
+    rebuilt = SolutionState(sol.bundle_paths, instance)
+    live(s) = Set(e for (e, a) in s.assignments if !isempty(a.commodities))
+    @test live(sol) == live(rebuilt)
+    @test length(live(sol)) == 3
+    @test cost(sol) ≈ c0 - 8.0
+    @test is_feasible(sol, instance; verbose=true)
+end
+
+@testset "corridor cost matrix gives the same Dijkstra path and costs as the donor arcs" begin
+    instance = TestFixtures.small_instance()
+    base = TestFixtures.small_greedy()
+    ttg = instance.travel_time_graph
+    pairs = Set{Tuple{Int,Int}}()
+    for path in base.bundle_paths, k in 1:(length(path) - 1)
+        length(through_idxs(base, path[k], path[k + 1])) >= 2 &&
+            push!(pairs, (path[k], path[k + 1]))
+    end
+    @test !isempty(pairs)
+    for (src, dst) in first(sort!(collect(pairs)), 4)
+        sol = deepcopy(base)
+        lifted = TPO.bundles_through_nodes(sol, src, dst)
+        foreach(
+            ((i, lo, hi),) -> TPO.remove_bundle_subpath!(sol, instance, i, lo, hi), lifted
+        )
+        idxs = [i for (i, _, _) in lifted]
+        virtual = TPO.merge_bundles(instance, idxs)
+        donor_arcs = ttg.bundle_arcs[TPO._donor_index(instance, idxs)]
+        corridor = TPO._corridor_arcs(ttg.graph, src, dst)
+        @test issubset(Set(corridor), Set(donor_arcs))
+        @test (src, dst) in corridor
+
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, virtual, donor_arcs, TPO.CheapestMode()
+        )
+        donor_costs = [ttg.cost_matrix[u, v] for (u, v) in corridor]
+        parents, _ = TPO.bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst)
+        donor_path = TPO.trace_path(parents, src, dst)
+
+        TPO.update_bundle_cost_matrix!(sol, instance, virtual, corridor, TPO.CheapestMode())
+        @test [ttg.cost_matrix[u, v] for (u, v) in corridor] == donor_costs
+        parents, _ = TPO.bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst)
+        @test TPO.trace_path(parents, src, dst) == donor_path
+    end
+end
+
+@testset "bundles_through_nodes matches a brute force on random pairs" begin
+    sol = TestFixtures.small_greedy()
+    rng = MersenneTwister(5)
+    paths = filter(!isempty, sol.bundle_paths)
+    for _ in 1:30
+        src = rand(rng, rand(rng, paths))
+        dst = rand(rng, rand(rng, paths))
+        expected = NTuple{3,Int}[
+            (i, findfirst(==(src), p), findlast(==(dst), p)) for
+            (i, p) in enumerate(sol.bundle_paths) if
+            src in p && dst in p && findfirst(==(src), p) < findlast(==(dst), p)
+        ]
+        @test TPO.bundles_through_nodes(sol, src, dst) == expected
+    end
+    @test isempty(TPO.bundles_through_nodes(sol, paths[1][1], paths[1][1]))
+    i = findfirst(q -> length(q) >= 2, sol.bundle_paths)
+    p = sol.bundle_paths[i]
+    @test all(!=(i) ∘ first, TPO.bundles_through_nodes(sol, p[end], p[1]))
+end
+
+@testset "batched removal on edges shared by several slices matches sequential removal" begin
+    for bin_packing in (false, true)
+        instance = chain_instance(; arrival=true, bin_packing)
+        sol, code = chain_solution(instance)
+        lifted = TPO.bundles_through_nodes(sol, code("H1"), code("H3"))
+        visits = Dict{Tuple{Int,Int},Int}()
+        for (i, lo, hi) in lifted
+            path = view(sol.bundle_paths[i], lo:hi)
+            TPO._foreach_path_edge(instance, instance.bundles[i], path) do edge, _, _
+                visits[edge] = get(visits, edge, 0) + 1
+                return 0.0
+            end
+        end
+        @test any(>=(2), values(visits))
+
+        sequential = deepcopy(sol)
+        for (i, lo, hi) in lifted
+            TPO.remove_bundle_subpath!(sequential, instance, i, lo, hi)
+        end
+        batched = deepcopy(sol)
+        delta = TPO.remove_bundle_subpaths!(batched, instance, lifted)
+        @test delta < 0
+        @test edge_multisets(batched) == edge_multisets(sequential)
+        @test cost(batched) ≈ cost(sol) + delta atol = 1e-9
+    end
 end
