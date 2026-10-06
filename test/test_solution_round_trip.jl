@@ -463,3 +463,20 @@ end
         instance === packed && @test arc_costs_match(rebuilt)
     end
 end
+
+@testset "Trivial commodities have an empty route" begin
+    for trivial_id in ("A", "B", "C"), arrival in (true, false)
+        alone = TestFixtures.trivial_instance(nothing; arrival)
+        instance = TestFixtures.trivial_instance(trivial_id; arrival)
+        solution = solve(instance; show_progress=false, time_limit=2.0)
+        @test cost(solution) ≈ cost(solve(alone; show_progress=false, time_limit=2.0))
+        @test isempty(solution.routes[end])
+        @test !isempty(solution.routes[1])
+        state = SolutionState(solution, instance)
+        @test is_feasible(state, instance; verbose=true)
+        @test is_feasible(solution, instance)
+        @test Solution(solution.routes, instance).routes == solution.routes
+        routes = [solution.routes[1], solution.routes[2], solution.routes[1]]
+        @test_throws rejects("dropped by the instance") Solution(routes, instance)
+    end
+end

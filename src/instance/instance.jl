@@ -54,7 +54,7 @@ $TYPEDFIELDS
     index_cache::IC
     "user input kept as given, see [`InstanceInput`](@ref)"
     input::IN
-    "entry `k` is `(bundle_idx, order_idx)` of input commodity `k`, or `(0, 0)` if its bundle was dropped"
+    "entry `k` is `(bundle_idx, order_idx)` of input commodity `k`, or `(0, 0)` if it is not routed by this instance (origin equal to destination, or bundle dropped by an extraction)"
     commodity_to_order::Vector{Tuple{Int,Int}}
 end
 
@@ -80,6 +80,7 @@ end
 $TYPEDSIGNATURES
 
 Return the number of commodities in the instance.
+Only routed commodities are counted (copies of input commodities not mapped to `(0, 0)`).
 """
 function commodity_count(instance::Instance)
     return sum(
@@ -135,7 +136,7 @@ $TYPEDSIGNATURES
 Compute the `DateTime` (at midnight) that anchors time step 1 of the instance's discrete horizon.
 All time step indices and `time_step_to_date` entries are measured as offsets from this date.
 
-The chosen date is the earliest relevant date across all commodities, where "relevant"
+The chosen date is the earliest relevant date across the given commodities, where "relevant"
 depends on the time semantics (`is_date_arrival`):
 - Arrival-based (`c.date` is a delivery deadline): the earliest deadline, or when
 `wrap_time=false`, the earliest deadline minus its `max_delivery_time` so the horizon
@@ -179,11 +180,14 @@ $TYPEDSIGNATURES
 
 Expand each `Commodity` into `LightCommodity` items and group them into `Order`s keyed by
 `(time_step_idx, origin_id, destination_id, group_by(commodity))`.
+Commodities with their origin equal to their destination are dropped: they never move, so they
+get no order, no light commodities and no key (`nothing` in `commodity_keys`), and they are
+ignored by the time grid. An `ArgumentError` is thrown if every commodity is dropped.
 
 Returns `(order_dict, time_horizon_length, start_date, commodity_keys)`, where `order_dict`
 maps each key to a `(commodities, min_transit_steps)` tuple, `time_horizon_length` accounts for
 `max_delivery_time` unless `wrap_time=true`, and `commodity_keys` holds the order key of each
-input commodity, in input order.
+input commodity (or `nothing` if dropped), in input order.
 """
 function _expand_commodities(
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
@@ -191,19 +195,26 @@ function _expand_commodities(
     group_by,
     wrap_time::Bool,
 ) where {is_date_arrival,ID,I}
-    total_quantity = sum(c.quantity for c in commodities)
+    isempty(commodities) &&
+        throw(ArgumentError("commodities is empty, there is nothing to plan"))
+    moving = filter(c -> c.origin_id != c.destination_id, commodities)
+    isempty(moving) && throw(
+        ArgumentError(
+            "every input commodity has its origin equal to its destination, there is nothing to plan",
+        ),
+    )
+    total_quantity = sum(c.quantity for c in moving)
     full_commodities = LightCommodity{I}[]
     sizehint!(full_commodities, total_quantity)
 
-    first_key = (
-        1, commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
-    )
+    first_key = (1, moving[1].origin_id, moving[1].destination_id, group_by(moving[1]))
     order_dict = Dict{typeof(first_key),Tuple{Vector{LightCommodity{I}},Int}}()
 
-    start_date = _compute_start_date(commodities, wrap_time)
-    commodity_keys = Vector{typeof(first_key)}(undef, length(commodities))
+    start_date = _compute_start_date(moving, wrap_time)
+    commodity_keys = Vector{Union{Nothing,typeof(first_key)}}(nothing, length(commodities))
 
     for (k, commodity) in enumerate(commodities)
+        commodity.origin_id == commodity.destination_id && continue
         light_commodity = _light_commodity(commodity)
 
         light_commodities_start_idx = length(full_commodities) + 1
@@ -255,16 +266,17 @@ end
 $TYPEDSIGNATURES
 
 Map each input commodity to its `(bundle_idx, order_idx)` in `bundles`, given the order key of
-each commodity from [`_expand_commodities`](@ref). The keys are rebuilt from the final
+each commodity and the `order_dict` from [`_expand_commodities`](@ref). The keys are rebuilt from the final
 `bundles` vector since bundle and order positions come from `Dict` iteration.
+A dropped commodity (`nothing` key) maps to `(0, 0)`.
 """
-function _commodity_to_order(bundles, commodity_keys)
-    key_to_position = Dict{eltype(commodity_keys),Tuple{Int,Int}}()
+function _commodity_to_order(bundles, commodity_keys, order_dict)
+    key_to_position = Dict{keytype(order_dict),Tuple{Int,Int}}()
     for (b, bundle) in enumerate(bundles), (o, order) in enumerate(bundle.orders)
         key = (order.time_step, bundle.origin_id, bundle.destination_id, bundle.group)
         key_to_position[key] = (b, o)
     end
-    return [key_to_position[key] for key in commodity_keys]
+    return [isnothing(key) ? (0, 0) : key_to_position[key] for key in commodity_keys]
 end
 
 """
@@ -282,9 +294,8 @@ function _build_bundles(
     group_by,
     time_horizon_length::Int,
 ) where {is_date_arrival,ID,I}
-    first_group_key = (
-        commodities[1].origin_id, commodities[1].destination_id, group_by(commodities[1])
-    )
+    K = keytype(order_dict)
+    G = fieldtype(K, 4)
     # `Order`'s constructor sorts the commodities by size descending (the
     # invariant the bin-packing hot path relies on), so no sort is needed here.
     order_keys = collect(keys(order_dict))
@@ -303,10 +314,9 @@ function _build_bundles(
         ),
     )
     O = eltype(orders)
-    bundle_dict = Dict{Tuple{String,String,eltype(first_group_key)},Vector{O}}()
+    bundle_dict = Dict{Tuple{String,String,G},Vector{O}}()
     bundle_forbidden_dict = Dict{
-        Tuple{String,String,eltype(first_group_key)},
-        Tuple{Set{String},Set{Tuple{String,String}}},
+        Tuple{String,String,G},Tuple{Set{String},Set{Tuple{String,String}}}
     }()
 
     for (key, order) in zip(order_keys, orders)
@@ -322,6 +332,7 @@ function _build_bundles(
 
     # Aggregate forbidden constraints from commodities
     for commodity in commodities
+        commodity.origin_id == commodity.destination_id && continue
         bundle_key = (commodity.origin_id, commodity.destination_id, group_by(commodity))
         if haskey(bundle_forbidden_dict, bundle_key)
             forbidden_nodes, forbidden_arcs = bundle_forbidden_dict[bundle_key]
@@ -334,8 +345,7 @@ function _build_bundles(
         end
     end
 
-    group_type = fieldtype(typeof(first_group_key), 3)
-    bundles = Bundle{O,group_type}[]
+    bundles = Bundle{O,G}[]
     for key in keys(bundle_dict)
         origin_id, destination_id, group_key = key
         forbidden_nodes, forbidden_arcs = get(
@@ -493,12 +503,22 @@ function build_instance(
             ),
         ) for (i, (o, d, a)) in enumerate(arcs)
     ]
+    node_ids = Set(node.id for node in nodes)
+    for (k, commodity) in enumerate(commodities),
+        id in (commodity.origin_id, commodity.destination_id)
+
+        id in node_ids || throw(
+            ArgumentError(
+                "input commodity $k ($(repr(commodity.origin_id)), $(repr(commodity.destination_id))) has an unknown endpoint: $(repr(id)) is not in nodes (add a Node with this id or remove the commodity)",
+            ),
+        )
+    end
     network_graph = NetworkGraph(narrowed_nodes, indexed_arcs; allow_multimodal)
     order_dict, time_horizon_length, start_date, commodity_keys = _expand_commodities(
         commodities, time_step, group_by, wrap_time
     )
     bundles = _build_bundles(order_dict, commodities, group_by, time_horizon_length)
-    commodity_to_order = _commodity_to_order(bundles, commodity_keys)
+    commodity_to_order = _commodity_to_order(bundles, commodity_keys, order_dict)
     time_step_to_date = [start_date + (i - 1) * time_step for i in 1:time_horizon_length]
     time_space_graph = TimeSpaceGraph(
         network_graph, time_horizon_length; wrap_time=wrap_time
@@ -598,6 +618,12 @@ grouped into `Order`s. Orders with the same origin and destination are grouped i
 
 The input is kept as given in `instance.input`, and each input commodity is mapped to its
 bundle and order in `instance.commodity_to_order`.
+
+Commodities with their origin equal to their destination are dropped: they never move and cost
+nothing, so they are mapped to `(0, 0)` in `instance.commodity_to_order`, get an empty route in a
+[`Solution`](@ref) and are ignored by the time grid.
+An `ArgumentError` is thrown if every commodity is dropped, or if a commodity endpoint is not a
+node id of `nodes`.
 """
 function Instance(
     nodes::Vector{<:Node},

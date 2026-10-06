@@ -12,7 +12,7 @@ The returned `Instance` shares the original bundle and commodity objects (no
 deep copy) and the original `input`. The links to the input (`input_index`) live on the graph
 elements, which are kept as is. Only the `bundles` vector, the three graph layers and
 `commodity_to_order` are new. The latter maps each input commodity to its position in the
-sub-instance, or to `(0, 0)` if its bundle was dropped.
+sub-instance, or to `(0, 0)` if it is not routed there (bundle dropped, or origin equal to destination).
 
 If no bundles survive filtering, an info message is logged and the returned instance
 has an empty `bundles` vector.

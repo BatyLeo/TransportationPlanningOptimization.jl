@@ -208,3 +208,18 @@ end
     @test is_feasible(rebuilt, instance)
     @test_throws ArgumentError Solution([TPO.Leg[] for _ in solution.routes], instance)
 end
+
+@testset "Trivial commodities round trip" begin
+    for trivial_id in ("A", "B", "C"),
+        arrival in (true, false),
+        trivial_first in (false, true)
+
+        instance = TestFixtures.trivial_instance(trivial_id; arrival, trivial_first)
+        trivial = trivial_first ? 1 : 3
+        solution = solve(instance; show_progress=false, time_limit=2.0)
+        back, lines = write_and_read(solution, instance)
+        @test back.routes == solution.routes
+        @test isempty(back.routes[trivial])
+        @test !any(startswith("$trivial,"), lines[2:end])
+    end
+end

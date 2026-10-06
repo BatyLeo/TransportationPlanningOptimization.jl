@@ -133,6 +133,6 @@ Instance(;
 )
 ```
 
-The `input` is kept exactly as given, and `commodity_to_order[k]` is the `(bundle_idx, order_idx)` of the `k`-th input commodity.
+The `input` is kept exactly as given, and `commodity_to_order[k]` is the `(bundle_idx, order_idx)` of the `k`-th input commodity, or `(0, 0)` if it is not routed by the instance (origin equal to destination, or bundle dropped by an extraction).
 
 Algorithms receive an `Instance` and produce a [`SolutionState`](@ref), which maps each bundle index to a path (sequence of node codes) in the `TravelTimeGraph`.

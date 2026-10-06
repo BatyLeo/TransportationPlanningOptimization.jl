@@ -685,3 +685,78 @@ end
         @test steps == fld.(offsets .+ shift, n) .+ 1
     end
 end
+
+@testset "Trivial commodities are dropped" begin
+    # Days 1 and 30 fall outside the window of the moving commodities in every mode.
+    for trivial_id in ("A", "B", "C"),
+        arrival in (true, false), wrap in (false, true),
+        trivial_day in (1, 10, 30)
+
+        alone = TestFixtures.trivial_instance(nothing; arrival, wrap_time=wrap)
+        for trivial_first in (false, true)
+            instance = TestFixtures.trivial_instance(
+                trivial_id; arrival, wrap_time=wrap, trivial_first, trivial_day
+            )
+            @test bundle_count(instance) == 1
+            @test commodity_count(instance) == 2
+            trivial_idx = trivial_first ? 1 : 3
+            @test instance.commodity_to_order[trivial_idx] == (0, 0)
+            routed = deleteat!(copy(instance.commodity_to_order), trivial_idx)
+            @test all(!=((0, 0)), routed)
+            @test instance.time_step_to_date == alone.time_step_to_date
+            @test instance.time_horizon_length == alone.time_horizon_length
+        end
+    end
+end
+
+@testset "Commodity endpoint validation" begin
+    nodes = [
+        Node(; id="A", node_type=:origin, capacity=10, info=nothing),
+        Node(; id="B", node_type=:destination, capacity=10, info=nothing),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            travel_time=Day(1),
+            cost=LinearArcCost(1.0),
+            info=nothing,
+        ),
+    ]
+    commodity(o, d) = Commodity(;
+        origin_id=o,
+        destination_id=d,
+        size=1.0,
+        arrival_date=DateTime(2024, 1, 10),
+        max_delivery_time=Day(4),
+    )
+    normal = commodity("A", "B")
+    for bad in (commodity("A", "Z"), commodity("Z", "B"), commodity("Z", "Z"))
+        @test_throws "input commodity 2" Instance(nodes, arcs, [normal, bad], Day(1))
+        @test_throws "\"Z\" is not in nodes" Instance(nodes, arcs, [normal, bad], Day(1))
+    end
+    @test_throws "every input commodity has its origin equal to its destination" Instance(
+        nodes, arcs, [commodity("A", "A"), commodity("B", "B")], Day(1)
+    )
+    @test_throws "commodities is empty" Instance(
+        nodes, arcs, Commodity{true,String,Nothing}[], Day(1)
+    )
+end
+
+@testset "Trivial commodities keep no constraint nor copy" begin
+    for (id, extra) in
+        (("B", (; forbidden_node_ids=["B"])), ("A", (; forbidden_arcs=[("A", "B")])))
+        instance = TestFixtures.trivial_instance(id; trivial_extra=extra)
+        @test instance.commodity_to_order[3] == (0, 0)
+        @test isempty(only(instance.bundles).forbidden_nodes)
+        @test isempty(only(instance.bundles).forbidden_arcs)
+    end
+    base = TestFixtures.trivial_instance("B"; trivial_extra=(; quantity=3))
+    c = base.input.commodities
+    instance = Instance(base.input.nodes, base.input.arcs, [c[1], c[3], c[2]], Day(1))
+    @test bundle_count(instance) == 1
+    @test commodity_count(instance) == 2
+    mapping = instance.commodity_to_order
+    @test mapping[2] == (0, 0)
+    @test Set([mapping[1], mapping[3]]) == Set([(1, 1), (1, 2)])
+end
