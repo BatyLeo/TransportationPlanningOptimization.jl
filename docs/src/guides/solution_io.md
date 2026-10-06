@@ -32,7 +32,7 @@ Date conventions:
 - Copies with equal size and info cannot be told apart, so when an order is split across modes they are attributed to modes by count.
   This also holds for equal copies of other orders, other bundles or reservation commodities on the same edge (possible only with a custom `group_by` splitting on something outside `info`).
   Totals stay consistent and only the mode of such a leg is arbitrary.
-- Commodities dropped by [`TransportationPlanningOptimization.extract_filtered_instance`](@ref) have an empty route, and the load reserved for them only appears in `arc_flows`.
+- Commodities not routed by the instance have an empty route: the ones with their origin equal to their destination (dropped at construction) and the ones dropped by [`TransportationPlanningOptimization.extract_filtered_instance`](@ref) (the load reserved for these only appears in `arc_flows`).
 
 To flatten the routes into a table with a `commodity` column:
 
@@ -62,7 +62,7 @@ is_feasible(solution_state, instance; verbose=true)
 - A route is pinned to the order date: its arrival (arrival-date mode) or its departure (departure-date mode) must equal the order date.
 - The solution-level round trip `Solution(SolutionState(solution, instance), instance) == solution` only holds for solutions produced by `Solution(solution_state, instance)`.
   Other plans come back normalized, with the legs of one leg position merged and in slot order and identical copies attributed by count.
-- Commodities dropped by an extraction must have an empty route, and the load reserved for them is not rebuilt.
+- Commodities not routed by the instance (origin equal to destination, or dropped by an extraction) must have an empty route, and the load reserved for the ones dropped by an extraction is not rebuilt.
 
 To get a full [`Solution`](@ref) back from edited routes, with `arc_flows` and cost rebuilt, use `Solution(routes, instance)`.
 It validates the routes like `SolutionState(solution, instance)` does, then converts the state back.

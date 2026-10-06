@@ -4,6 +4,7 @@ $TYPEDSIGNATURES
 Build the [`SolutionState`](@ref) of the plan `solution` on `instance`, the reverse of `Solution(solution_state, instance)`.
 The routes are the source of truth and give the paths and the input arcs (modes) of every commodity.
 The `arc_flows` are ignored, and the capacity reserved for commodities dropped by an extraction is not rebuilt.
+Commodities not routed by the instance (mapped to `(0, 0)`, such as the ones with their origin equal to their destination) must have an empty route.
 Every slot of every edge is repacked by first-fit decreasing, so bins and costs only equal those of the original state for linear costs (up to floating point summation order).
 Capacity is not checked, run [`is_feasible`](@ref) on the result.
 Several legs on the same arc at the same position are merged, and the solution-level round trip `Solution(SolutionState(solution, instance), instance) == solution` only holds for solutions produced by `Solution(solution_state, instance)`.

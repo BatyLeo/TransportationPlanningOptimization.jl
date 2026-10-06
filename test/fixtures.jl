@@ -414,6 +414,52 @@ function check_round_trip(state, instance; same_cost::Bool)
     return rebuilt
 end
 
+# Chain A -> B -> C (origin, other, destination) with the commodities A -> C on days 10 and 14 (so
+# that the horizon holds a path even with wrap) and, if `trivial_id` is not `nothing`, a commodity
+# with origin and destination `trivial_id` on day `trivial_day` (first when `trivial_first`),
+# built with the extra `Commodity` keywords `trivial_extra`.
+function trivial_instance(
+    trivial_id;
+    arrival::Bool=true,
+    wrap_time::Bool=false,
+    trivial_first::Bool=false,
+    trivial_day::Int=10,
+    trivial_extra=(;),
+)
+    nodes = [
+        Node(; id="A", node_type=:origin, capacity=10, info=nothing),
+        Node(; id="B", node_type=:other, capacity=10, info=nothing),
+        Node(; id="C", node_type=:destination, capacity=10, info=nothing),
+    ]
+    arcs = [
+        Arc(;
+            origin_id=o,
+            destination_id=d,
+            capacity=10,
+            travel_time=Day(1),
+            cost=LinearArcCost(1.0),
+            info=nothing,
+        ) for (o, d) in (("A", "B"), ("B", "C"))
+    ]
+    function commodity(o, d, day; extra...)
+        date = DateTime(2024, 1, day)
+        return Commodity(;
+            origin_id=o,
+            destination_id=d,
+            size=1.0,
+            max_delivery_time=Day(4),
+            extra...,
+            (arrival ? (; arrival_date=date) : (; departure_date=date))...,
+        )
+    end
+    commodities = [commodity("A", "C", 10), commodity("A", "C", 14)]
+    if !isnothing(trivial_id)
+        trivial = commodity(trivial_id, trivial_id, trivial_day; trivial_extra...)
+        trivial_first ? pushfirst!(commodities, trivial) : push!(commodities, trivial)
+    end
+    return Instance(nodes, arcs, commodities, Day(1); wrap_time)
+end
+
 # Clear any cost_scaling mutations left on the shared instances.
 function reset!()
     for inst in values(_INSTANCE)

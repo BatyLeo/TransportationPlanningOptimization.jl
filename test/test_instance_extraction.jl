@@ -357,3 +357,12 @@ end
     @test all(==((0, 0)), empty_sub.commodity_to_order)
     @test length(empty_sub.commodity_to_order) == length(instance.input.commodities)
 end
+
+@testset "TPO.extract_filtered_instance keeps trivial commodities dropped" begin
+    instance = TestFixtures.trivial_instance("B")
+    filt = lower_bound_filtering(instance; show_progress=false)
+    sub = TPO.extract_filtered_instance(instance, filt)
+    @test bundle_count(sub) == 1
+    @test sub.commodity_to_order[3] == (0, 0)
+    @test all(!=((0, 0)), sub.commodity_to_order[1:2])
+end
