@@ -57,7 +57,7 @@ With `network_design=true`, each arc additionally gets a [`BinPackingArcCost`](@
 The published reference values for these instances (arXiv 2512.25018, Table F.10) refer to the MCFND version, which that paper calls the unsplitable multicommodity capacitated network design problem (MCND).
 
 [`Problems.MultiCommodityFlow.benchmark_solve`](@ref) solves the exact MIP for either variant with JuMP, using HiGHS by default (pass any JuMP-compatible optimizer factory through the `optimizer` keyword, for instance `gurobi_optimizer` once `Gurobi.jl` is loaded).
-It returns the solved `Instance` and a `SolutionState` of it.
+It returns the solved `Instance` and a `Solution` of it.
 `objective_value` equals `cost(res.solution)`, so it compares directly with heuristic solutions of `res.instance` (for instance via [`solve`](@ref)).
 
 ```julia

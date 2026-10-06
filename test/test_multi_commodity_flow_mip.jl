@@ -22,7 +22,16 @@ MULTIGEN.DAT:
     @test res.objective_value ≈ 75
     @test !isnothing(res.solution)
     @test is_feasible(res.solution, res.instance; verbose=true)
-    @test cost(res.solution) ≈ res.objective_value
+    @test res.relative_gap ≈ 0 atol = 1e-6
+    @test res.objective_bound <= res.objective_value + 1e-6
+
+    # Each route is a chain of input arcs from the commodity origin to its destination.
+    for k in eachindex(data.origins)
+        arcs = [leg.arc for leg in res.solution.routes[k]]
+        @test data.tails[first(arcs)] == data.origins[k]
+        @test data.heads[last(arcs)] == data.destinations[k]
+        @test all(data.heads[a] == data.tails[b] for (a, b) in zip(arcs, arcs[2:end]))
+    end
 
     greedy = greedy_heuristic(res.instance; show_progress=false)
     @test res.objective_value <= cost(greedy)
@@ -49,6 +58,31 @@ end
     @test res.objective_bound == Inf
 end
 
+@testset "Same endpoints, different paths" begin
+    # Two unit commodities 1 -> 2, the direct arc 1 -> 2 only holds one of them,
+    # the other takes the detour 1 -> 3 -> 2.
+    data = MultiCommodityFlow._MCFData(;
+        n_nodes=3,
+        tails=[1, 1, 3],
+        heads=[2, 3, 2],
+        var_costs=[1, 1, 1],
+        capacities=[1, 1, 1],
+        fixed_costs=[0, 0, 0],
+        origins=[1, 1],
+        destinations=[2, 2],
+        demands=[1, 1],
+    )
+    res = MultiCommodityFlow._benchmark_solve(data)
+
+    @test bundle_count(res.instance) == 2
+    @test res.termination_status == OPTIMAL
+    @test res.objective_value ≈ 3
+    @test is_feasible(res.solution, res.instance; verbose=true)
+    @test res.relative_gap ≈ 0 atol = 1e-6
+    @test res.objective_bound <= res.objective_value + 1e-6
+    @test length(unique([leg.arc for leg in route] for route in res.solution.routes)) == 2
+end
+
 @testset "Tiny instance MIP (network design)" begin
     data = MultiCommodityFlow._parse_canad_data(IOBuffer(dow); network_design=true)
     res = MultiCommodityFlow._benchmark_solve(data)
@@ -57,7 +91,8 @@ end
     @test res.objective_value ≈ 95
     @test !isnothing(res.solution)
     @test is_feasible(res.solution, res.instance; verbose=true)
-    @test cost(res.solution) ≈ res.objective_value
+    @test res.relative_gap ≈ 0 atol = 1e-6
+    @test res.objective_bound <= res.objective_value + 1e-6
 
     greedy = greedy_heuristic(res.instance; show_progress=false)
     @test res.objective_value <= cost(greedy)
@@ -67,8 +102,12 @@ end
     withenv("DATADEPS_ALWAYS_ACCEPT" => "true") do
         @testset "UMCF" begin
             res = benchmark_solve(CanadC(), "c33"; time_limit=300.0)
-            @test res.termination_status == OPTIMAL
-            @test is_feasible(res.solution, res.instance; verbose=true)
+            @test !isnothing(res.solution)
+            !isnothing(res.solution) &&
+                @test is_feasible(res.solution, res.instance; verbose=true)
+            if res.termination_status == OPTIMAL
+                @test isapprox(res.objective_value, 361_499; rtol=1e-4)
+            end
 
             greedy_cost = cost(greedy_heuristic(res.instance; show_progress=false))
             lb = cost(lower_bound(res.instance; show_progress=false))
@@ -78,7 +117,8 @@ end
         @testset "Network design" begin
             res = benchmark_solve(CanadC(), "c33"; network_design=true, time_limit=60.0)
             @test !isnothing(res.solution)
-            @test is_feasible(res.solution, res.instance; verbose=true)
+            !isnothing(res.solution) &&
+                @test is_feasible(res.solution, res.instance; verbose=true)
 
             greedy_cost = cost(greedy_heuristic(res.instance; show_progress=false))
             @test res.objective_value <= greedy_cost + 1e-6

@@ -100,10 +100,12 @@ function _to_instance(data::_MCFData)
             quantity=1,
             arrival_date=DateTime(2000, 1, 1), # no time dimension, any date works
             max_delivery_time=Day(0),
-            info=k,
+            info=k, # key for `group_by` below
         )
     end
 
+    # One bundle per commodity: unsplittable flow routes each commodity on its own path,
+    # so two commodities with the same endpoints can take different paths.
     return Instance(nodes, arcs, commodities, Day(1); group_by=c -> c.info)
 end
 
@@ -148,6 +150,8 @@ Problem (UMCF): each arc has a [`LinearArcCost`](@ref) and a hard `capacity`.
 With `network_design=true`, this is the Multicommodity Flow Network Design Problem
 (MCFND): each arc also gets a [`BinPackingArcCost`](@ref) charging its fixed cost once
 per used arc.
+Each commodity forms its own bundle, so commodities with the same endpoints can take
+different paths.
 """
 function load_instance(c::CanadC, name::AbstractString; network_design::Bool=false)
     return _to_instance(_load_data(c, name; network_design))

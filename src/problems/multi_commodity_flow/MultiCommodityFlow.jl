@@ -30,9 +30,8 @@ using JuMP:
     INFEASIBLE_OR_UNBOUNDED,
     solve_time
 using HiGHS: HiGHS
-using MetaGraphsNext: code_for
 using ...TransportationPlanningOptimization:
-    Node, Arc, LinearArcCost, BinPackingArcCost, Commodity, Instance, SolutionState, cost
+    Node, Arc, LinearArcCost, BinPackingArcCost, Commodity, Instance, Solution, Leg, cost
 using ..Problems: AbstractDataset
 import ..Problems: list_instances, dataset_dir, load_instance, benchmark_solve
 
