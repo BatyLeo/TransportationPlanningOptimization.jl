@@ -138,7 +138,7 @@ function _benchmark_solve(
             [Leg(; arc=a, departure=date, arrival=date, quantity=1) for a in arc_path]
             for arc_path in mip.arc_paths
         ]
-        sol = Solution(SolutionState(Solution(routes, ArcFlow[]), instance), instance)
+        sol = Solution(routes, instance)
         sol_cost = cost(sol)
         gap =
             iszero(sol_cost) ? sol_cost - mip.objective_bound :

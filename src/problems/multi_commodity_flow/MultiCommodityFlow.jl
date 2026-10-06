@@ -32,17 +32,7 @@ using JuMP:
     solve_time
 using HiGHS: HiGHS
 using ...TransportationPlanningOptimization:
-    Node,
-    Arc,
-    LinearArcCost,
-    BinPackingArcCost,
-    Commodity,
-    Instance,
-    Solution,
-    SolutionState,
-    Leg,
-    ArcFlow,
-    cost
+    Node, Arc, LinearArcCost, BinPackingArcCost, Commodity, Instance, Solution, Leg, cost
 using ..Problems: AbstractDataset
 import ..Problems: list_instances, dataset_dir, load_instance, benchmark_solve
 
