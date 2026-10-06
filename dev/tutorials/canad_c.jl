@@ -49,7 +49,8 @@ list_instances(CanadC())
 # We load the `c33` data (nominal size `20-230-40`) with the default
 # `network_design=false`, giving the UMCF version of the data: each arc only carries a
 # [`LinearArcCost`](@ref) on the routed volume, with a hard capacity.
-# Each commodity forms its own bundle.
+# Each commodity forms its own bundle, so commodities with the same endpoints can take
+# different paths.
 # The instance is generated randomly, so its realized size (20 nodes, 228 arcs, 39
 # commodities) differs slightly from the nominal name.
 
@@ -76,7 +77,7 @@ ls_cost = cost(solution)
 # [`Problems.MultiCommodityFlow.benchmark_solve`](@ref) solves the exact UMCF MIP with
 # JuMP (HiGHS by default), giving the optimal value (up to the solver MIP gap) as the
 # gap reference.
-# It returns the solved `Instance` and a `SolutionState` of it, which we check for
+# It returns the solved `Instance` and a `Solution` of it, which we check for
 # feasibility:
 
 umcf_result = benchmark_solve(CanadC(), "c33")
