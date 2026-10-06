@@ -49,6 +49,43 @@ function _greedy(name::String, wrap_time::Bool)
     return deepcopy(sol)
 end
 
+slots(a::TransportationPlanningOptimization.SingleAssignment) = [a]
+slots(a::TransportationPlanningOptimization.MultiAssignment) = a.per_mode
+
+# Commodities of the non-empty slots of every edge, as multisets (commodity => count).
+function edge_multisets(sol)
+    out = Dict{Tuple{Int,Int},Vector{Dict{Any,Int}}}()
+    for (edge, a) in sol.assignments
+        sets = map(slots(a)) do s
+            d = Dict{Any,Int}()
+            for c in s.commodities
+                d[c] = get(d, c, 0) + 1
+            end
+            return d
+        end
+        all(isempty, sets) || (out[edge] = collect(sets))
+    end
+    return out
+end
+
+function same_state(sol, sol0)
+    ok =
+        sol.bundle_paths == sol0.bundle_paths &&
+        keys(sol.assignments) == keys(sol0.assignments)
+    ok || return false
+    for (edge, a) in sol.assignments,
+        (s, s0) in zip(slots(a), slots(sol0.assignments[edge]))
+
+        for f in fieldnames(TransportationPlanningOptimization.SingleAssignment)
+            f === :bins && continue
+            ok &= getfield(s, f) == getfield(s0, f)
+        end
+        ok &=
+            [(bin.commodities, bin.remaining_capacity) for bin in s.bins] == [(bin.commodities, bin.remaining_capacity) for bin in s0.bins]
+    end
+    return ok
+end
+
 # Mock perturbation that removes and reinserts a random bundle along its cheapest path.
 struct ReinsertPerturbation <: AbstractPerturbation end
 

@@ -56,26 +56,7 @@ end
     @test is_feasible(sol, instance)
 end
 
-slots(a::TPO.SingleAssignment) = [a]
-slots(a::TPO.MultiAssignment) = a.per_mode
-
-function same_state(sol, sol0)
-    ok =
-        sol.bundle_paths == sol0.bundle_paths &&
-        keys(sol.assignments) == keys(sol0.assignments)
-    ok || return false
-    for (edge, a) in sol.assignments,
-        (s, s0) in zip(slots(a), slots(sol0.assignments[edge]))
-
-        for f in fieldnames(TPO.SingleAssignment)
-            f === :bins && continue
-            ok &= getfield(s, f) == getfield(s0, f)
-        end
-        ok &=
-            [(bin.commodities, bin.remaining_capacity) for bin in s.bins] == [(bin.commodities, bin.remaining_capacity) for bin in s0.bins]
-    end
-    return ok
-end
+using .TestFixtures: same_state
 
 # Shortest path of bundle `b` once the arcs of its current path are forbidden.
 function alternative_path(sol, instance, b)
@@ -138,6 +119,54 @@ end
     @test same_state(sol, sol0)
 end
 
+# Slice ranges `lo:hi_old` and `lo:hi_new` where `old` and `new` differ.
+function differing_slice(old, new)
+    lo = 1
+    while lo < min(length(old), length(new)) && old[lo + 1] == new[lo + 1]
+        lo += 1
+    end
+    # Number of common trailing nodes, the first of them ends both slices.
+    common = 0
+    while common < min(length(old), length(new)) - lo - 1 &&
+          old[end - common] == new[end - common]
+        common += 1
+    end
+    shrink = max(common - 1, 0)
+    return lo, length(old) - shrink, length(new) - shrink
+end
+
+@testset "slice rollback restores the exact state, including edges the slice created" begin
+    instance = TestFixtures.small_instance()
+    sol0 = TestFixtures.small_greedy()
+    b, new_path, range = 0, Int[], (0, 0, 0)
+    for i in eachindex(sol0.bundle_paths)
+        isempty(sol0.bundle_paths[i]) && continue
+        p = alternative_path(deepcopy(sol0), instance, i)
+        (isempty(p) || p == sol0.bundle_paths[i]) && continue
+        lo, hi_old, hi_new = differing_slice(sol0.bundle_paths[i], p)
+        snaps = TPO._snapshot_path_assignments(sol0, instance, i, view(p, lo:hi_new))
+        if any(isnothing, values(snaps))
+            b, new_path, range = i, p, (lo, hi_old, hi_new)
+            break
+        end
+    end
+    @test b != 0
+    lo, hi_old, hi_new = range
+    old_path = sol0.bundle_paths[b]
+
+    sol = deepcopy(sol0)
+    snapshots = TPO._snapshot_path_assignments(sol, instance, b, view(old_path, lo:hi_old))
+    TPO.remove_bundle_subpath!(sol, instance, b, lo, hi_old)
+    TPO._snapshot_path_assignments(
+        sol, instance, b, view(new_path, lo:hi_new); cache=snapshots, clear=false
+    )
+    TPO.add_bundle_subpath!(sol, instance, b, copy(new_path), lo, hi_new)
+    @test !same_state(sol, sol0)
+    @test length(sol.assignments) > length(sol0.assignments)
+    TPO._restore_multi_bundle_assignments!(sol, [b], [old_path], snapshots)
+    @test same_state(sol, sol0)
+end
+
 @testset "a snapshot stays intact when its slot changes in place" begin
     sol = TestFixtures.small_greedy()
     slot = first(
@@ -174,4 +203,18 @@ end
     end
     @test n_accepted > 0
     @test is_feasible(sol, instance)
+end
+
+@testset "restoring a snapshot of a slot without bins empties the new bins" begin
+    c = LightCommodity(; origin_id="o", destination_id="d", size=5.0, info=nothing)
+    slot = TPO.SingleAssignment{typeof(c)}()
+    snap = TPO._snapshot_assignment(slot)
+    push!(slot.commodities, c)
+    push!(slot.bins, TPO.Bin([c], 95.0))
+    slot.arc_cost = 3.0
+    slot.node_cost = 1.0
+    slot.total_size = 5.0
+    TPO._restore_assignment!(slot, snap)
+    @test isempty(slot.commodities) && isempty(slot.bins)
+    @test slot.arc_cost == 0.0 && slot.node_cost == 0.0 && slot.total_size == 0.0
 end

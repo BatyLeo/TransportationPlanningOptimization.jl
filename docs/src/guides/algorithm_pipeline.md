@@ -100,7 +100,7 @@ The full-instance cost is `cost(merge_solutions(result.filtering_state, result.s
 Each iteration randomly picks one of two moves:
 
 - **Bundle reintroduction**: remove a random bundle's path, recompute costs, find a new path via Dijkstra (with the elementary fallback), accept if the total cost strictly improves.
-- **Two-node consolidation**: pick a random arc `(src, dst)` in the travel-time graph, lift all bundles passing through it, reroute the shared segment via Dijkstra (with the elementary fallback), accept if cost improves.
+- **Two-node consolidation**: pick a random arc `(src, dst)` in the travel-time graph, lift the segment between the two nodes of all bundles visiting both, reroute the shared segment via Dijkstra (with the elementary fallback), accept if cost improves.
 
 The loop stops when any of three conditions is met: `time_limit` seconds elapsed, `max_iter` iterations reached, or `max_no_improv` consecutive iterations without improvement.
 

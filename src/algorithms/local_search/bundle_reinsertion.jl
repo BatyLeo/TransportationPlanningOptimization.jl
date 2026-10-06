@@ -1,14 +1,17 @@
 """
 $TYPEDSIGNATURES
 
-Cheap proxy for the cost delta of removing `bundle_idx`'s path from `sol`.
+Cheap proxy for the cost delta of removing `bundle_idx`'s path (or only the sub-path
+`path`) from `sol`.
 Sums each touched edge's cost weighted by the bundle's commodity share on
 that edge. Used to skip low-potential bundles before running Dijkstra.
 """
 function bundle_estimated_removal_cost(
-    sol::SolutionState, instance::Instance, bundle_idx::Int
+    sol::SolutionState,
+    instance::Instance,
+    bundle_idx::Int,
+    path::AbstractVector{Int}=sol.bundle_paths[bundle_idx],
 )
-    path = sol.bundle_paths[bundle_idx]
     isempty(path) && return 0.0
     bundle = instance.bundles[bundle_idx]
     total = 0.0
@@ -43,11 +46,6 @@ function _compute_bundle_adjacencies(ttg::TravelTimeGraph, n_bundles::Int)
         bundle_adjs[i] = adj
     end
     return bundle_adjs
-end
-
-_assignment_commodity_count(a::SingleAssignment) = length(a.commodities)
-function _assignment_commodity_count(a::MultiAssignment)
-    return sum(length(slot.commodities) for slot in a.per_mode; init=0)
 end
 
 """

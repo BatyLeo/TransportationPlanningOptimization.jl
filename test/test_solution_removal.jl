@@ -7,6 +7,7 @@ const TPO = TransportationPlanningOptimization
 
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
+using .TestFixtures: same_state, edge_multisets
 
 @testset "TPO.remove_bundle_path! on tiny instance" begin
     instance = TestFixtures.tiny_instance()
@@ -230,9 +231,182 @@ end
 @testset "in-place removal of many equal duplicates in one call" begin
     arc_f = BinPackingArcCost(10.0, 100)
     slot = packed_slot(fill(10.0, 15); arc_f)
-    # 9 removed copies exceed the small-vector threshold of `_remove_from_bin!`.
+    # 9 removed copies take the multiset path of `_remove_from_bins!`.
     remove_in_place!(slot, arc_f, slot.commodities[1:9])
     @test length(slot.commodities) == 6
     @test bins_consistent(slot, arc_f)
     @test length(slot.bins) == 1
+end
+
+@testset "multiset bin removal matches the per-bin removal" begin
+    arc_f = BinPackingArcCost(10.0, 100)
+    rng = MersenneTwister(11)
+    slot = packed_slot(rand(rng, [10.0, 20.0, 30.0], 40); arc_f)
+    removed = slot.commodities[1:2:20]
+    @test length(removed) > TPO.LINEAR_REMOVAL_MAX
+    bins_a = [TPO.Bin(copy(b.commodities), b.remaining_capacity) for b in slot.bins]
+    bins_b = [TPO.Bin(copy(b.commodities), b.remaining_capacity) for b in slot.bins]
+    working = copy(removed)
+    for bin in bins_a
+        isempty(working) && break
+        TPO._remove_from_bin!(bin.commodities, working) || continue
+        bin.remaining_capacity = 100.0 - sum(c.size for c in bin.commodities; init=0.0)
+    end
+    TPO._remove_from_bins_multiset!(bins_b, removed, 100.0)
+    @test isempty(working)
+    @test [b.commodities for b in bins_a] == [b.commodities for b in bins_b]
+    @test [b.remaining_capacity for b in bins_a] == [b.remaining_capacity for b in bins_b]
+end
+
+@testset "vacated edges cost like never-used edges and hold no size residue" begin
+    instance = TestFixtures.small_instance()
+    for packing in (:frozen, :ffd_union)
+        sol = greedy_heuristic(instance; packing, show_progress=false)
+        paths = [copy(p) for p in sol.bundle_paths]
+        for i in eachindex(paths)
+            TPO.remove_bundle_path!(sol, instance, i)
+        end
+        @test !isempty(sol.assignments)
+        @test all(
+            a -> all(s -> s.total_size == 0.0, TestFixtures.slots(a)),
+            values(sol.assignments),
+        )
+        fresh = TPO.SolutionState(instance)
+        for (i, path) in enumerate(paths), k in 1:(length(path) - 1)
+            args = (instance, instance.bundles[i], path[k], path[k + 1])
+            counts = TPO.empty_pack_counts(
+                instance, instance.bundles[i], instance.travel_time_graph.bundle_arcs[i]
+            )
+            @test TPO.compute_ttg_edge_incremental_cost(
+                sol, args...; packing, empty_counts=counts
+            ) === TPO.compute_ttg_edge_incremental_cost(fresh, args...; packing)
+        end
+    end
+end
+
+@testset "slice removal and re-add match whole-path removal and restore the state" begin
+    for wrap_time in (true, false), packing in (:frozen, :ffd_union)
+        instance = TestFixtures.small_instance(; wrap_time)
+        base = greedy_heuristic(instance; packing, show_progress=false)
+        long = findall(p -> length(p) >= 3, base.bundle_paths)
+        @test !isempty(long)
+        for b in first(long, 3)
+            path = copy(base.bundle_paths[b])
+            n = length(path)
+
+            whole = deepcopy(base)
+            sliced = deepcopy(base)
+            @test TPO.remove_bundle_path!(whole, instance, b) ==
+                TPO.remove_bundle_subpath!(sliced, instance, b, 1, n)
+            @test sliced.bundle_paths[b] == path
+            @test edge_multisets(whole) == edge_multisets(sliced)
+
+            for (lo, hi) in ((1, n), (2, n), (1, n - 1), (2, n - 1))
+                sol = deepcopy(base)
+                removed = TPO.remove_bundle_subpath!(sol, instance, b, lo, hi)
+                @test removed <= 0
+                added = TPO.add_bundle_subpath!(
+                    sol, instance, b, copy(path), lo, hi; packing
+                )
+                @test sol.bundle_paths[b] == path
+                @test edge_multisets(sol) == edge_multisets(base)
+                @test cost(sol) ≈ cost(base) + removed + added atol = 1e-6
+            end
+        end
+    end
+end
+
+@testset "swapping slices between bundles matches a rebuild from the paths" begin
+    for wrap_time in (true, false)
+        instance = TestFixtures.small_instance(; wrap_time)
+        spatial = instance.index_cache.ttg_code_to_spatial_code
+        base = greedy_heuristic(instance; show_progress=false)
+        found = false
+        for p in base.bundle_paths, k in 1:(length(p) - 1), l in (k + 1):length(p)
+            lifted = TPO.bundles_through_nodes(base, p[k], p[l])
+            length(lifted) >= 2 || continue
+            (i, lo_i, hi_i), (j, lo_j, hi_j) = lifted[1], lifted[2]
+            pi_, pj = base.bundle_paths[i], base.bundle_paths[j]
+            new_i = vcat(pi_[1:(lo_i - 1)], pj[lo_j:hi_j], pi_[(hi_i + 1):end])
+            new_j = vcat(pj[1:(lo_j - 1)], pi_[lo_i:hi_i], pj[(hi_j + 1):end])
+            pi_ == new_i && continue
+            all(q -> TPO.is_elementary_path(q, spatial), (new_i, new_j)) || continue
+            found = true
+
+            sol = deepcopy(base)
+            delta = TPO.remove_bundle_subpath!(sol, instance, i, lo_i, hi_i)
+            delta += TPO.remove_bundle_subpath!(sol, instance, j, lo_j, hi_j)
+            delta += TPO.add_bundle_subpath!(
+                sol, instance, i, new_i, lo_i, lo_i + length(pj[lo_j:hi_j]) - 1
+            )
+            delta += TPO.add_bundle_subpath!(
+                sol, instance, j, new_j, lo_j, lo_j + length(pi_[lo_i:hi_i]) - 1
+            )
+            rebuilt = TPO.SolutionState(sol.bundle_paths, instance)
+            @test edge_multisets(sol) == edge_multisets(rebuilt)
+            @test cost(sol) ≈ cost(base) + delta atol = 1e-6
+            @test is_feasible(sol, instance; verbose=true)
+            break
+        end
+        @test found
+    end
+end
+
+@testset "batched slice removal matches sequential removal and rolls back exactly" begin
+    for packing in (:frozen, :ffd_union)
+        instance = TestFixtures.small_instance()
+        base = greedy_heuristic(instance; packing, show_progress=false)
+        best = NTuple{3,Int}[]
+        for p in base.bundle_paths, k in 1:(length(p) - 1), l in (k + 1):length(p)
+            lifted = TPO.bundles_through_nodes(base, p[k], p[l])
+            length(lifted) > length(best) && (best = lifted)
+        end
+        @test length(best) >= 2
+
+        sequential = deepcopy(base)
+        for (i, lo, hi) in best
+            TPO.remove_bundle_subpath!(sequential, instance, i, lo, hi)
+        end
+        batched = deepcopy(base)
+        old_paths = [batched.bundle_paths[i] for (i, _, _) in best]
+        i1, lo1, hi1 = first(best)
+        snapshots = TPO._snapshot_path_assignments(
+            batched, instance, i1, view(batched.bundle_paths[i1], lo1:hi1)
+        )
+        for (i, lo, hi) in best[2:end]
+            TPO._snapshot_path_assignments(
+                batched,
+                instance,
+                i,
+                view(batched.bundle_paths[i], lo:hi);
+                cache=snapshots,
+                clear=false,
+            )
+        end
+        delta = TPO.remove_bundle_subpaths!(batched, instance, best)
+        @test delta < 0
+        @test edge_multisets(batched) == edge_multisets(sequential)
+        @test cost(batched) ≈ cost(base) + delta atol = 1e-6
+
+        TPO._restore_multi_bundle_assignments!(
+            batched, [i for (i, _, _) in best], old_paths, snapshots
+        )
+        @test same_state(batched, base)
+    end
+end
+
+@testset "batched slice removal on a MultiAssignment edge matches whole-path removal" begin
+    modes = [(BinPackingArcCost(10.0, 2), 1, 3), (BinPackingArcCost(7.0, 2), 1, 10)]
+    instance = TestFixtures._leg_instance(modes, 1; quantity=5)
+    base = greedy_heuristic(
+        instance; mode_selector=FillThenSpillMode(), show_progress=false
+    )
+    @test only(values(base.assignments)) isa TPO.MultiAssignment
+    path = base.bundle_paths[1]
+    whole = deepcopy(base)
+    batched = deepcopy(base)
+    delta = TPO.remove_bundle_subpaths!(batched, instance, [(1, 1, length(path))])
+    @test delta == TPO.remove_bundle_path!(whole, instance, 1)
+    @test edge_multisets(batched) == edge_multisets(whole)
+    @test cost(batched) ≈ cost(base) + delta atol = 1e-9
 end

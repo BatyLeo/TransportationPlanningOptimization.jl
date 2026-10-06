@@ -245,40 +245,37 @@ end
 """
 $TYPEDSIGNATURES
 
+Arcs of the corridor from `src` to `dst`: all arcs whose two ends are both reachable from
+`src` and able to reach `dst` in the travel-time graph.
+"""
+function _corridor_arcs(graph::MetaGraph, src::Int, dst::Int)
+    # Nodes reachable from src and nodes that can reach dst (reverse BFS)
+    reachable_from_src = _bfs_reachable(graph, src, Graphs.outneighbors)
+    can_reach_dst = _bfs_reachable(graph, dst, Graphs.inneighbors)
+    nodes_on_paths = intersect(reachable_from_src, can_reach_dst)
+
+    arcs = Tuple{Int,Int}[]
+    sizehint!(arcs, length(nodes_on_paths) * 3)  # Estimate avg out-degree
+    for u in nodes_on_paths
+        for v in Graphs.outneighbors(graph, u)
+            if v in nodes_on_paths
+                push!(arcs, (u, v))
+            end
+        end
+    end
+    return arcs
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute usable arcs for each bundle by finding all arcs that lie on paths
 from the bundle's origin to its destination in the travel-time graph.
 """
 function _compute_bundle_arcs(
     graph::MetaGraph, origin_codes::Vector{Int}, destination_codes::Vector{Int}
 )
-    bundle_arcs = Vector{Vector{Tuple{Int,Int}}}(undef, length(origin_codes))
-
-    for i in eachindex(origin_codes)
-        # Find all nodes reachable from origin
-        reachable_from_origin = _bfs_reachable(graph, origin_codes[i], Graphs.outneighbors)
-        # Find all nodes that can reach destination (reverse BFS)
-        can_reach_destination = _bfs_reachable(
-            graph, destination_codes[i], Graphs.inneighbors
-        )
-        # Intersection: nodes on paths from origin to destination
-        nodes_on_paths = intersect(reachable_from_origin, can_reach_destination)
-
-        # Collect all arcs where both endpoints are on paths
-        # Pre-allocate to reduce allocations
-        arcs = Tuple{Int,Int}[]
-        sizehint!(arcs, length(nodes_on_paths) * 3)  # Estimate avg out-degree
-        for u in nodes_on_paths
-            for v in Graphs.outneighbors(graph, u)
-                if v in nodes_on_paths
-                    push!(arcs, (u, v))
-                end
-            end
-        end
-
-        bundle_arcs[i] = arcs
-    end
-
-    return bundle_arcs
+    return [_corridor_arcs(graph, o, d) for (o, d) in zip(origin_codes, destination_codes)]
 end
 
 """
