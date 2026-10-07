@@ -269,11 +269,18 @@ Map each input commodity to its `(bundle_idx, order_idx)` in `bundles`, given th
 each commodity and the `order_dict` from [`_expand_commodities`](@ref). The keys are rebuilt from the final
 `bundles` vector since bundle and order positions come from `Dict` iteration.
 A dropped commodity (`nothing` key) maps to `(0, 0)`.
+The bundles are rooted on the endpoint copies of `split`, which map back to the user node ids
+of the keys.
 """
-function _commodity_to_order(bundles, commodity_keys, order_dict)
+function _commodity_to_order(bundles, commodity_keys, order_dict, split::EndpointSplit)
     key_to_position = Dict{keytype(order_dict),Tuple{Int,Int}}()
     for (b, bundle) in enumerate(bundles), (o, order) in enumerate(bundle.orders)
-        key = (order.time_step, bundle.origin_id, bundle.destination_id, bundle.group)
+        key = (
+            order.time_step,
+            get(split.user_id, bundle.origin_id, bundle.origin_id),
+            get(split.user_id, bundle.destination_id, bundle.destination_id),
+            bundle.group,
+        )
         key_to_position[key] = (b, o)
     end
     return [isnothing(key) ? (0, 0) : key_to_position[key] for key in commodity_keys]
@@ -287,12 +294,16 @@ Assemble `Bundle`s from the `order_dict` produced by [`_expand_commodities`](@re
 Turns each entry into an `Order`, groups orders sharing `(origin_id, destination_id,
 group_key)` into a bundle, aggregates each bundle's forbidden nodes and arcs from its
 commodities, and rejects bundles that forbid their own origin or destination.
+The grouping and these checks use the user node ids, then each bundle is re-rooted on the
+endpoint copies of `split` and its forbidden constraints are translated to them
+(see [`EndpointSplit`](@ref)).
 """
 function _build_bundles(
     order_dict,
     commodities::Vector{Commodity{is_date_arrival,ID,I}},
     group_by,
     time_horizon_length::Int,
+    split::EndpointSplit,
 ) where {is_date_arrival,ID,I}
     K = keytype(order_dict)
     G = fieldtype(K, 4)
@@ -369,10 +380,13 @@ function _build_bundles(
             )
         end
 
+        forbidden_nodes, forbidden_arcs = _translate_forbidden(
+            split, forbidden_nodes, forbidden_arcs
+        )
         bundle = Bundle(
             bundle_dict[key],
-            origin_id,
-            destination_id,
+            get(split.origin_copy, origin_id, origin_id),
+            get(split.destination_copy, destination_id, destination_id),
             forbidden_nodes,
             forbidden_arcs,
             group_key,
@@ -488,37 +502,80 @@ function build_instance(
             "input_arcs has $(length(input_arcs)) entries but arcs has $(length(arcs))"
         ),
     )
-    narrowed_nodes = collect_nodes(infer_node_cost_types(nodes), nodes; validate=false)
-    _validate_node_costs_on_empty_load(narrowed_nodes, LightCommodity{I})
-    indexed_arcs = Tuple{String,String,NA}[
-        (
-            o,
-            d,
-            typeof(a)(;
-                travel_time_steps=a.travel_time_steps,
-                capacity=a.capacity,
-                cost=a.cost,
-                info=a.info,
-                input_index=i,
-            ),
-        ) for (i, (o, d, a)) in enumerate(arcs)
-    ]
     node_ids = Set(node.id for node in nodes)
-    for (k, commodity) in enumerate(commodities),
-        id in (commodity.origin_id, commodity.destination_id)
-
-        id in node_ids || throw(
-            ArgumentError(
-                "input commodity $k ($(repr(commodity.origin_id)), $(repr(commodity.destination_id))) has an unknown endpoint: $(repr(id)) is not in nodes (add a Node with this id or remove the commodity)",
-            ),
-        )
+    for (k, commodity) in enumerate(commodities)
+        label = "input commodity $k ($(repr(commodity.origin_id)), $(repr(commodity.destination_id)))"
+        for id in (commodity.origin_id, commodity.destination_id)
+            id in node_ids || throw(
+                ArgumentError(
+                    "$label has an unknown endpoint: $(repr(id)) is not in nodes (add a Node with this id or remove the commodity)",
+                ),
+            )
+        end
+        for id in commodity.forbidden_node_ids
+            id in node_ids || throw(
+                ArgumentError(
+                    "$label forbids node $(repr(id)) which is not in nodes (check the id, endpoint copies of a split node are internal)",
+                ),
+            )
+        end
+        for arc in commodity.forbidden_arcs, id in arc
+            id in node_ids || throw(
+                ArgumentError(
+                    "$label forbids arc $(repr(arc)) whose endpoint $(repr(id)) is not in nodes (check the id, endpoint copies of a split node are internal)",
+                ),
+            )
+        end
     end
-    network_graph = NetworkGraph(narrowed_nodes, indexed_arcs; allow_multimodal)
     order_dict, time_horizon_length, start_date, commodity_keys = _expand_commodities(
         commodities, time_step, group_by, wrap_time
     )
-    bundles = _build_bundles(order_dict, commodities, group_by, time_horizon_length)
-    commodity_to_order = _commodity_to_order(bundles, commodity_keys, order_dict)
+    network_nodes, indexed_arcs, split = _derive_network(nodes, arcs, order_dict)
+    _validate_node_costs_on_empty_load(network_nodes, LightCommodity{I})
+    # Function barrier: the node and arc types depend on whether endpoints were split.
+    return _assemble_instance(
+        network_nodes,
+        indexed_arcs,
+        split,
+        order_dict,
+        time_horizon_length,
+        start_date,
+        commodity_keys,
+        commodities,
+        time_step,
+        InstanceInput(nodes, input_arcs, commodities),
+        group_by,
+        wrap_time,
+        check_bundle_feasibility,
+        allow_multimodal,
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Second half of [`build_instance`](@ref): builds the graphs and bundles from the derived
+network nodes and arcs, and assembles the `Instance`.
+"""
+function _assemble_instance(
+    network_nodes,
+    indexed_arcs,
+    split::EndpointSplit,
+    order_dict,
+    time_horizon_length::Int,
+    start_date,
+    commodity_keys,
+    commodities,
+    time_step::Period,
+    input::InstanceInput,
+    group_by,
+    wrap_time::Bool,
+    check_bundle_feasibility::Bool,
+    allow_multimodal::Bool,
+)
+    network_graph = NetworkGraph(network_nodes, indexed_arcs; allow_multimodal)
+    bundles = _build_bundles(order_dict, commodities, group_by, time_horizon_length, split)
+    commodity_to_order = _commodity_to_order(bundles, commodity_keys, order_dict, split)
     time_step_to_date = [start_date + (i - 1) * time_step for i in 1:time_horizon_length]
     time_space_graph = TimeSpaceGraph(
         network_graph, time_horizon_length; wrap_time=wrap_time
@@ -537,7 +594,7 @@ function build_instance(
         time_space_graph,
         travel_time_graph,
         index_cache,
-        input=InstanceInput(nodes, input_arcs, commodities),
+        input,
         commodity_to_order,
     )
 end
@@ -623,7 +680,7 @@ Commodities with their origin equal to their destination are dropped: they never
 nothing, so they are mapped to `(0, 0)` in `instance.commodity_to_order`, get an empty route in a
 [`Solution`](@ref) and are ignored by the time grid.
 An `ArgumentError` is thrown if every commodity is dropped, or if a commodity endpoint is not a
-node id of `nodes`.
+node id of `nodes`, or if a forbidden node or arc endpoint is not a node id of `nodes`.
 """
 function Instance(
     nodes::Vector{<:Node},

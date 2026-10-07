@@ -410,7 +410,9 @@ end
 end
 
 @testset "Rejected plans, sub-instance" begin
-    instance = TestFixtures.shared_arc_instance(; b_type=:destination)
+    instance = @test_logs (:warn, r"1 input arc\(s\) skipped") match_mode = :any TestFixtures.shared_arc_instance(;
+        transit=false
+    )
     (; solution_state, sub_instance) = solve_filtered(instance; show_progress=false)
     routes = Solution(solution_state, sub_instance).routes
     dropped = findfirst(==((0, 0)), sub_instance.commodity_to_order)

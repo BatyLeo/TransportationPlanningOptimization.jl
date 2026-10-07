@@ -239,6 +239,7 @@ end
 
     filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
+    @test bundle_count(sub) == 1  # only K is kept, F is filtered out
     # No pre-load: K is routed from a bare empty starting solution, blind to
     # F's already-committed capacity.
     sub_sol = greedy_heuristic(sub; show_progress=false)

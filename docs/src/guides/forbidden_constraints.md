@@ -20,6 +20,7 @@ Commodity(;
 ```
 
 **Important:** You cannot forbid the origin or destination nodes of a commodity. Attempting to do so will raise an `ArgumentError`.
+Forbidden ids must be ids of `nodes`, otherwise construction throws an `ArgumentError`.
 
 ### Forbidden Arcs
 

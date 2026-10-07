@@ -1,6 +1,25 @@
 """
 $TYPEDSIGNATURES
 
+Integer spatial codes of the forbidden nodes and arcs of `bundle`. Ids absent from the
+network graph are skipped. The input commodities are validated against the user nodes when the
+instance is built, so such an id is a node dropped by an instance extraction (for example an
+unused endpoint copy), it can no longer be traversed.
+"""
+function _forbidden_codes(ng, bundle::Bundle)
+    fn = Set{Int}(
+        MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes if haskey(ng, id)
+    )
+    fa = Set{Tuple{Int,Int}}(
+        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
+        (u, v) in bundle.forbidden_arcs if haskey(ng, u) && haskey(ng, v)
+    )
+    return fn, fa
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
@@ -32,6 +51,8 @@ function compute_ttg_edge_incremental_cost(
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf # Infeasible for this bundle
     end
+    # A virtual arc carries no cost and its head is a hub, which must not be charged.
+    _is_virtual(arc) && return 0.0
 
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders differ by less than the horizon and
@@ -120,6 +141,7 @@ function compute_ttg_edge_lower_bound_cost(
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf
     end
+    _is_virtual(arc) && return 0.0
     total = 0.0
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders cannot alias modulo the horizon and
@@ -162,6 +184,7 @@ function _direct_arc_lb_cost(
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf
     end
+    _is_virtual(arc) && return 0.0
     node_f = cache.spatial_code_to_node_cost[cache.ttg_code_to_spatial_code[v_ttg_code]]
     total = 0.0
     for order in bundle.orders
@@ -367,11 +390,7 @@ function update_bundle_cost_matrix!(
     # Map the bundle's forbidden sets to integer spatial codes once (these sets
     # are usually empty or tiny), so the per-arc check stays on integers and
     # works for both real and virtual (two-node) bundles with no bundle index.
-    fn = Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
-    fa = Set{Tuple{Int,Int}}(
-        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
-        (u, v) in bundle.forbidden_arcs
-    )
+    fn, fa = _forbidden_codes(ng, bundle)
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
@@ -487,11 +506,7 @@ function parallel_update_bundle_cost_matrix!(
     cache = instance.index_cache
     ng = instance.network_graph.graph
 
-    fn = Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
-    fa = Set{Tuple{Int,Int}}(
-        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
-        (u, v) in bundle.forbidden_arcs
-    )
+    fn, fa = _forbidden_codes(ng, bundle)
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
     isempty(bundle_arcs) && return true

@@ -128,11 +128,12 @@ small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 # Four-node instance where F (A->B, size 3) is filtered out as a direct path and
 # K (A->D2, size 4) is kept: K's cheap route through B shares the capacity-5
 # arc A->B with F, so it must route around it through C.
-# With `b_type=:destination`, B belongs to F alone and the filtering drops it with its arcs.
-function shared_arc_instance(; b_type::Symbol=:other)
+# With `transit=false`, B belongs to F alone (its outgoing arc is not created) and the filtering
+# drops it with its arcs.
+function shared_arc_instance(; transit::Bool=true)
     nodes = [
         Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=b_type),
+        Node(; id="B", node_type=:other, transit=transit),
         Node(; id="C", node_type=:other),
         Node(; id="D2", node_type=:destination),
     ]
