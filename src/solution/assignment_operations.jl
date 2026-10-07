@@ -427,25 +427,18 @@ end
 """
 $TYPEDSIGNATURES
 
-Merge `new_commodities` into `slot` and recompute its cost, returning the cost
-delta. Under `:frozen` the commit adds onto the slot's cached bins; otherwise it
-recomputes from scratch. `new_commodities` must be sorted desc by size (the
-caller's duty), so the merge preserves `slot.sorted=true` and the next remove can
-skip its `_ensure_sorted!` sort.
+Merge `new_commodities` into `slot` and return the cost delta. The new commodities are
+first-fitted onto the slot's cached bins (opening new bins as needed) without
+repacking. `new_commodities` must be sorted desc by size (the caller's duty), so the
+merge preserves `slot.sorted=true` and the next remove can skip its `_ensure_sorted!`
+sort.
 """
 function _commit_new_to_slot!(
-    slot::SingleAssignment{C},
-    arc_f::AbstractArcCostFunction,
-    new_commodities::Vector{C},
-    packing::Symbol,
+    slot::SingleAssignment{C}, arc_f::AbstractArcCostFunction, new_commodities::Vector{C}
 ) where {C<:LightCommodity}
     before = slot.arc_cost
     _merge_sorted_into_slot!(slot, new_commodities)
-    if packing === :frozen
-        _frozen_commit_single_assignment!(slot, arc_f, new_commodities)
-    else
-        _update_single_assignment_cost!(slot, arc_f)
-    end
+    _frozen_commit_single_assignment!(slot, arc_f, new_commodities)
     return slot.arc_cost - before
 end
 
@@ -463,13 +456,12 @@ function _add_order_to_assignment!(
     new_commodities::Vector{C},
     ::AbstractModeSelector,
     node_costs::Vector{<:AbstractNodeCostFunction},
-    sv::Int;
-    packing::Symbol=:frozen,
+    sv::Int,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         return SingleAssignment{C}()
     end::SingleAssignment{C}
-    arc_delta = _commit_new_to_slot!(assignment, arc.cost, new_commodities, packing)
+    arc_delta = _commit_new_to_slot!(assignment, arc.cost, new_commodities)
     node_delta = _refresh_node_cost!(assignment, node_costs[sv])
     return arc_delta + node_delta
 end
@@ -481,8 +473,7 @@ function _add_order_to_assignment!(
     new_commodities::Vector{C},
     ::CheapestMode,
     node_costs::Vector{<:AbstractNodeCostFunction},
-    sv::Int;
-    packing::Symbol=:frozen,
+    sv::Int,
 ) where {C<:LightCommodity}
     assignment = get!(assignments, edge) do
         return MultiAssignment{C}(length(arc.modes))
@@ -494,7 +485,7 @@ function _add_order_to_assignment!(
             arc.modes[i], assignment.per_mode[i].total_size, new_commodities
         )
             _commit_mode_incremental(
-                arc.modes[i].cost, assignment.per_mode[i], new_commodities, packing
+                arc.modes[i].cost, assignment.per_mode[i], new_commodities
             )
         else
             Inf
@@ -509,9 +500,7 @@ function _add_order_to_assignment!(
         )
     end
     slot = assignment.per_mode[best_mode_idx]
-    arc_delta = _commit_new_to_slot!(
-        slot, arc.modes[best_mode_idx].cost, new_commodities, packing
-    )
+    arc_delta = _commit_new_to_slot!(slot, arc.modes[best_mode_idx].cost, new_commodities)
     node_delta = _refresh_node_cost!(assignment, node_costs[sv])
     return arc_delta + node_delta
 end
@@ -520,21 +509,16 @@ end
 $TYPEDSIGNATURES
 
 Per-mode incremental cost used by the `CheapestMode` commit to pick the mode.
-Under `:frozen` it scores against the slot's cached frozen bins (matching the
-greedy cost matrix), otherwise it uses the standard `incremental_cost`.
+It scores against the slot's cached frozen bins (matching the greedy cost matrix).
 """
 function _commit_mode_incremental(
     mode_cost::AbstractArcCostFunction,
     slot::SingleAssignment{C},
     new_commodities::Vector{C},
-    packing::Symbol,
 ) where {C<:LightCommodity}
-    if packing === :frozen
-        return _frozen_edge_incremental_cost(
-            BinPackingBuffer(), mode_cost, slot, new_commodities
-        )
-    end
-    return incremental_cost(mode_cost, slot.commodities, new_commodities)
+    return _frozen_edge_incremental_cost(
+        BinPackingBuffer(), mode_cost, slot, new_commodities
+    )
 end
 
 function _add_order_to_assignment!(
@@ -544,12 +528,10 @@ function _add_order_to_assignment!(
     new_commodities::Vector{C},
     ::FillThenSpillMode,
     node_costs::Vector{<:AbstractNodeCostFunction},
-    sv::Int;
-    packing::Symbol=:frozen,
+    sv::Int,
 ) where {C<:LightCommodity}
-    # FillThenSpillMode always uses ffd_union semantics (re-packs each affected
-    # mode), matching its `_edge_incremental_cost`. `packing` is accepted for
-    # signature uniformity but does not switch to frozen here.
+    # FillThenSpillMode re-packs each affected mode (union semantics), matching its
+    # `_edge_incremental_cost`.
     assignment = get!(assignments, edge) do
         return MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}

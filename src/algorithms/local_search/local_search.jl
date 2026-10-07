@@ -46,9 +46,9 @@ Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type.
 
 With `refine_two_node=true`, after a two-node consolidation splice each lifted bundle is re-inserted individually on its whole path (in random order) before the move is accepted or rejected, which makes moves slower (default `false`).
 
-`packing` selects how accepted moves are committed on bin-packing arcs (`:frozen` by
-default packs new commodities onto the existing bins, `:ffd_union` re-packs the union of
-existing and new commodities). `cost_packing` does the same for move evaluation.
+Moves are priced and committed by first-fit of the new commodities onto each arc's
+existing bins (opening new bins as needed), except on `FillThenSpillMode` multimodal
+edges, which repack the modes they fill.
 
 Returns a [`LocalSearchResult`](@ref) with cost improvement, iteration counts,
 and time-series samples for convergence analysis.
@@ -65,8 +65,6 @@ function local_search!(
     allow_consolidate::Bool=true,
     allow_repack::Bool=true,
     refine_two_node::Bool=false,
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
     rng::Random.AbstractRNG=Random.default_rng(),
     sample_every::Int=1000,
 ) where {C}
@@ -120,9 +118,7 @@ function local_search!(
                     instance,
                     mode_selector,
                     rng,
-                    cost_threshold,
-                    packing,
-                    cost_packing;
+                    cost_threshold;
                     buffer=shared_buffer,
                     bundle_adjs,
                     workspace,
@@ -137,9 +133,7 @@ function local_search!(
                     mode_selector,
                     rng,
                     cost_threshold,
-                    refine_two_node,
-                    packing,
-                    cost_packing;
+                    refine_two_node;
                     bundle_adjs,
                     buffer=shared_buffer,
                     workspace,

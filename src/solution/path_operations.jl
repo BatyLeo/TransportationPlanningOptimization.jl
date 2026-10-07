@@ -138,10 +138,10 @@ This updates the `bundle_paths` and the `assignments` for all arcs along the pat
 
 Returns the cost increase produced by adding `path` (a non-negative `Float64`).
 The increase is the sum, over every path edge, of the arc-cost change (via
-`_commit_new_to_slot!`, which commits onto the cached bins under `:frozen` and
-recomputes the slot cost otherwise) plus the change in the head node's cost.
+`_commit_new_to_slot!`, which commits onto the cached bins) plus the change in the head
+node's cost.
 Multimodal `FillThenSpillMode` edges are the exception: they always repack through
-`_fill_then_spill_assign!`, whatever `packing` is.
+`_fill_then_spill_assign!`.
 """
 function add_bundle_path!(
     current_solution::SolutionState{C},
@@ -149,7 +149,6 @@ function add_bundle_path!(
     bundle_idx::Int,
     path::Vector{Int};
     mode_selector::AbstractModeSelector=CheapestMode(),
-    packing::Symbol=:frozen,
 ) where {C}
     # Remove potential shortcut edges before storing the path (TTG may contain shortcuts).
     _remove_shortcuts_from_path!(path, instance.travel_time_graph)
@@ -157,7 +156,7 @@ function add_bundle_path!(
     bundle = instance.bundles[bundle_idx]
 
     return _commit_bundle_path!(
-        current_solution.assignments, instance, bundle, path, mode_selector, packing
+        current_solution.assignments, instance, bundle, path, mode_selector
     )
 end
 
@@ -176,7 +175,6 @@ function _commit_bundle_path!(
     bundle::Bundle,
     path::AbstractVector{Int},
     mode_selector::AbstractModeSelector,
-    packing::Symbol,
 )
     cache = instance.index_cache
     return _foreach_path_edge(instance, bundle, path) do edge, arc, order
@@ -188,8 +186,7 @@ function _commit_bundle_path!(
             order.commodities,
             mode_selector,
             cache.spatial_code_to_node_cost,
-            sv;
-            packing,
+            sv,
         )
     end
 end
@@ -338,7 +335,6 @@ function add_bundle_subpath!(
     lo::Int,
     hi::Int;
     mode_selector::AbstractModeSelector=CheapestMode(),
-    packing::Symbol=:frozen,
 )
     current_solution.bundle_paths[bundle_idx] = new_path
     return _commit_bundle_path!(
@@ -347,7 +343,6 @@ function add_bundle_subpath!(
         instance.bundles[bundle_idx],
         view(new_path, lo:hi),
         mode_selector,
-        packing,
     )
 end
 
@@ -373,7 +368,7 @@ function SolutionState(
     for (bundle_idx, ttg_path) in enumerate(cleaned_paths)
         _remove_shortcuts_from_path!(ttg_path, instance.travel_time_graph)
         _commit_bundle_path!(
-            assignments, instance, bundles[bundle_idx], ttg_path, mode_selector, :frozen
+            assignments, instance, bundles[bundle_idx], ttg_path, mode_selector
         )
     end
 

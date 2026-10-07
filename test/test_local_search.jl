@@ -32,17 +32,7 @@ end
     @test cost(sol) <= c0 + 1e-6
     @test saved >= -1e-6
     @test isapprox(c0 - cost(sol), saved; atol=1e-6)
-end
-
-for packing in (:frozen, :ffd_union)
-    @testset "TPO.bundle_reinsertion_improvement! saved matches cost(sol) delta for small (packing=$packing)" begin
-        instance = TestFixtures.small_instance()
-        sol = TestFixtures.small_greedy()
-        c0 = cost(sol)
-        saved = TPO.bundle_reinsertion_improvement!(sol, instance; packing=packing)
-        @test isapprox(c0 - cost(sol), saved; atol=1e-3)
-        @test saved > 0.0  # on small, reinsertion is expected to improve (~84k from earlier benchmark)
-    end
+    @test saved > 0.0  # on small, reinsertion is expected to improve
 end
 
 @testset "local_search! does not increase cost and stays feasible" begin
@@ -58,18 +48,13 @@ end
     @test res.n_iter >= 1
 end
 
-@testset "local_search! with packing=:ffd_union keeps cost consistent" begin
+@testset "local_search! without repack keeps cost consistent" begin
     instance = TestFixtures.small_instance()
     sol = TestFixtures.small_greedy()
     c0 = cost(sol)
 
     res = local_search!(
-        sol,
-        instance;
-        max_iter=300,
-        packing=:ffd_union,
-        allow_repack=false,
-        rng=MersenneTwister(0),
+        sol, instance; max_iter=300, allow_repack=false, rng=MersenneTwister(0)
     )
 
     @test is_feasible(sol, instance)

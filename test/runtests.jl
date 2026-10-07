@@ -27,9 +27,6 @@ using .TestFixtures
             include("test_bin_packing.jl")
             include("test_tentative_bin_packing.jl")
         end
-        @testset "Frozen packing default" begin
-            include("test_frozen_packing.jl")
-        end
         @testset "Merge sorted slot" begin
             include("test_merge_sorted_slot.jl")
         end

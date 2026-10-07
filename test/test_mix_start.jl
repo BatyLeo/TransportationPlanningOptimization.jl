@@ -45,6 +45,17 @@ end
     end
 end
 
+@testset "mix_greedy_and_lower_bound on small gives feasible finite states" begin
+    instance = TestFixtures.small_instance()
+
+    result = TPO.mix_greedy_and_lower_bound(instance; show_progress=false)
+
+    for state in result
+        @test TPO.is_feasible(state, instance)
+        @test isfinite(TPO.cost(state))
+    end
+end
+
 @testset "mix_greedy_and_lower_bound reproduces standalone greedy and lower_bound" begin
     instance = TestFixtures.tiny_instance()
 

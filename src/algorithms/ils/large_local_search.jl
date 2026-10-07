@@ -19,9 +19,8 @@ reinserted, every bundle in the batch is rolled back to its pre-removal path
 and step 3 is skipped, instead of throwing or leaving `sol` half-routed.
 Step 4 always runs.
 
-`packing` and `cost_packing` (default `:frozen`, see [`local_search!`](@ref)) are
-forwarded to every step. The fallback of step 2 ([`_try_insert_bundle!`](@ref)) takes
-a single mode and uses `packing`. Other keywords are forwarded to step 4 only.
+Keywords other than `is_forbidden`, `mode_selector`, `time_limit` and `rng` are
+forwarded to step 4 only.
 """
 function large_local_search!(
     sol::SolutionState,
@@ -30,8 +29,6 @@ function large_local_search!(
     mode_selector::AbstractModeSelector=CheapestMode(),
     time_limit::Real=300.0,
     rng::Random.AbstractRNG=Random.default_rng(),
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
     kwargs...,
 )
     start_cost = cost(sol)
@@ -61,14 +58,7 @@ function large_local_search!(
         all_ok = true
         for b in Random.shuffle(rng, forbidden_bundles)
             if !_reinsert_with_filter!(
-                sol,
-                instance,
-                b,
-                is_forbidden,
-                mode_selector;
-                snapshots,
-                packing,
-                cost_packing,
+                sol, instance, b, is_forbidden, mode_selector; snapshots
             )
                 all_ok = false
                 break
@@ -80,13 +70,7 @@ function large_local_search!(
             remaining = time_limit - (time() - t_start)
             if remaining > 0
                 loop_two_nodes!(
-                    sol,
-                    instance,
-                    mode_selector;
-                    time_limit=remaining * 0.3,
-                    rng,
-                    packing,
-                    cost_packing,
+                    sol, instance, mode_selector; time_limit=remaining * 0.3, rng
                 )
             end
         else
@@ -98,16 +82,7 @@ function large_local_search!(
     # Step 4: Standard local search (forbidden arcs allowed again)
     remaining = time_limit - (time() - t_start)
     if remaining > 0
-        local_search!(
-            sol,
-            instance,
-            mode_selector;
-            time_limit=remaining,
-            rng,
-            packing,
-            cost_packing,
-            kwargs...,
-        )
+        local_search!(sol, instance, mode_selector; time_limit=remaining, rng, kwargs...)
     end
 
     return start_cost - cost(sol)
@@ -131,15 +106,11 @@ function _reinsert_with_filter!(
     is_forbidden,
     mode_selector::AbstractModeSelector;
     snapshots::Union{Dict,Nothing}=nothing,
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
 )
     ttg = instance.travel_time_graph
 
     # Update cost matrix for this bundle, then blank out the forbidden arcs.
-    update_bundle_cost_matrix!(
-        sol, instance, bundle_idx, mode_selector; packing=cost_packing
-    )
+    update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector)
     for (u, v) in ttg.bundle_arcs[bundle_idx]
         if is_forbidden(instance, u, v)
             ttg.cost_matrix[u, v] = Inf
@@ -155,10 +126,10 @@ function _reinsert_with_filter!(
         isnothing(snapshots) || _snapshot_path_assignments(
             sol, instance, bundle_idx, path; cache=snapshots, clear=false
         )
-        add_bundle_path!(sol, instance, bundle_idx, path; mode_selector, packing)
+        add_bundle_path!(sol, instance, bundle_idx, path; mode_selector)
         return true
     end
     # No feasible path avoiding the forbidden arcs: fall back to an
     # unrestricted reinsertion.
-    return _try_insert_bundle!(sol, instance, bundle_idx, mode_selector; snapshots, packing)
+    return _try_insert_bundle!(sol, instance, bundle_idx, mode_selector; snapshots)
 end

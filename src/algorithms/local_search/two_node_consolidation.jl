@@ -205,8 +205,6 @@ function two_node_common_incremental!(
     mode_selector::AbstractModeSelector=CheapestMode(),
     cost_threshold::Real=0.0,
     refine::Bool=true,
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
@@ -263,7 +261,6 @@ function two_node_common_incremental!(
             virtual_arcs,
             mode_selector,
             buffer_pool;
-            packing=cost_packing,
             empty_counts,
             deadline,
         )
@@ -274,7 +271,6 @@ function two_node_common_incremental!(
             virtual_bundle,
             virtual_arcs,
             mode_selector;
-            packing=cost_packing,
             empty_counts,
             deadline,
         )
@@ -335,9 +331,7 @@ function two_node_common_incremental!(
         )
     end
     for ((i, lo, _), np, nhi) in zip(lifted, new_paths, new_his)
-        cost_delta += add_bundle_subpath!(
-            sol, instance, i, np, lo, nhi; mode_selector, packing
-        )
+        cost_delta += add_bundle_subpath!(sol, instance, i, np, lo, nhi; mode_selector)
     end
 
     if refine
@@ -349,8 +343,6 @@ function two_node_common_incremental!(
                 instance,
                 i,
                 mode_selector;
-                packing,
-                cost_packing,
                 remove_before_routing=false,
                 bundle_adj,
                 buffer,
@@ -385,8 +377,6 @@ function loop_two_nodes!(
     cost_threshold_relative::Real=5e-5,
     refine::Bool=true,
     rng::Random.AbstractRNG=Random.default_rng(),
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
 )
     valid_pairs = compute_candidate_nodes(instance.travel_time_graph)
     isempty(valid_pairs) && return 0.0
@@ -404,8 +394,6 @@ function loop_two_nodes!(
             mode_selector,
             cost_threshold,
             refine,
-            packing,
-            cost_packing,
             deadline=Float64(t_start + time_limit),
             rng,
         )
@@ -429,9 +417,7 @@ function _run_two_node_step!(
     mode_selector::AbstractModeSelector,
     rng::Random.AbstractRNG,
     cost_threshold::Float64,
-    refine::Bool,
-    packing::Symbol,
-    cost_packing::Symbol;
+    refine::Bool;
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
@@ -449,8 +435,6 @@ function _run_two_node_step!(
         mode_selector,
         cost_threshold,
         refine,
-        packing,
-        cost_packing,
         bundle_adjs,
         buffer,
         workspace,

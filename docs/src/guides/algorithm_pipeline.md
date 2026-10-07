@@ -204,15 +204,5 @@ solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
 ### Packing semantics
 
-For [`BinPackingArcCost`](@ref) arcs, the `packing` keyword controls how commodities are packed into bins:
-
-- `:frozen` (default for greedy and local search): cache committed bins and pack only new commodities onto remaining capacity (faster).
-- `:ffd_union` (opt-in): re-pack the union of existing and new commodities from scratch (slightly better packing).
-
-In `greedy_heuristic`, `packing` applies to both insertion cost evaluation and commit.
-In `local_search!`, `packing` sets only the commit of accepted moves and `cost_packing` sets the move evaluation (both `:frozen` by default).
-
-```julia
-solution_state = greedy_heuristic(instance; packing=:ffd_union)
-stats = local_search!(solution_state, instance; packing=:ffd_union, cost_packing=:frozen)
-```
+On [`BinPackingArcCost`](@ref) arcs, greedy and local search price and commit moves by first-fit of the new commodities onto the arc's existing bins (opening new bins as needed, as in ShipperTransportationPlanning.jl), except on `FillThenSpillMode` multimodal edges, which repack the modes they fill.
+Local search ends with a [`bin_packing_improvement!`](@ref TransportationPlanningOptimization.bin_packing_improvement!) pass (when `allow_repack=true`) that repacks the bins.
