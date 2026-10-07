@@ -101,6 +101,8 @@ Each iteration randomly picks one of two moves:
 
 - **Bundle reintroduction**: remove a random bundle's path, recompute costs, find a new path via Dijkstra (with the elementary fallback), accept if the total cost strictly improves.
 - **Two-node consolidation**: pick a random arc `(src, dst)` in the travel-time graph, lift the segment between the two nodes of all bundles visiting both, reroute the shared segment via Dijkstra (with the elementary fallback), accept if cost improves.
+  With `refine_two_node=true` (default `false`, also a keyword of `solve` and `solve_state`), each lifted bundle is then re-inserted individually on its whole path before the move is judged.
+  This makes moves slower but slightly improves world-scale instances such as the inbound world ones.
 
 The loop stops when any of three conditions is met: `time_limit` seconds elapsed, `max_iter` iterations reached, or `max_no_improv` consecutive iterations without improvement.
 
