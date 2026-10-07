@@ -44,6 +44,8 @@ iterations is reached. A final [`bin_packing_improvement!`](@ref) pass runs when
 
 Set `allow_reintro=false` or `allow_consolidate=false` to disable one move type.
 
+With `refine_two_node=true`, after a two-node consolidation splice each lifted bundle is re-inserted individually on its whole path (in random order) before the move is accepted or rejected, which makes moves slower (default `false`).
+
 `packing` selects how accepted moves are committed on bin-packing arcs (`:frozen` by
 default packs new commodities onto the existing bins, `:ffd_union` re-packs the union of
 existing and new commodities). `cost_packing` does the same for move evaluation.

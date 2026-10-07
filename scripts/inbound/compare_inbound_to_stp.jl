@@ -182,7 +182,9 @@ function _run_tpo(instance, ls_limit::Real)
     ls_time = 0.0
     if ls_limit > 0
         local ls_result
-        ls_time = @elapsed ls_result = TPO.local_search!(chosen, sub; time_limit=ls_limit)
+        ls_time = @elapsed ls_result = TPO.local_search!(
+            chosen, sub; time_limit=ls_limit, refine_two_node=true
+        )
         ls_iters = ls_result.n_iter
         ls_saved = ls_result.saved
     end

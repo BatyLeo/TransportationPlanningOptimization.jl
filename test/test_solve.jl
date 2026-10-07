@@ -78,6 +78,32 @@ end
     @test TPO.cost(sol) ≈ TPO.cost(chained)
 end
 
+@testset "solve with refine_two_node equals the hand-chained pipeline" begin
+    instance = TestFixtures.small_instance()
+    sol = TPO.solve_state(
+        instance; LS..., rng=MersenneTwister(0), refine_two_node=true, show_progress=false
+    )
+    @test TPO.is_feasible(sol, instance; verbose=true)
+
+    result = TPO.solve_filtered(instance; show_progress=false)
+    TPO.local_search!(
+        result.solution_state,
+        result.sub_instance;
+        LS...,
+        rng=MersenneTwister(0),
+        refine_two_node=true,
+    )
+    chained = TPO.merge_solutions(
+        result.filtering_state, result.solution_state, instance, result.sub_instance
+    )
+    @test sol.bundle_paths == chained.bundle_paths
+    @test TPO.cost(sol) ≈ TPO.cost(chained)
+
+    # The default (false) differs on this fixture, so the keyword is really forwarded.
+    plain = TPO.solve_state(instance; LS..., rng=MersenneTwister(0), show_progress=false)
+    @test plain.bundle_paths != sol.bundle_paths
+end
+
 @testset "solve on a non-wrapping instance is feasible" begin
     instance = TestFixtures.small_instance(; wrap_time=false)
     sol = TPO.solve_state(instance; time_limit=5.0, max_iter=50, show_progress=false)

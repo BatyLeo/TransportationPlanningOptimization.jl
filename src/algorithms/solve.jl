@@ -52,7 +52,8 @@ A `SolutionState` is copied and the caller's one is left untouched.
 The state must be feasible on `instance`, then local search runs on the full instance if `local_search=true`.
 The cost of the result is at most the cost of the converted start, which can differ from `cost(start)` for bin packing costs.
 
-`time_limit` (seconds), `max_iter` and `rng` only apply to local search, so `time_limit` does not cover construction.
+`time_limit` (seconds), `max_iter`, `rng` and `refine_two_node` only apply to local search, so `time_limit` does not cover construction.
+`refine_two_node=true` re-inserts each lifted bundle on its whole path after a two-node consolidation move (see [`local_search!`](@ref)), which makes moves slower but slightly improves world-scale instances.
 Local search also stops after 15000 consecutive non-improving iterations (the [`local_search!`](@ref) default), so it can return well before `time_limit`.
 All steps use [`CheapestMode`](@ref).
 Set `show_progress=false` to hide the progress bars.
@@ -67,6 +68,7 @@ function solve_state(
     time_limit::Real=60.0,
     max_iter::Int=500_000,
     rng::Random.AbstractRNG=Random.default_rng(),
+    refine_two_node::Bool=false,
     show_progress::Bool=true,
 )
     if !isnothing(start)
@@ -77,7 +79,9 @@ function solve_state(
             ),
         )
         if local_search && bundle_count(instance) > 0
-            local_search!(solution_state, instance; time_limit, max_iter, rng)
+            local_search!(
+                solution_state, instance; time_limit, max_iter, rng, refine_two_node
+            )
         end
         return solution_state
     end
@@ -85,7 +89,9 @@ function solve_state(
     if !filtering
         solution_state = mix_greedy_heuristic(instance; show_progress)
         if local_search
-            local_search!(solution_state, instance; time_limit, max_iter, rng)
+            local_search!(
+                solution_state, instance; time_limit, max_iter, rng, refine_two_node
+            )
         end
         return solution_state
     end
@@ -94,7 +100,9 @@ function solve_state(
         instance; show_progress
     )
     if local_search && bundle_count(sub_instance) > 0
-        local_search!(solution_state, sub_instance; time_limit, max_iter, rng)
+        local_search!(
+            solution_state, sub_instance; time_limit, max_iter, rng, refine_two_node
+        )
     end
     return merge_solutions(filtering_state, solution_state, instance, sub_instance)
 end
@@ -120,10 +128,19 @@ function solve(
     time_limit::Real=60.0,
     max_iter::Int=500_000,
     rng::Random.AbstractRNG=Random.default_rng(),
+    refine_two_node::Bool=false,
     show_progress::Bool=true,
 )
     solution_state = solve_state(
-        instance; start, filtering, local_search, time_limit, max_iter, rng, show_progress
+        instance;
+        start,
+        filtering,
+        local_search,
+        time_limit,
+        max_iter,
+        rng,
+        refine_two_node,
+        show_progress,
     )
     return Solution(solution_state, instance)
 end
