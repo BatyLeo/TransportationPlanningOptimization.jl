@@ -24,7 +24,6 @@ Set `show_progress=false` to hide the progress bar.
 function mix_greedy_and_lower_bound(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
-    packing::Symbol=:frozen,
     start::SolutionState=SolutionState(instance),
     show_progress::Bool=true,
 )
@@ -53,7 +52,6 @@ function mix_greedy_and_lower_bound(
             mode_selector;
             cost_fn=compute_ttg_edge_incremental_cost,
             buffer=buffer,
-            packing=packing,
         )
         greedy_snapshot = Dict{Tuple{Int,Int},Float64}()
         for (u, v) in bundle_arcs
@@ -69,9 +67,7 @@ function mix_greedy_and_lower_bound(
                 ),
             )
         end
-        add_bundle_path!(
-            greedy_sol, instance, bundle_idx, greedy_path; mode_selector, packing
-        )
+        add_bundle_path!(greedy_sol, instance, bundle_idx, greedy_path; mode_selector)
 
         # Lower-bound strategy: relaxed costs against empty lb_sol path state.
         # This overwrites ttg.cost_matrix in place.
@@ -93,9 +89,7 @@ function mix_greedy_and_lower_bound(
                 ),
             )
         end
-        add_bundle_path!(
-            lb_sol, instance, bundle_idx, lb_path; mode_selector, packing=:ffd_union
-        )
+        add_bundle_path!(lb_sol, instance, bundle_idx, lb_path; mode_selector)
 
         # Mixed strategy: convex blend of the two cost matrices.
         w_greedy = i / B
@@ -119,7 +113,7 @@ function mix_greedy_and_lower_bound(
                 ),
             )
         end
-        add_bundle_path!(mixed_sol, instance, bundle_idx, mix_path; mode_selector, packing)
+        add_bundle_path!(mixed_sol, instance, bundle_idx, mix_path; mode_selector)
     end
 
     return (; mixed=mixed_sol, greedy=greedy_sol, lower_bound=lb_sol)
@@ -154,12 +148,9 @@ Set `show_progress=false` to hide the progress bar.
 function mix_greedy_heuristic(
     instance::Instance;
     mode_selector::AbstractModeSelector=CheapestMode(),
-    packing::Symbol=:frozen,
     start::SolutionState=SolutionState(instance),
     show_progress::Bool=true,
 )
-    candidates = mix_greedy_and_lower_bound(
-        instance; mode_selector, packing, start, show_progress
-    )
+    candidates = mix_greedy_and_lower_bound(instance; mode_selector, start, show_progress)
     return choose_best_feasible(collect(values(candidates)), instance)
 end

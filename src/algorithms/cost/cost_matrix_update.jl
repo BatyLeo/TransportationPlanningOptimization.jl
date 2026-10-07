@@ -12,7 +12,6 @@ function compute_ttg_edge_incremental_cost(
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
-    packing::Symbol=:frozen,
     empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
 ) where {C}
     cache = instance.index_cache
@@ -58,7 +57,6 @@ function compute_ttg_edge_incremental_cost(
             existing_assignment,
             order.commodities,
             mode_selector;
-            packing=packing,
             new_total_size=new_total_size,
             empty_counts=isnothing(empty_counts) ? nothing : empty_counts[k],
         )
@@ -95,12 +93,8 @@ function compute_ttg_edge_lower_bound_cost(
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
-    packing::Symbol=:frozen,
     empty_counts=nothing,
 )
-    # The lower-bound path is a fractional relaxation, not FFD bin packing, so
-    # `packing` is accepted only to keep the `cost_fn` call signature uniform
-    # with `compute_ttg_edge_incremental_cost`. It has no effect here.
     # The fractional bin counting needs none of `buffer`'s scratch, so `buffer` is
     # accepted only to keep the `cost_fn` call signature uniform. Likewise for
     # `empty_counts`.
@@ -260,7 +254,6 @@ function compute_ttg_edge_filtering_cost(
     v_ttg_code::Int,
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
-    packing::Symbol=:frozen,
     empty_counts=nothing,
 ) where {C}
     cache = instance.index_cache
@@ -363,7 +356,6 @@ function update_bundle_cost_matrix!(
     mode_selector::AbstractModeSelector=CheapestMode();
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     buffer::BinPackingBuffer=BinPackingBuffer(),
-    packing::Symbol=:frozen,
     empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
     deadline::Float64=Inf,
 )
@@ -399,7 +391,6 @@ function update_bundle_cost_matrix!(
                 v_code,
                 mode_selector;
                 buffer,
-                packing,
                 empty_counts,
             )
         end
@@ -421,7 +412,6 @@ function update_bundle_cost_matrix!(
     mode_selector::AbstractModeSelector=CheapestMode();
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     buffer::BinPackingBuffer=BinPackingBuffer(),
-    packing::Symbol=:frozen,
 )
     return update_bundle_cost_matrix!(
         current_solution,
@@ -431,7 +421,6 @@ function update_bundle_cost_matrix!(
         mode_selector;
         cost_fn=cost_fn,
         buffer=buffer,
-        packing=packing,
     )
 end
 
@@ -475,7 +464,6 @@ function parallel_update_bundle_cost_matrix!(
     mode_selector::AbstractModeSelector,
     buffer_pool::Vector{<:BinPackingBuffer};
     cost_fn::Function=compute_ttg_edge_incremental_cost,
-    packing::Symbol=:frozen,
     empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
     deadline::Float64=Inf,
 )
@@ -488,7 +476,6 @@ function parallel_update_bundle_cost_matrix!(
             mode_selector;
             cost_fn,
             buffer=buffer_pool[1],
-            packing,
             empty_counts,
             deadline,
         )
@@ -537,7 +524,6 @@ function parallel_update_bundle_cost_matrix!(
                     v_code,
                     mode_selector;
                     buffer=buf,
-                    packing,
                     empty_counts,
                 )
             end
@@ -554,7 +540,6 @@ function parallel_update_bundle_cost_matrix!(
     mode_selector::AbstractModeSelector,
     buffer_pool::Vector{<:BinPackingBuffer};
     cost_fn::Function=compute_ttg_edge_incremental_cost,
-    packing::Symbol=:frozen,
 )
     return parallel_update_bundle_cost_matrix!(
         current_solution,
@@ -564,6 +549,5 @@ function parallel_update_bundle_cost_matrix!(
         mode_selector,
         buffer_pool;
         cost_fn,
-        packing,
     )
 end

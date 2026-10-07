@@ -314,25 +314,21 @@ end
     arcs = instance.travel_time_graph.bundle_arcs[TPO._donor_index(instance, lifted)]
     nz = SparseArrays.nonzeros(instance.travel_time_graph.cost_matrix)
 
-    for packing in (:frozen, :ffd_union)
-        TPO.update_bundle_cost_matrix!(
-            sol, instance, virtual, arcs, TPO.CheapestMode(); packing
-        )
-        plain = copy(nz)
-        counts = TPO.empty_pack_counts(instance, virtual, arcs)
-        @test all(ec -> !isempty(ec.capacities), counts)
-        TPO.update_bundle_cost_matrix!(
-            sol, instance, virtual, arcs, TPO.CheapestMode(); packing, empty_counts=counts
-        )
-        @test reinterpret(UInt64, nz) == reinterpret(UInt64, plain)
-        @test any(isfinite, plain)
-        # Deliberately wrong counts must change the matrix, so they are really used.
-        bumped = [TPO.EmptyPackCounts(ec.capacities, ec.counts .+ 1) for ec in counts]
-        TPO.update_bundle_cost_matrix!(
-            sol, instance, virtual, arcs, TPO.CheapestMode(); packing, empty_counts=bumped
-        )
-        @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
-    end
+    TPO.update_bundle_cost_matrix!(sol, instance, virtual, arcs, TPO.CheapestMode())
+    plain = copy(nz)
+    counts = TPO.empty_pack_counts(instance, virtual, arcs)
+    @test all(ec -> !isempty(ec.capacities), counts)
+    TPO.update_bundle_cost_matrix!(
+        sol, instance, virtual, arcs, TPO.CheapestMode(); empty_counts=counts
+    )
+    @test reinterpret(UInt64, nz) == reinterpret(UInt64, plain)
+    @test any(isfinite, plain)
+    # Deliberately wrong counts must change the matrix, so they are really used.
+    bumped = [TPO.EmptyPackCounts(ec.capacities, ec.counts .+ 1) for ec in counts]
+    TPO.update_bundle_cost_matrix!(
+        sol, instance, virtual, arcs, TPO.CheapestMode(); empty_counts=bumped
+    )
+    @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
 end
 
 @testset "two_node_common_incremental! with a passed deadline restores the solution" begin
@@ -441,10 +437,7 @@ function chain_solution(instance)
 end
 
 @testset "two-node move reroutes only the slice of the lifted bundles" begin
-    for arrival in (true, false),
-        bin_packing in (false, true),
-        packing in (:frozen, :ffd_union)
-
+    for arrival in (true, false), bin_packing in (false, true)
         instance = chain_instance(; arrival, bin_packing)
         ttg = instance.travel_time_graph
         sol, code = chain_solution(instance)
@@ -460,13 +453,7 @@ end
         # kept by the third bundle, so only the 8 of H2 -> H3 is replaced by two bins of 1.
         expected = bin_packing ? 6.0 : 42.0
         saved = TPO.two_node_common_incremental!(
-            sol,
-            instance,
-            code("H1"),
-            code("H3");
-            refine=false,
-            packing,
-            cost_packing=packing,
+            sol, instance, code("H1"), code("H3"); refine=false
         )
         @test saved ≈ expected
         @test cost(sol) ≈ c0 - expected
@@ -509,13 +496,7 @@ end
         # Running the same move again changes nothing (Dijkstra returns the current slices).
         after = deepcopy(sol)
         @test TPO.two_node_common_incremental!(
-            sol,
-            instance,
-            code("H1"),
-            code("H3");
-            refine=false,
-            packing,
-            cost_packing=packing,
+            sol, instance, code("H1"), code("H3"); refine=false
         ) == 0.0
         @test same_state(sol, after)
         rebuilt = SolutionState(sol.bundle_paths, instance)

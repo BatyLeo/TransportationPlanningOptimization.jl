@@ -23,14 +23,13 @@ function _frozen_edge_incremental_cost(
 end
 
 # --- Incremental cost: NetworkArc (single mode) ------------------------------
-# The selector is irrelevant (one mode); the batch always forwards to the arc's
-# own `incremental_cost!`.
+# The selector is irrelevant (one mode). The empty case packs the batch from
+# scratch and the loaded case forwards to `frozen_incremental_cost!`.
 
 """
 $TYPEDSIGNATURES
 
-Empty `NetworkArc`: with no existing commodities, `:frozen` and `:ffd_union`
-agree, so the batch is packed from scratch.
+Empty `NetworkArc`: with no existing commodities the batch is packed from scratch.
 """
 function _edge_incremental_cost(
     buffer::BinPackingBuffer,
@@ -38,7 +37,6 @@ function _edge_incremental_cost(
     ::Nothing,
     new_comms::Vector{C},
     ::AbstractModeSelector;
-    packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
     empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
@@ -49,10 +47,8 @@ end
 """
 $TYPEDSIGNATURES
 
-Loaded `NetworkArc`. Under `packing == :frozen` the bin-packing increment is
-computed against the assignment's cached frozen bins (`existing.bins`) via
-`_frozen_edge_incremental_cost`; under `:ffd_union` it repacks the existing+new
-commodity union.
+Loaded `NetworkArc`: the bin-packing increment is computed against the assignment's
+cached frozen bins (`existing.bins`) via `_frozen_edge_incremental_cost`.
 """
 function _edge_incremental_cost(
     buffer::BinPackingBuffer,
@@ -60,18 +56,12 @@ function _edge_incremental_cost(
     existing::SingleAssignment{C},
     new_comms::Vector{C},
     ::AbstractModeSelector;
-    packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
     empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     _mode_has_capacity(arc, existing.total_size, new_comms) || return Inf
-    if packing === :frozen
-        return _frozen_edge_incremental_cost(
-            buffer, arc.cost, existing, new_comms, new_total_size
-        )
-    end
-    return incremental_cost!(
-        buffer, arc.cost, existing.commodities, new_comms; n_existing=length(existing.bins)
+    return _frozen_edge_incremental_cost(
+        buffer, arc.cost, existing, new_comms, new_total_size
     )
 end
 
@@ -91,7 +81,6 @@ function _edge_incremental_cost(
     ::Nothing,
     new_comms::Vector{C},
     ::CheapestMode;
-    packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
     empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
@@ -108,8 +97,8 @@ end
 $TYPEDSIGNATURES
 
 Loaded `MultiModalArc` under `CheapestMode`: minimum over feasible modes of each
-mode's increment, computed against that mode's existing slot. Honours `packing`
-per mode (`:frozen` reuses the slot's committed bins, `:ffd_union` repacks).
+mode's increment, computed against that mode's existing slot (its committed bins are
+reused).
 """
 function _edge_incremental_cost(
     buffer::BinPackingBuffer,
@@ -117,29 +106,14 @@ function _edge_incremental_cost(
     existing::MultiAssignment{C},
     new_comms::Vector{C},
     ::CheapestMode;
-    packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
     empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
     return minimum(
         if _mode_has_capacity(arc.modes[i], existing.per_mode[i].total_size, new_comms)
-            if packing === :frozen
-                _frozen_edge_incremental_cost(
-                    buffer,
-                    arc.modes[i].cost,
-                    existing.per_mode[i],
-                    new_comms,
-                    new_total_size,
-                )
-            else
-                incremental_cost!(
-                    buffer,
-                    arc.modes[i].cost,
-                    existing.per_mode[i].commodities,
-                    new_comms;
-                    n_existing=length(existing.per_mode[i].bins),
-                )
-            end
+            _frozen_edge_incremental_cost(
+                buffer, arc.modes[i].cost, existing.per_mode[i], new_comms, new_total_size
+            )
         else
             Inf
         end for i in eachindex(arc.modes)
@@ -147,10 +121,10 @@ function _edge_incremental_cost(
 end
 
 # --- Incremental cost: MultiModalArc + FillThenSpillMode ---------------------
-# Allow splitting the batch across modes when the cheapest is full; the cost is
-# the sum of the per-mode increments. Always uses ffd_union semantics (the commit
-# re-packs too), so `packing` is not consulted here. Returns `Inf` if the batch
-# overflows the combined mode capacity.
+# Allow splitting the batch across modes when the cheapest is full. The cost is
+# the sum of the per-mode increments. It always uses union semantics (the commit
+# repacks too) and returns `Inf` if the batch overflows the combined mode
+# capacity.
 
 """
 $TYPEDSIGNATURES
@@ -164,7 +138,6 @@ function _edge_incremental_cost(
     ::Nothing,
     new_comms::Vector{C},
     ::FillThenSpillMode;
-    packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
     empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
@@ -194,7 +167,6 @@ function _edge_incremental_cost(
     existing::MultiAssignment{C},
     new_comms::Vector{C},
     ::FillThenSpillMode;
-    packing::Symbol=:frozen,
     new_total_size::Float64=NaN,
     empty_counts::Union{Nothing,EmptyPackCounts}=nothing,
 ) where {C<:LightCommodity}
@@ -229,15 +201,9 @@ Buffer-free `NetworkArc` overload: allocates a scratch `BinPackingBuffer` and
 forwards to the buffer-threading method.
 """
 function _edge_incremental_cost(
-    arc::NetworkArc,
-    existing,
-    new_comms::Vector{C},
-    sel::AbstractModeSelector;
-    packing::Symbol=:frozen,
+    arc::NetworkArc, existing, new_comms::Vector{C}, sel::AbstractModeSelector
 ) where {C<:LightCommodity}
-    return _edge_incremental_cost(
-        BinPackingBuffer(), arc, existing, new_comms, sel; packing=packing
-    )
+    return _edge_incremental_cost(BinPackingBuffer(), arc, existing, new_comms, sel)
 end
 
 """
@@ -247,15 +213,9 @@ Buffer-free `MultiModalArc` overload: allocates a scratch `BinPackingBuffer` and
 forwards to the buffer-threading method.
 """
 function _edge_incremental_cost(
-    arc::MultiModalArc,
-    existing,
-    new_comms::Vector{C},
-    sel::AbstractModeSelector;
-    packing::Symbol=:frozen,
+    arc::MultiModalArc, existing, new_comms::Vector{C}, sel::AbstractModeSelector
 ) where {C<:LightCommodity}
-    return _edge_incremental_cost(
-        BinPackingBuffer(), arc, existing, new_comms, sel; packing=packing
-    )
+    return _edge_incremental_cost(BinPackingBuffer(), arc, existing, new_comms, sel)
 end
 
 # ============================================================================
@@ -263,14 +223,13 @@ end
 #
 # The optimistic counterpart of `_edge_incremental_cost`: each mode's increment
 # comes from `lower_bound_incremental_cost` (fractional bin counts, no capacity
-# ceiling), so there is no `:frozen`/`:ffd_union` split. The only feasibility
-# gate is on the batch's own size: an order's commodities always travel
-# together on one edge, so a batch that alone exceeds a mode's capacity is
-# infeasible in every solution and is priced `Inf` (existing load on the mode
-# is otherwise ignored, keeping the bound order-independent and a valid
-# relaxation). `NetworkArc` forwards to its single mode; `MultiModalArc` +
-# `CheapestMode` takes the minimum over modes. Used by the lower-bound and
-# filtering strategies.
+# ceiling). The only feasibility gate is on the batch's own size: an order's
+# commodities always travel together on one edge, so a batch that alone exceeds
+# a mode's capacity is infeasible in every solution and is priced `Inf`
+# (existing load on the mode is otherwise ignored, keeping the bound
+# order-independent and a valid relaxation). `NetworkArc` forwards to its
+# single mode, and `MultiModalArc` + `CheapestMode` takes the minimum over
+# modes. Used by the lower-bound and filtering strategies.
 # ============================================================================
 
 """

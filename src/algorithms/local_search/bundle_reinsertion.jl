@@ -65,7 +65,6 @@ function _lazy_bundle_dijkstra!(
     mode_selector::AbstractModeSelector,
     buffer::BinPackingBuffer,
     bundle_adj::Dict{Int,Vector{Int}};
-    packing::Symbol=:frozen,
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
 ) where {C}
     ttg = instance.travel_time_graph
@@ -121,7 +120,7 @@ function _lazy_bundle_dijkstra!(
                     continue
                 end
                 w = compute_ttg_edge_incremental_cost(
-                    sol, instance, bundle, u, v, mode_selector; buffer, packing
+                    sol, instance, bundle, u, v, mode_selector; buffer
                 )
                 alt = d_u + w
             end
@@ -157,8 +156,6 @@ function _try_reinsert_bundle!(
     instance::Instance,
     bundle_idx::Int,
     mode_selector::AbstractModeSelector;
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     bundle_adj::Union{Dict{Int,Vector{Int}},Nothing}=nothing,
     remove_before_routing::Bool=true,
@@ -190,7 +187,7 @@ function _try_reinsert_bundle!(
     # (fewer arc evaluations, better for single-threaded).
     new_path = if Threads.nthreads() > 1 && buffer_pool !== nothing
         parallel_update_bundle_cost_matrix!(
-            sol, instance, bundle_idx, mode_selector, buffer_pool; packing=cost_packing
+            sol, instance, bundle_idx, mode_selector, buffer_pool
         )
         bundle_shortest_path(instance, origin, dest; workspace)
     elseif bundle_adj !== nothing
@@ -203,7 +200,6 @@ function _try_reinsert_bundle!(
             mode_selector,
             buffer,
             bundle_adj;
-            packing=cost_packing,
             workspace,
         )
         lazy_path = trace_path(parents, origin, dest)
@@ -211,9 +207,7 @@ function _try_reinsert_bundle!(
             lazy_path
         else
             # The lazy search leaves the cost matrix unfilled, so fill it first.
-            update_bundle_cost_matrix!(
-                sol, instance, bundle_idx, mode_selector; buffer, packing=cost_packing
-            )
+            update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector; buffer)
             elementary_shortest_path(
                 ttg.graph,
                 ttg.cost_matrix,
@@ -223,9 +217,7 @@ function _try_reinsert_bundle!(
             )
         end
     else
-        update_bundle_cost_matrix!(
-            sol, instance, bundle_idx, mode_selector; packing=cost_packing
-        )
+        update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector)
         bundle_shortest_path(instance, origin, dest)
     end
     if !isempty(new_path)
@@ -252,9 +244,7 @@ function _try_reinsert_bundle!(
         sol, instance, bundle_idx, new_path; cache=snapshots, clear=false
     )
 
-    cost_added = add_bundle_path!(
-        sol, instance, bundle_idx, new_path; mode_selector, packing
-    )
+    cost_added = add_bundle_path!(sol, instance, bundle_idx, new_path; mode_selector)
     net_delta = cost_added + cost_removed
     if net_delta < -COST_IMPROVEMENT_EPS
         isnothing(outer_snapshots) ||
@@ -280,8 +270,6 @@ function bundle_reinsertion_improvement!(
     mode_selector::AbstractModeSelector=CheapestMode();
     time_limit::Real=Inf,
     cost_threshold::Real=0.0,
-    packing::Symbol=:frozen,
-    cost_packing::Symbol=:frozen,
 )
     saved = 0.0
     t_start = time()
@@ -292,9 +280,7 @@ function bundle_reinsertion_improvement!(
             bundle_estimated_removal_cost(sol, instance, i) <= cost_threshold
             continue
         end
-        saved += _try_reinsert_bundle!(
-            sol, instance, i, mode_selector; packing, cost_packing
-        )
+        saved += _try_reinsert_bundle!(sol, instance, i, mode_selector)
     end
     return saved
 end
@@ -312,9 +298,7 @@ function _run_reintro_step!(
     instance::Instance,
     mode_selector::AbstractModeSelector,
     rng::Random.AbstractRNG,
-    cost_threshold::Float64,
-    packing::Symbol,
-    cost_packing::Symbol;
+    cost_threshold::Float64;
     buffer::BinPackingBuffer=BinPackingBuffer(),
     bundle_adjs::Union{Vector{Dict{Int,Vector{Int}}},Nothing}=nothing,
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
@@ -335,8 +319,6 @@ function _run_reintro_step!(
         instance,
         bundle_idx,
         mode_selector;
-        packing,
-        cost_packing,
         buffer,
         bundle_adj,
         workspace,

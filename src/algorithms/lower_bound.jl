@@ -120,9 +120,9 @@ function lower_bound_filtering(
         )
         return nothing
     end
-    filtering_cost(sol_, inst, bundle, u, v, sel; buffer, packing, empty_counts=nothing) =
+    filtering_cost(sol_, inst, bundle, u, v, sel; buffer, empty_counts=nothing) =
         if _fits_fixed_load(fixed, fixed_pairs, inst, bundle, u, v, sel, buffer)
-            compute_ttg_edge_filtering_cost(sol_, inst, bundle, u, v, sel; buffer, packing)
+            compute_ttg_edge_filtering_cost(sol_, inst, bundle, u, v, sel; buffer)
         else
             Inf
         end
