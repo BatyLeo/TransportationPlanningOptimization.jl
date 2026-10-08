@@ -99,7 +99,7 @@ function _translate_tpo_to_stp(tpo_sol, tpo_instance, stp_instance)
         ok = true
         for code in path
             mapped = _tpo_to_stp_code(code, tpo_instance, stp_instance, stp_node_by_account)
-            if mapped === nothing
+            if isnothing(mapped)
                 ok = false
                 break
             end
@@ -139,7 +139,7 @@ end
 "Extract `i` from STP's `Loop Break : time = X, i = Y, noImprov = Z` log."
 function _parse_stp_loop_break_iters(captured::AbstractString)
     m = match(r"Loop Break\s*:\s*time\s*=\s*[\d\.]+,\s*i\s*=\s*(\d+)", captured)
-    return m === nothing ? -1 : parse(Int, m.captures[1])
+    return isnothing(m) ? -1 : parse(Int, m.captures[1])
 end
 
 # ---------------------------------------------------------------------------
@@ -745,7 +745,7 @@ function compare_all(; ls_limit_override::Union{Nothing,Real}=nothing)
             @info "Skipping $name (already in CSV)"
             continue
         end
-        ls_limit = ls_limit_override === nothing ? _ls_limit(name) : ls_limit_override
+        ls_limit = isnothing(ls_limit_override) ? _ls_limit(name) : ls_limit_override
         ils_limit = INCLUDE_ILS ? _ils_limit(name) : 0
         @info "Running $name" ls_limit ils_limit
         local result

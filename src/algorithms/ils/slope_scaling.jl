@@ -43,10 +43,10 @@ function _slope_scaling_update_edge!(
     assignment::SingleAssignment,
 )
     arc = tsg_edge_arc(cache, u_tsg, v_tsg)
-    arc === nothing && return nothing
+    isnothing(arc) && return nothing
 
     bp_cost = _bin_packing_cost_of(arc.cost)
-    bp_cost === nothing && return nothing
+    isnothing(bp_cost) && return nothing
 
     total_volume = total_size_of(assignment)
     total_volume <= 0 && return nothing

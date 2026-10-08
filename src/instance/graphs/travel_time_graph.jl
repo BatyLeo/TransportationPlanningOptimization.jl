@@ -207,7 +207,7 @@ function _bfs_reachable(graph::MetaGraph, start::Int, neighbors_fn; allowed_edge
         node = popfirst!(queue)
         for neighbor in neighbors_fn(graph, node)
             if !(neighbor in reachable) &&
-                (allowed_edge === nothing || allowed_edge(node, neighbor))
+                (isnothing(allowed_edge) || allowed_edge(node, neighbor))
                 push!(reachable, neighbor)
                 push!(queue, neighbor)
             end

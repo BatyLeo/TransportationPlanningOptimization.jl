@@ -190,7 +190,7 @@ function parse_outbound_instance(
         # if row[COMMODITY_TYPE_BT] == "BTS"
         #     dest_node_id = string(row[COMMODITY_DESTINATION_ID])
         #     dest_node = findfirst(n -> n.id == dest_node_id, nodes)
-        #     @assert dest_node !== nothing "Destination node $dest_node_id not found among parsed nodes."
+        #     @assert !isnothing(dest_node) "Destination node $dest_node_id not found among parsed nodes."
         #     bts_list = nodes[dest_node].info.bts_list
         #     for arc in raw_arcs
         #         if arc.destination_id == dest_node_id

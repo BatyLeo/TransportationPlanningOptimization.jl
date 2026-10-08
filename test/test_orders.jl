@@ -12,7 +12,7 @@ using Test
     @test length(order.commodities) == 1
     @test order.time_step == 1
     @test order.max_transit_steps == 7
-    @test order.aggregate === nothing
+    @test isnothing(order.aggregate)
 end
 
 @testset "Order with multiple commodities" begin

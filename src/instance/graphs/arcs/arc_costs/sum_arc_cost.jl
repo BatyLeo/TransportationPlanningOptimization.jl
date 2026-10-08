@@ -141,7 +141,7 @@ Throws `ArgumentError` if zero or more than one `BinPackingArcCost` is present.
 """
 function _find_bin_packing(c::SumArcCost)
     bp = _try_find_bin_packing(c)
-    bp === nothing && throw(ArgumentError("SumArcCost has no BinPackingArcCost term"))
+    isnothing(bp) && throw(ArgumentError("SumArcCost has no BinPackingArcCost term"))
     return bp
 end
 

@@ -31,7 +31,7 @@ end
 
 function _restore_assignment!(a::SingleAssignment, snap::_SingleAssignmentSnapshot)
     a.commodities = snap.commodities
-    if snap.bins === nothing
+    if isnothing(snap.bins)
         empty!(a.bins)
     else
         a.bins = snap.bins
@@ -83,7 +83,7 @@ function _snapshot_path_assignments(
     clear::Bool=true,
 ) where {C}
     bundle = instance.bundles[bundle_idx]
-    snapshots = if cache !== nothing
+    snapshots = if !isnothing(cache)
         clear && empty!(cache)
         cache
     else
@@ -97,7 +97,7 @@ function _snapshot_path_assignments(
             haskey(snapshots, edge) && continue
             assignment = get(sol.assignments, edge, nothing)
             snapshots[edge] =
-                assignment === nothing ? nothing : _snapshot_assignment(assignment)
+                isnothing(assignment) ? nothing : _snapshot_assignment(assignment)
         end
     end
     return snapshots
@@ -118,7 +118,7 @@ end
 
 function _restore_snapshots!(sol::SolutionState, snapshots::Dict)
     for (edge, snap) in snapshots
-        if snap === nothing
+        if isnothing(snap)
             delete!(sol.assignments, edge)
         else
             _restore_assignment!(sol.assignments[edge], snap)

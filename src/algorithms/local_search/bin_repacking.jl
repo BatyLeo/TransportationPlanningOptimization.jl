@@ -41,7 +41,7 @@ end
 
 function _repack_assignment!(a::SingleAssignment, arc::NetworkArc)
     bp_cost = _bin_packing_cost_of(arc.cost)
-    bp_cost === nothing && return 0.0
+    isnothing(bp_cost) && return 0.0
     return _repack_slot!(a, bp_cost)
 end
 
@@ -50,7 +50,7 @@ function _repack_assignment!(a::MultiAssignment, arc::MultiModalArc)
     for (i, slot) in enumerate(a.per_mode)
         mode_cost = arc.modes[i].cost
         bp_cost = _bin_packing_cost_of(mode_cost)
-        bp_cost === nothing && continue
+        isnothing(bp_cost) && continue
         saved += _repack_slot!(slot, bp_cost)
     end
     return saved

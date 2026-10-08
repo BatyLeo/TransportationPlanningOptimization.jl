@@ -35,7 +35,7 @@ function iterated_local_search!(
     best_cost = start_cost
     cost_history = Tuple{Float64,Float64}[(0.0, start_cost)]
 
-    if cost_update! !== nothing
+    if !isnothing(cost_update!)
         cost_update!(instance, sol)
     end
 
@@ -98,14 +98,14 @@ function iterated_local_search!(
             cost_threshold = config.cost_threshold_ratio * best_cost
             no_improv = 0
             verbose && @info "New best solution" best_cost elapsed
-            if on_improvement !== nothing
+            if !isnothing(on_improvement)
                 on_improvement(sol, best_cost, elapsed)
             end
         else
             no_improv += 1
         end
 
-        if cost_update! !== nothing
+        if !isnothing(cost_update!)
             cost_update!(instance, sol)
         end
 
@@ -120,7 +120,7 @@ function iterated_local_search!(
         best_cost = final_cost
         elapsed = time() - start_time
         push!(cost_history, (elapsed, best_cost))
-        if on_improvement !== nothing
+        if !isnothing(on_improvement)
             on_improvement(sol, best_cost, elapsed)
         end
     end

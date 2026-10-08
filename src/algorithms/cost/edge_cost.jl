@@ -326,7 +326,7 @@ costs fall back to `incremental_cost`.
 function _node_incremental_cost(
     f::AbstractNodeCostFunction, existing, new::Vector{C}, ::Float64
 ) where {C<:LightCommodity}
-    load = existing === nothing ? C[] : _node_load(existing)
+    load = isnothing(existing) ? C[] : _node_load(existing)
     return incremental_cost(f, load, new)
 end
 
@@ -350,6 +350,6 @@ carrying `existing`.
 function _node_lower_bound_incremental_cost(
     f::AbstractNodeCostFunction, existing, new::Vector{C}, ::Float64
 ) where {C<:LightCommodity}
-    load = existing === nothing ? C[] : _node_load(existing)
+    load = isnothing(existing) ? C[] : _node_load(existing)
     return lower_bound_incremental_cost(f, load, new)
 end

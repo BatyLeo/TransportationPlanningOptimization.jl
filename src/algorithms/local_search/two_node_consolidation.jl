@@ -9,9 +9,9 @@ function bundles_through_nodes(sol::SolutionState, src::Int, dst::Int)
     out = NTuple{3,Int}[]
     for (i, path) in enumerate(sol.bundle_paths)
         lo = findfirst(==(src), path)
-        lo === nothing && continue
+        isnothing(lo) && continue
         hi = findnext(==(dst), path, lo + 1)
-        hi === nothing && continue
+        isnothing(hi) && continue
         push!(out, (i, lo, hi))
     end
     return out
@@ -253,7 +253,7 @@ function two_node_common_incremental!(
     virtual_arcs = _corridor_arcs(ttg.graph, src, dst)
     empty_counts = empty_pack_counts(instance, virtual_bundle, virtual_arcs)
 
-    in_time = if Threads.nthreads() > 1 && buffer_pool !== nothing
+    in_time = if Threads.nthreads() > 1 && !isnothing(buffer_pool)
         parallel_update_bundle_cost_matrix!(
             sol,
             instance,
@@ -337,7 +337,7 @@ function two_node_common_incremental!(
     if refine
         for i in Random.shuffle(rng, lifted_idxs)
             time() > deadline && break
-            bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[i]
+            bundle_adj = isnothing(bundle_adjs) ? nothing : bundle_adjs[i]
             cost_delta -= _try_reinsert_bundle!(
                 sol,
                 instance,

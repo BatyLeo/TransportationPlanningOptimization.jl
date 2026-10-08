@@ -110,7 +110,7 @@ function load_hexaly_solution(instance, data_dir::AbstractString)
         rid = od_dominant[key]
         str_path = routes[rid].nodes
         int_path = to_ttg_path(str_path)
-        if int_path === nothing
+        if isnothing(int_path)
             push!(path_failed, "$(key) -> $(str_path) (no TTG codes)")
             continue
         end
@@ -186,7 +186,7 @@ function compare_outbound()
     # ── Load Hexaly solution ──
     println("\n--- Hexaly solution ---")
     hex = load_hexaly_solution(instance, DATA_DIR)
-    if hex === nothing
+    if isnothing(hex)
         println("  Hexaly result file not found, skipping comparison.")
         return nothing
     end
