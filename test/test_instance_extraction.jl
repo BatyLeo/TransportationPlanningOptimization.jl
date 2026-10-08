@@ -327,7 +327,7 @@ end
         @test bundle_count(sub) == length(keep_idxs)
         for (k, (i, o)) in enumerate(parent.commodity_to_order)
             j = i == 0 ? nothing : findfirst(==(i), keep_idxs)
-            if j === nothing
+            if isnothing(j)
                 @test sub.commodity_to_order[k] == (0, 0)
             else
                 @test sub.commodity_to_order[k] == (j, o)

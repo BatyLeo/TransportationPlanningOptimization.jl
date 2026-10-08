@@ -322,7 +322,7 @@ end
         # The default grouping key is `nothing`; the custom key is the model string.
         default_group_ok =
             length(instance_default.bundles) == 1 &&
-            instance_default.bundles[1].group === nothing
+            isnothing(instance_default.bundles[1].group)
         grouped_groups = Set(b.group for b in instance_grouped.bundles)
         grouped_ok =
             length(instance_grouped.bundles) == 2 && grouped_groups == Set(["X", "Y"])

@@ -176,7 +176,7 @@ function _collect_common_tsg_arcs(instance)
 
     for ((su, sv, _), arc) in cache.edge_group_to_arc
         bp = _bp_cost_of(arc.cost)
-        bp === nothing && continue
+        isnothing(bp) && continue
         for t in 1:H
             dest_t = t + arc.travel_time_steps
             if dest_t > H
@@ -201,7 +201,7 @@ function _compute_tsg_loads(sol, instance, bundle_idxs, common_arcs)
     loads = Dict{Tuple{Int,Int},Float64}()
     for (u_tsg, v_tsg) in common_arcs
         assignment = get(sol.assignments, (u_tsg, v_tsg), nothing)
-        if assignment !== nothing
+        if !isnothing(assignment)
             loads[(u_tsg, v_tsg)] = TPO.total_size_of(assignment)
         else
             loads[(u_tsg, v_tsg)] = 0.0
@@ -246,7 +246,7 @@ function _select_bundles_by_plant(
     # Approximate number of tau variables (common TSG arcs)
     n_common = 0
     for ((su, sv, _), arc) in cache.edge_group_to_arc
-        if _bp_cost_of(arc.cost) !== nothing
+        if !isnothing(_bp_cost_of(arc.cost))
             n_common += instance.time_horizon_length
         end
     end
@@ -312,7 +312,7 @@ function _solve_arc_flow_milp(
     small_instance = length(instance.bundles) < 800
     actual_time_limit = small_instance ? time_limit * 0.5 : time_limit
 
-    opt = optimizer_factory === nothing ? _make_optimizer() : optimizer_factory()
+    opt = isnothing(optimizer_factory) ? _make_optimizer() : optimizer_factory()
     model = JuMP.Model(() -> opt)
     use_gurobi = _is_gurobi(model)
     JuMP.set_optimizer_attribute(model, use_gurobi ? "MIPGap" : "mip_rel_gap", 0.001)
@@ -379,7 +379,7 @@ function _solve_arc_flow_milp(
                 sv = cache.ttg_code_to_spatial_code[v_ttg]
                 su == sv && continue  # shortcut
                 tsg_arc = TPO.ttg_edge_arc(cache, u_ttg, v_ttg)
-                _bp_cost_of(tsg_arc.cost) === nothing && continue  # linear, no packing
+                isnothing(_bp_cost_of(tsg_arc.cost)) && continue  # linear, no packing
 
                 u_tsg = TPO.project_to_time_space_graph(u_ttg, order, instance)
                 v_tsg = TPO.project_to_time_space_graph(v_ttg, order, instance)
@@ -543,7 +543,7 @@ function _solve_arc_flow_milp(
             end
         end
 
-        if start_node === nothing
+        if isnothing(start_node)
             paths[i] = copy(sol.bundle_paths[b])
             continue
         end
@@ -554,7 +554,7 @@ function _solve_arc_flow_milp(
         steps = 0
         while current != destination && steps < max_steps
             next = get(neighbors, current, nothing)
-            next === nothing && break
+            isnothing(next) && break
             push!(path, next)
             current = next
             steps += 1
@@ -622,7 +622,7 @@ function TPO.perturbate!(
         time_limit=15.0,
         optimizer_factory=p.optimizer_factory,
     )
-    new_paths === nothing && return (0.0, 0)
+    isnothing(new_paths) && return (0.0, 0)
 
     changed_mask = [new_paths[i] != old_paths[i] for i in eachindex(bundle_idxs)]
     !any(changed_mask) && return (0.0, 0)

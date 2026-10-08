@@ -182,7 +182,7 @@ end
     solution = greedy_heuristic(instance; show_progress=false)
 
     # Solution should exist and be feasible
-    @test solution !== nothing
+    @test !isnothing(solution)
     @test length(solution.bundle_paths) == 1
 
     # Path should not go through B

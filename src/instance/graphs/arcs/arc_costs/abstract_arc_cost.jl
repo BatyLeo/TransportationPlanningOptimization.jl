@@ -111,7 +111,7 @@ function lower_bound_incremental_cost_with_order(
 )
     return lower_bound_incremental_cost(
         arc_f,
-        existing === nothing ? eltype(order.commodities)[] : existing,
+        isnothing(existing) ? eltype(order.commodities)[] : existing,
         order.commodities,
     )
 end

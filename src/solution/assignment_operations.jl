@@ -125,7 +125,7 @@ function _update_single_assignment_cost!(slot::SingleAssignment, arc_f::SumArcCo
     # cached bin count stays consistent with slot.commodities (read by
     # incremental_cost! to skip the FFD-on-existing pass).
     bp = _try_find_bin_packing(arc_f)
-    if bp === nothing
+    if isnothing(bp)
         slot.arc_cost = _sum_evaluate_with_total_size(
             arc_f.terms, slot.commodities, slot.total_size
         )
@@ -156,7 +156,7 @@ function _remove_from_bin!(pool::Vector{C}, working::Vector{C}) where {C<:LightC
     write_idx = 0
     @inbounds for c in pool
         j = findfirst(==(c), working)
-        if j === nothing
+        if isnothing(j)
             write_idx += 1
             pool[write_idx] = c
         else
@@ -253,7 +253,7 @@ function _update_cost_after_removal!(
     slot::SingleAssignment{C}, arc_f::SumArcCost, removed::Vector{C}
 ) where {C<:LightCommodity}
     bp = _try_find_bin_packing(arc_f)
-    bp === nothing && return _update_single_assignment_cost!(slot, arc_f)
+    isnothing(bp) && return _update_single_assignment_cost!(slot, arc_f)
     _ensure_sorted!(slot)
     _remove_from_bins!(slot, bp, removed)
     slot.arc_cost = _sum_packed_cost(slot, arc_f.terms)

@@ -70,7 +70,7 @@ function _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal::Bool
     for node in nodes
         if haskey(network_graph, node.id)
             prev_idx = findfirst(x -> x.id == node.id, nodes)
-            prev_node = prev_idx === nothing ? "unknown" : nodes[prev_idx]
+            prev_node = isnothing(prev_idx) ? "unknown" : nodes[prev_idx]
             throw(ErrorException("""Duplicate node id detected:
                   - node id           : $(node.id)
                   - first occurrence  : index $(prev_idx), record: $(prev_node)

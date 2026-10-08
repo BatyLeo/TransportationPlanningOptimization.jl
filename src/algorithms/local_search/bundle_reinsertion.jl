@@ -89,7 +89,7 @@ function _lazy_bundle_dijkstra!(
         Set{Tuple{Int,Int}}()
     end
 
-    if workspace !== nothing
+    if !isnothing(workspace)
         _reset_workspace!(workspace, origin)
         dists = workspace.dists
         parents = workspace.parents
@@ -185,12 +185,12 @@ function _try_reinsert_bundle!(
     # When multiple threads are available, pre-compute all arc costs in
     # parallel and run standard Dijkstra. Otherwise, use lazy Dijkstra
     # (fewer arc evaluations, better for single-threaded).
-    new_path = if Threads.nthreads() > 1 && buffer_pool !== nothing
+    new_path = if Threads.nthreads() > 1 && !isnothing(buffer_pool)
         parallel_update_bundle_cost_matrix!(
             sol, instance, bundle_idx, mode_selector, buffer_pool
         )
         bundle_shortest_path(instance, origin, dest; workspace)
-    elseif bundle_adj !== nothing
+    elseif !isnothing(bundle_adj)
         parents = _lazy_bundle_dijkstra!(
             sol,
             instance,
@@ -313,7 +313,7 @@ function _run_reintro_step!(
         bundle_estimated_removal_cost(sol, instance, bundle_idx) <= cost_threshold
         return 0.0
     end
-    bundle_adj = bundle_adjs === nothing ? nothing : bundle_adjs[bundle_idx]
+    bundle_adj = isnothing(bundle_adjs) ? nothing : bundle_adjs[bundle_idx]
     return _try_reinsert_bundle!(
         sol,
         instance,

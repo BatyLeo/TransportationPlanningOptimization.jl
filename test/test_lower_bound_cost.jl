@@ -186,7 +186,7 @@ end
     lin = LinearArcCost(1.7)
     costs = (bp, lin, TPO.SumArcCost((bp, lin)), _EvalOnlyArcCost())
     for f in costs, ex in (nothing, C[], loaded)
-        vec_ex = ex === nothing ? C[] : ex
+        vec_ex = isnothing(ex) ? C[] : ex
         @test TPO.lower_bound_incremental_cost_with_order(f, ex, order) ===
             TPO.lower_bound_incremental_cost(f, vec_ex, order.commodities)
     end

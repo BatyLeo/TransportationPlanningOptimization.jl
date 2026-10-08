@@ -344,7 +344,7 @@ end
                 s,
                 TPO._bin_packing_cost_of(TPO.tsg_edge_arc(instance.index_cache, e...).cost),
             ) for (e, s) in sol.assignments
-        ) if bp !== nothing
+        ) if !isnothing(bp)
     ]
     saved = TPO.bin_packing_improvement!(sol, instance)
     freed = sum(cpb * (n0 - length(s.bins)) for (s, cpb, n0) in packed)
