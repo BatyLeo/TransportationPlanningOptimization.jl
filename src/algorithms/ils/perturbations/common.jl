@@ -1,3 +1,21 @@
+"""
+$TYPEDSIGNATURES
+
+Routed bundles of `sol` grouped by `group_by`, with the groups listed in first-seen bundle
+order, so a pick among them only depends on the `rng`.
+"""
+function _routed_groups(sol::SolutionState, instance::Instance, group_by)
+    index_of = Dict{Any,Int}()
+    groups = Vector{Int}[]
+    for (i, bundle) in enumerate(instance.bundles)
+        isempty(sol.bundle_paths[i]) && continue
+        k = get!(index_of, group_by(bundle), length(groups) + 1)
+        k > length(groups) && push!(groups, Int[])
+        push!(groups[k], i)
+    end
+    return groups
+end
+
 function _current_cost(sol::SolutionState, edge)
     a = get(sol.assignments, edge, nothing)
     return isnothing(a) ? 0.0 : cost_of(a)
@@ -58,4 +76,38 @@ function _reroute_bundles!(
     end
     _restore_multi_bundle_assignments!(sol, bundle_idxs, old_paths, snapshots)
     return (0.0, 0)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Snapshot the edges of `path` into `snapshots`, then add it to `sol` as the path of bundle
+`bundle_idx`. This is the `reinsert!` step of [`_reroute_bundles!`](@ref) for a given path,
+which must not carry shortcut edges at its ends (see `_remove_shortcuts_from_path!`).
+"""
+function _add_fixed_path!(
+    sol::SolutionState, instance::Instance, bundle_idx::Int, path::Vector{Int}, snapshots
+)
+    _snapshot_path_assignments(
+        sol, instance, bundle_idx, path; cache=snapshots, clear=false
+    )
+    add_bundle_path!(sol, instance, bundle_idx, path)
+    return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
+Whether every edge in `snapshots` (the edges touched by a reroute) respects the capacity of
+its arc, with the same tolerance as [`is_feasible`](@ref).
+"""
+function _fits_capacities(sol::SolutionState, instance::Instance, snapshots)
+    cache = instance.index_cache
+    for e in keys(snapshots)
+        a = get(sol.assignments, e, nothing)
+        isnothing(a) && continue
+        arc = tsg_edge_arc(cache, e[1], e[2])
+        _capacity_feasible(arc, a, nothing; tol=EPS, verbose=false) || return false
+    end
+    return true
 end

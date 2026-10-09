@@ -34,20 +34,9 @@ function perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
 )
-    # Groups are listed in first-seen bundle order, so the pick only depends on `rng`.
-    keys_seen = Any[]
-    groups = Dict{Any,Vector{Int}}()
-    for (i, bundle) in enumerate(instance.bundles)
-        isempty(sol.bundle_paths[i]) && continue
-        key = p.group_by(bundle)
-        if !haskey(groups, key)
-            push!(keys_seen, key)
-            groups[key] = Int[]
-        end
-        push!(groups[key], i)
-    end
-    isempty(keys_seen) && return (0.0, 0)
-    bundle_idxs = Random.shuffle(rng, groups[rand(rng, keys_seen)])
+    groups = _routed_groups(sol, instance, p.group_by)
+    isempty(groups) && return (0.0, 0)
+    bundle_idxs = Random.shuffle(rng, rand(rng, groups))
 
     buffer = BinPackingBuffer()
     workspace = DijkstraWorkspace(Graphs.nv(instance.travel_time_graph.graph))
