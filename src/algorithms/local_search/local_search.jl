@@ -73,7 +73,7 @@ function local_search!(
     cost_threshold = cost_threshold_relative * start_cost
 
     ttg = instance.travel_time_graph
-    valid_pairs = compute_candidate_nodes(ttg)
+    valid_pairs = compute_candidate_nodes(instance)
     can_consolidate = allow_consolidate && !isempty(valid_pairs)
     can_reintro = allow_reintro && !isempty(instance.bundles)
 

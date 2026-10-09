@@ -62,7 +62,7 @@ function mix_greedy_and_lower_bound(
             throw(
                 ArgumentError(
                     "No feasible greedy path for bundle $bundle_idx: " *
-                    "$(bundle.origin_id) -> $(bundle.destination_id), " *
+                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
                     "no elementary path from origin to destination",
                 ),
             )
@@ -84,7 +84,7 @@ function mix_greedy_and_lower_bound(
             throw(
                 ArgumentError(
                     "No feasible lower-bound path for bundle $bundle_idx: " *
-                    "$(bundle.origin_id) -> $(bundle.destination_id), " *
+                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
                     "no elementary path from origin to destination",
                 ),
             )
@@ -108,7 +108,7 @@ function mix_greedy_and_lower_bound(
             throw(
                 ArgumentError(
                     "No feasible mixed path for bundle $bundle_idx: " *
-                    "$(bundle.origin_id) -> $(bundle.destination_id), " *
+                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
                     "no elementary path from origin to destination",
                 ),
             )

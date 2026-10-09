@@ -1,6 +1,25 @@
 """
 $TYPEDSIGNATURES
 
+Integer spatial codes of the forbidden nodes and arcs of `bundle`. Ids absent from the
+network graph are skipped. The input commodities are validated against the user nodes when the
+instance is built, so such an id is a node dropped by an instance extraction (for example an
+unused endpoint copy), it can no longer be traversed.
+"""
+function _forbidden_codes(ng, bundle::Bundle)
+    fn = Set{Int}(
+        MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes if haskey(ng, id)
+    )
+    fa = Set{Tuple{Int,Int}}(
+        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
+        (u, v) in bundle.forbidden_arcs if haskey(ng, u) && haskey(ng, v)
+    )
+    return fn, fa
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
@@ -32,6 +51,8 @@ function compute_ttg_edge_incremental_cost(
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf # Infeasible for this bundle
     end
+    # A virtual arc carries no cost and its head is a hub, which must not be charged.
+    _is_virtual(arc) && return 0.0
 
     # Each order in a bundle has a distinct delivery time step in
     # 1:time_horizon_length, so two orders differ by less than the horizon and
@@ -77,13 +98,37 @@ end
 """
 $TYPEDSIGNATURES
 
+Whether the spatial edge `su -> sv` joins the origin and the destination of `bundle`, where
+the origin (destination) is matched by its own node or by the hub that its endpoint copy is
+linked to (see [`IndexCache`](@ref)).
+"""
+@inline function _is_direct_edge(cache::IndexCache, ng, bundle::Bundle, su::Int, sv::Int)
+    return _is_bundle_end(cache.hub_origin_copy, ng, su, bundle.origin_id) &&
+           _is_bundle_end(cache.hub_destination_copy, ng, sv, bundle.destination_id)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Whether spatial node `s` is the node `end_id` of a bundle, or the hub of that node when it is
+an endpoint copy (`hub_copy` is `hub_origin_copy` or `hub_destination_copy` of the cache).
+"""
+@inline function _is_bundle_end(hub_copy::Vector{Int}, ng, s::Int, end_id::String)
+    MetaGraphsNext.label_for(ng, s) == end_id && return true
+    c = hub_copy[s]
+    return c != 0 && MetaGraphsNext.label_for(ng, c) == end_id
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute the incremental cost of a TTG edge under the lower-bound relaxation.
 Same projection logic as `compute_ttg_edge_incremental_cost`, but with
 `_edge_lower_bound_cost` substituted for `_edge_incremental_cost`.
 
-When the TTG edge is the bundle's direct arc (spatial labels equal to
-`(bundle.origin_id, bundle.destination_id)`), the per-order ceil rule is
-applied instead of the fractional formula.
+When the TTG edge is the bundle's direct arc (its spatial endpoints are the bundle's origin and
+destination, or the hubs of their endpoint copies), the per-order ceil rule is
+applied instead of the fractional formula. Virtual arcs of an endpoint split cost nothing.
 """
 function compute_ttg_edge_lower_bound_cost(
     current_solution::SolutionState,
@@ -109,16 +154,16 @@ function compute_ttg_edge_lower_bound_cost(
         return 0.0
     end
 
-    # Direct arc dispatch: bundle's origin -> destination.
-    u_id = MetaGraphsNext.label_for(ng, su)
-    v_id = MetaGraphsNext.label_for(ng, sv)
-    if u_id == bundle.origin_id && v_id == bundle.destination_id
-        return _direct_arc_lb_cost(bundle, instance, u_ttg_code, v_ttg_code, mode_selector)
-    end
     arc = ttg_edge_arc(cache, u_ttg_code, v_ttg_code)
     if isnothing(arc)
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf
+    end
+    _is_virtual(arc) && return 0.0
+
+    # Direct arc dispatch: bundle's origin -> destination.
+    if _is_direct_edge(cache, ng, bundle, su, sv)
+        return _direct_arc_lb_cost(bundle, instance, u_ttg_code, v_ttg_code, mode_selector)
     end
     total = 0.0
     # Each order in a bundle has a distinct delivery time step in
@@ -162,6 +207,7 @@ function _direct_arc_lb_cost(
         @warn "TTG edge ($(MetaGraphsNext.label_for(instance.travel_time_graph.graph, u_ttg_code)) -> $(MetaGraphsNext.label_for(instance.travel_time_graph.graph, v_ttg_code))) has no network arc!"
         return Inf
     end
+    _is_virtual(arc) && return 0.0
     node_f = cache.spatial_code_to_node_cost[cache.ttg_code_to_spatial_code[v_ttg_code]]
     total = 0.0
     for order in bundle.orders
@@ -220,17 +266,18 @@ end
 $TYPEDSIGNATURES
 
 Like `compute_ttg_edge_lower_bound_cost`, but on the bundle's direct arc
-(spatial endpoints equal to `bundle.origin_id` / `bundle.destination_id`) it
-charges the *integer* bin count (via `incremental_cost`). The result is the
-cost a bundle would pay if it shared bins for free on every multi-hop arc but
-paid for its own bins on its direct route. Path lengths of 2 (origin to
-destination) after this update mean the relaxed optimum is the direct arc,
-which is the signal used by `extract_filtered_instance`.
+(spatial endpoints equal to `bundle.origin_id` / `bundle.destination_id`, or to the hubs of
+their endpoint copies) it charges the *integer* bin count (via `incremental_cost`).
+The result is the cost a bundle would pay if it shared bins for free on every multi-hop arc but
+paid for its own bins on its direct route. A path made of the direct arc alone
+(plus the virtual arcs of an endpoint split) after this update means the relaxed optimum is
+the direct arc, which is the signal used by `extract_filtered_instance`.
 
 # Note on direct-arc detection
 
 This implementation detects a direct arc by spatial-endpoint equality with
-the routed bundle's `(origin_id, destination_id)`. The Renault reference
+the routed bundle's `(origin_id, destination_id)`, where an endpoint copy `v_o` or `v_d` of an
+endpoint split matches through its hub `v` (see `_is_direct_edge`). The Renault reference
 implementation (`Algorithms/Utils/lb_utils.jl:lb_filtering_transport_units`)
 uses an arc-type tag instead (`arcData.type == :direct`), which is a property
 of the arc itself, independent of which bundle is being routed.
@@ -258,9 +305,9 @@ function compute_ttg_edge_filtering_cost(
 ) where {C}
     cache = instance.index_cache
     ng = instance.network_graph.graph
-    u_id = MetaGraphsNext.label_for(ng, cache.ttg_code_to_spatial_code[u_ttg_code])
-    v_id = MetaGraphsNext.label_for(ng, cache.ttg_code_to_spatial_code[v_ttg_code])
-    if u_id == bundle.origin_id && v_id == bundle.destination_id
+    su = cache.ttg_code_to_spatial_code[u_ttg_code]
+    sv = cache.ttg_code_to_spatial_code[v_ttg_code]
+    if _is_direct_edge(cache, ng, bundle, su, sv)
         return compute_ttg_edge_incremental_cost(
             current_solution,
             instance,
@@ -367,11 +414,7 @@ function update_bundle_cost_matrix!(
     # Map the bundle's forbidden sets to integer spatial codes once (these sets
     # are usually empty or tiny), so the per-arc check stays on integers and
     # works for both real and virtual (two-node) bundles with no bundle index.
-    fn = Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
-    fa = Set{Tuple{Int,Int}}(
-        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
-        (u, v) in bundle.forbidden_arcs
-    )
+    fn, fa = _forbidden_codes(ng, bundle)
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
@@ -487,11 +530,7 @@ function parallel_update_bundle_cost_matrix!(
     cache = instance.index_cache
     ng = instance.network_graph.graph
 
-    fn = Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
-    fa = Set{Tuple{Int,Int}}(
-        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
-        (u, v) in bundle.forbidden_arcs
-    )
+    fn, fa = _forbidden_codes(ng, bundle)
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
     isempty(bundle_arcs) && return true

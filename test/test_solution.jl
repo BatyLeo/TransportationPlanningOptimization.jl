@@ -15,7 +15,7 @@ using .TestFixtures
 # or instances where first-fit decreasing coincides with it, like tiny), false with other bin packing or reservations.
 function check_projection(sol, instance; reservations::Bool=false, same_cost::Bool=true)
     ns = Solution(sol, instance)
-    TestFixtures.check_flows(ns, sol)
+    TestFixtures.check_flows(ns, sol, instance)
     TestFixtures.check_routes(ns, sol, instance; reservations)
     TestFixtures.check_round_trip(sol, instance; same_cost=same_cost && !reservations)
     @test is_feasible(ns, instance) == is_feasible(sol, instance)
@@ -144,7 +144,7 @@ end
     TPO._update_cost_after_removal!(slot, arc.cost, removed)
     @test length(slot.bins) == 1
     ns = Solution(sol, instance)
-    TestFixtures.check_flows(ns, sol)
+    TestFixtures.check_flows(ns, sol, instance)
     flow = only(ns.arc_flows)
     @test flow.n_bins == length(slot.bins) == 1
     @test flow.n_bins * 10.0 ≈ flow.arc_cost

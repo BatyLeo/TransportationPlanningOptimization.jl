@@ -54,6 +54,9 @@ using .TestFixtures
         @testset "Instances" begin
             include("test_instances.jl")
         end
+        @testset "Endpoint split" begin
+            include("test_endpoint_split.jl")
+        end
         @testset "Tiny instance" begin
             include("test_tiny_instance.jl")
         end

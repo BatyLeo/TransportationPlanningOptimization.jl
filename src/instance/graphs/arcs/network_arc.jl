@@ -98,6 +98,14 @@ function Base.show(io::IO, arc::MultiModalArc)
 end
 
 """
+$TYPEDSIGNATURES
+
+Whether `arc` is a virtual arc linking an endpoint copy of a split node to its hub.
+"""
+_is_virtual(arc::NetworkArc) = arc.cost isa VirtualArcCost
+_is_virtual(::MultiModalArc) = false
+
+"""
     input_arc_index(arc::AbstractNetworkArc, slot::Int)
 
 Return the index in `instance.input.arcs` of the input arc behind mode `slot` of `arc`

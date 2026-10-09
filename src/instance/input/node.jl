@@ -1,8 +1,16 @@
 """
 $TYPEDEF
 
-User-facing description of a node of the network, converted to a [`NetworkNode`](@ref)
-by [`collect_nodes`](@ref) when an [`Instance`](@ref) is built.
+User-facing description of a node of the network, converted to one or more [`NetworkNode`](@ref)s
+(a hub and endpoint copies when it is split, or two unconnected copies and no hub for a `transit=false` node that is both origin and destination) when an [`Instance`](@ref) is built.
+
+The role of a node is derived when the instance is built, from the commodities that start or
+end at it and from the arcs that enter or leave it. A node that is both a commodity endpoint
+and a crossing point is split internally into a hub and endpoint copies linked by virtual
+arcs, without any change of cost. With `transit=false` the node can never be an intermediate
+node of a route: the arcs that could only be used to cross it (an incoming arc when no
+commodity ends there, an outgoing arc when no commodity starts there) are not created.
+Arcs from a node to itself are ignored with a warning and do not count.
 
 # Fields
 $TYPEDFIELDS
@@ -10,21 +18,14 @@ $TYPEDFIELDS
 struct Node{J,N<:AbstractNodeCostFunction}
     "unique identifier for the node"
     id::String
-    "type of node: :origin, :destination, or :other"
-    node_type::Symbol
     "capacity of the node (in size units)"
     capacity::Int
     "additional information associated with the node"
     info::J
     "node cost function for this node"
     node_cost::N
-
-    function Node{J,N}(
-        id, node_type, capacity, info, node_cost
-    ) where {J,N<:AbstractNodeCostFunction}
-        _check_node_type(node_type)
-        return new{J,N}(id, node_type, capacity, info, node_cost)
-    end
+    "whether routes may cross the node (`false`: it can only be the origin or destination of a route)"
+    transit::Bool
 end
 
 """
@@ -32,20 +33,23 @@ $TYPEDSIGNATURES
 
 Keyword constructor for [`Node`](@ref).
 
-# Node Types (Symbol)
-- `:origin`: An entry point for commodities.
-- `:destination`: An exit point for commodities.
-- `:other`: An intermediate or transhipment point.
+The `node_type` keyword is deprecated and ignored, node roles are now derived from the
+commodities and arcs (use `transit=false` to forbid crossing a node).
 """
 function Node(;
     id::AbstractString,
-    node_type::Symbol,
     capacity::Int=typemax(Int),
     info=nothing,
     node_cost::AbstractNodeCostFunction=NoNodeCost(),
+    transit::Bool=true,
+    node_type=nothing,
 )
+    isnothing(node_type) || Base.depwarn(
+        "the `node_type` keyword of `Node` is ignored, node roles are now derived from the commodities and arcs (use `transit=false` for a node that cannot be crossed)",
+        :Node,
+    )
     return Node{typeof(info),typeof(node_cost)}(
-        String(id), node_type, capacity, info, node_cost
+        String(id), capacity, info, node_cost, transit
     )
 end
 
@@ -54,10 +58,10 @@ function Base.show(io::IO, node::Node)
         io,
         "Node(",
         "id=$(node.id), ",
-        "node_type=$(node.node_type), ",
         "capacity=$(node.capacity == typemax(Int) ? "∞" : string(node.capacity)), ",
         "info=$(node.info), ",
-        "node_cost=$(node.node_cost)",
+        "node_cost=$(node.node_cost), ",
+        "transit=$(node.transit)",
         ")",
     )
 end
@@ -77,7 +81,9 @@ $TYPEDSIGNATURES
 
 Collect nodes into a type-stable vector with the specified node cost types.
 Converts the user [`Node`](@ref)s to [`NetworkNode`](@ref)s, keeping their positions
-(the `input_index` of each converted node is its position).
+(the `input_index` of each converted node is its position). The converted nodes are typed
+`:other`, the roles are derived when the instance is built (see [`Node`](@ref)).
+[`build_instance`](@ref) only uses the result as a base and derives the instance nodes from it.
 Mirrors [`collect_arcs`](@ref): when an instance mixes several
 [`AbstractNodeCostFunction`](@ref) subtypes, the resulting `Vector{NetworkNode{J, CostUnion}}`
 keeps Julia's small-union optimization in play (up to 4 concrete types).
@@ -120,7 +126,7 @@ function collect_nodes(
 
     return [
         NetworkNode{J,CostUnion}(
-            node.id, node.node_type, node.capacity, node.info, node.node_cost, i
+            node.id, :other, node.capacity, node.info, node.node_cost, i
         ) for (i, node) in enumerate(nodes)
     ]
 end

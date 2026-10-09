@@ -1,8 +1,9 @@
 # Shared loop for lower_bound and lower_bound_filtering: sort bundles by
 # decreasing max single-commodity size (matching greedy_heuristic), compute
 # each bundle's shortest path against the empty solution using `cost_fn`,
-# and insert it. `on_fixed(i, path)` is called for each bundle whose path is its
-# direct arc (length 2 after shortcut removal), i.e. the ones filtering fixes.
+# and insert it. `on_fixed(i, path, k)` is called for each bundle whose path is its direct
+# arc (a single real arc once the virtual arcs of an endpoint split are dropped), i.e. the
+# ones filtering fixes. `k` is the position of that arc, see `_direct_arc_position`.
 function _shortest_path_assign!(
     current_solution::SolutionState,
     instance::Instance,
@@ -10,7 +11,7 @@ function _shortest_path_assign!(
     cost_fn,
     label::AbstractString;
     show_progress::Bool=true,
-    on_fixed::Function=(i, path) -> nothing,
+    on_fixed::Function=(i, path, k) -> nothing,
 )
     ttg = instance.travel_time_graph
     # Initialize an empty solution and a reusable buffer
@@ -34,10 +35,10 @@ function _shortest_path_assign!(
             throw(
                 ArgumentError(
                     "No feasible $label path for bundle $i: " *
-                    "$(bundle.origin_id) -> $(bundle.destination_id), " *
+                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
                     "max_transit_steps=$(max_steps), " *
-                    "forbidden_nodes=$(bundle.forbidden_nodes), " *
-                    "forbidden_arcs=$(bundle.forbidden_arcs), " *
+                    "forbidden_nodes=$(Set(_user_id(instance, id) for id in bundle.forbidden_nodes)), " *
+                    "forbidden_arcs=$(Set((_user_id(instance, u), _user_id(instance, v)) for (u, v) in bundle.forbidden_arcs)), " *
                     "no elementary path from origin to destination" *
                     (
                         label == "filtering" ?
@@ -48,7 +49,8 @@ function _shortest_path_assign!(
         end
         # Insert bundle i using computed path above
         add_bundle_path!(current_solution, instance, i, path; mode_selector)
-        length(path) == 2 && on_fixed(i, path)
+        k = _direct_arc_position(instance.index_cache, path)
+        k != 0 && on_fixed(i, path, k)
     end
     return current_solution
 end
@@ -89,8 +91,8 @@ $TYPEDSIGNATURES
 Run the lower-bound filtering pre-pass. Computes, for each bundle,
 the cheapest path under the hybrid relaxed cost from
 `compute_ttg_edge_filtering_cost`, still priced against an empty solution.
-Bundles whose result is the direct arc (path length 2) are the ones
-`extract_filtered_instance` will drop, so they are fixed: an arc already full
+Bundles whose result is the direct arc (a single real arc, see `_direct_arc_position`) are
+the ones `extract_filtered_instance` will drop, so they are fixed: an arc already full
 of fixed bundles is closed to later bundles, which keeps the fixed bundles
 jointly within the hard capacities (unlike [`lower_bound`](@ref)). If a bundle
 then has no path left, an `ArgumentError` is thrown. As in `greedy_heuristic`, bundles
@@ -109,13 +111,13 @@ function lower_bound_filtering(
     fixed = SolutionState(instance)
     fixed_pairs = Set{Tuple{Int,Int}}()
     cache = instance.index_cache
-    function fix!(i, path)
+    function fix!(i, path, k)
         add_bundle_path!(fixed, instance, i, path; mode_selector)
         push!(
             fixed_pairs,
             (
-                cache.ttg_code_to_spatial_code[path[1]],
-                cache.ttg_code_to_spatial_code[path[2]],
+                cache.ttg_code_to_spatial_code[path[k]],
+                cache.ttg_code_to_spatial_code[path[k + 1]],
             ),
         )
         return nothing

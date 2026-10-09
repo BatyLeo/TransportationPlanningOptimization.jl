@@ -118,7 +118,8 @@ function _foreach_path_edge(
                 throw(
                     ArgumentError(
                         "TTG edge ($u_label, $v_label) of bundle " *
-                        "$(bundle.origin_id) -> $(bundle.destination_id) has no network arc",
+                        "$(_user_id(instance, bundle.origin_id)) -> " *
+                        "$(_user_id(instance, bundle.destination_id)) has no network arc",
                     ),
                 )
             end

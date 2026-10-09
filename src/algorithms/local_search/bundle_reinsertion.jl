@@ -75,18 +75,10 @@ function _lazy_bundle_dijkstra!(
     # which is the common case for inbound instances).
     ng = instance.network_graph.graph
     has_forbidden = !isempty(bundle.forbidden_nodes) || !isempty(bundle.forbidden_arcs)
-    fn_codes = if has_forbidden
-        Set{Int}(MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes)
+    fn_codes, fa_codes = if has_forbidden
+        _forbidden_codes(ng, bundle)
     else
-        Set{Int}()
-    end
-    fa_codes = if has_forbidden
-        Set{Tuple{Int,Int}}(
-            (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
-            (u, v) in bundle.forbidden_arcs
-        )
-    else
-        Set{Tuple{Int,Int}}()
+        Set{Int}(), Set{Tuple{Int,Int}}()
     end
 
     if !isnothing(workspace)
