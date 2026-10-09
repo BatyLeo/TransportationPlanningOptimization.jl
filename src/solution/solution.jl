@@ -220,7 +220,7 @@ end
 
 # Single-mode edge: every commodity of the order travels on the arc with its full quantity.
 function _add_legs!(routes, arc::NetworkArc, commodities, ks, departure, arrival, _)
-    iszero(arc.input_index) && return nothing
+    _is_virtual(arc) && return nothing
     for k in ks
         push!(routes[k], Leg(arc.input_index, departure, arrival, commodities[k].quantity))
     end

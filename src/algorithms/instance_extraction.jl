@@ -10,8 +10,8 @@ are. An empty path is not direct.
 function _direct_arc_position(cache::IndexCache, path::AbstractVector{Int})
     lo, hi = 1, length(path)
     lo < hi || return 0
-    _is_virtual_edge(cache, path[lo], path[lo + 1]) && (lo += 1)
-    lo < hi && _is_virtual_edge(cache, path[hi - 1], path[hi]) && (hi -= 1)
+    _is_virtual_ttg_edge(cache, path[lo], path[lo + 1]) && (lo += 1)
+    lo < hi && _is_virtual_ttg_edge(cache, path[hi - 1], path[hi]) && (hi -= 1)
     return hi - lo == 1 ? lo : 0
 end
 

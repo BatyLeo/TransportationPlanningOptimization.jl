@@ -383,7 +383,7 @@ function _place_copies!(
             project_to_time_space_graph(v, order, instance),
         )
         edge_loads = get!(() -> [C[] for _ in 1:_slot_count(arc)], loads, edge)
-        if _is_virtual_edge(cache, u, v)
+        if _is_virtual_ttg_edge(cache, u, v)
             append!(edge_loads[1], Iterators.repeated(light, commodity.quantity))
         else
             p += 1

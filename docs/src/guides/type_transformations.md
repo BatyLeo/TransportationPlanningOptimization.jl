@@ -71,7 +71,7 @@ All orders in a bundle follow the same spatial path but with order-specific timi
 ### Node -> NetworkNode
 
 [`Node`](@ref) is the user-facing input type, converted to a [`NetworkNode`](@ref) by [`collect_nodes`](@ref TransportationPlanningOptimization.collect_nodes) during instance construction.
-Its fields are copied as is, except that `node_cost` is narrowed to a union type for type stability across heterogeneous cost functions.
+Its fields are copied as is, except `transit` (which drives the role) and `node_cost` (narrowed to a union type for type stability across heterogeneous cost functions, and `NoNodeCost` on the endpoint copies of a hub and on the origin copy of a `transit=false` node without a hub), and the `id` differs on the copies.
 Each `NetworkNode` links back to its `Node` through its `input_index`.
 The role of a node (hub, plain origin or destination, or split into a hub and endpoint copies) is derived from the commodities and arcs, see the [Getting Started](../getting_started.md) page.
 The `info` type parameter is taken from the first node, so all nodes must share one `info` type.

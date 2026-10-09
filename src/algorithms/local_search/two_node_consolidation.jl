@@ -173,7 +173,7 @@ function compute_candidate_nodes(instance::Instance)
     for s in src_codes, d in dst_codes
         s != d &&
             Graphs.has_edge(g, s, d) &&
-            !_is_virtual_edge(cache, s, d) &&
+            !_is_virtual_ttg_edge(cache, s, d) &&
             push!(valid_pairs, (s, d))
     end
     return valid_pairs

@@ -34,14 +34,14 @@ using Dates
 # Create nodes with unique IDs (their roles are derived from the commodities and arcs):
 
 nodes = [
-    Node(; id="A1", node_type=:origin),
-    Node(; id="A2", node_type=:origin),
-    Node(; id="B1", node_type=:other),
-    Node(; id="B2", node_type=:other),
-    Node(; id="B3", node_type=:other),
-    Node(; id="B4", node_type=:other),
-    Node(; id="C1", node_type=:destination),
-    Node(; id="C2", node_type=:destination),
+    Node(; id="A1"),
+    Node(; id="A2"),
+    Node(; id="B1"),
+    Node(; id="B2"),
+    Node(; id="B3"),
+    Node(; id="B4"),
+    Node(; id="C1"),
+    Node(; id="C2"),
 ]
 
 # ## Define Transportation Arcs

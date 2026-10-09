@@ -111,11 +111,11 @@ end
 $TYPEDSIGNATURES
 
 Whether spatial node `s` is the node `end_id` of a bundle, or the hub of that node when it is
-an endpoint copy (`copy_of` is `hub_origin_copy` or `hub_destination_copy` of the cache).
+an endpoint copy (`hub_copy` is `hub_origin_copy` or `hub_destination_copy` of the cache).
 """
-@inline function _is_bundle_end(copy_of::Vector{Int}, ng, s::Int, end_id::String)
+@inline function _is_bundle_end(hub_copy::Vector{Int}, ng, s::Int, end_id::String)
     MetaGraphsNext.label_for(ng, s) == end_id && return true
-    c = copy_of[s]
+    c = hub_copy[s]
     return c != 0 && MetaGraphsNext.label_for(ng, c) == end_id
 end
 

@@ -708,6 +708,10 @@ Commodities with their origin equal to their destination are dropped: they never
 nothing, so they are mapped to `(0, 0)` in `instance.commodity_to_order`, get an empty route in a
 [`Solution`](@ref) and are ignored by the time grid.
 Arcs from a node to itself are ignored with a warning.
+The role of each node is derived from the commodities and arcs, and the nodes that are both
+commodity endpoints and crossing points are split internally into a hub and endpoint copies.
+Arcs that could only be used to cross a `transit=false` node are ignored with a warning
+(see [`Node`](@ref)).
 An `ArgumentError` is thrown if every commodity is dropped, or if a commodity endpoint is not a
 node id of `nodes`, or if a forbidden node or arc endpoint is not a node id of `nodes`.
 """

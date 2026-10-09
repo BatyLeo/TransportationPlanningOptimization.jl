@@ -806,7 +806,7 @@ end
         spatial(code) = MetaGraphsNext.label_for(g, code)[1]
         pairs = TPO.compute_candidate_nodes(instance)
         @test !isempty(pairs)
-        @test all(((s, d),) -> !TPO._is_virtual_edge(cache, s, d), pairs)
+        @test all(((s, d),) -> !TPO._is_virtual_ttg_edge(cache, s, d), pairs)
         # The hub B has the virtual arc B -> B_d, which is a TTG edge but not a candidate
         @test any(MetaGraphsNext.edge_labels(g)) do (u, v)
             u[1] == "B" && v[1] == "B_d"

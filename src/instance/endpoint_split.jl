@@ -94,7 +94,8 @@ commodity ends at `v`:
 
 The internal arcs keep the position of their input arc as `input_index`. Every loop arc
 (origin id equal to destination id) is ignored, as are the arcs skipped by the `transit=false`
-rules. Ignored arcs have no internal arc and a separate warning reports each kind.
+rules. Ignored arcs have no internal arc. Loops have their own warning, while skipped arcs and
+isolated `transit=false` nodes share another one.
 Duplicated node ids are rejected. The node cost and arc types are widened with the types of the
 copies and virtual arcs only when some are created.
 """

@@ -599,6 +599,9 @@ end
                 net_nodes, [("A", "B", arc), bad]
             )
         end
+        @test_throws ArgumentError NetworkGraph(
+            [net_nodes; NetworkNode(; id="A", node_type=:origin)], [("A", "B", arc)]
+        )
     end
 end
 

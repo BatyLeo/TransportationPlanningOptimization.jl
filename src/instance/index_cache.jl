@@ -3,7 +3,7 @@ $TYPEDEF
 
 Precomputed integer-indexed lookup tables, derived once from the instance graphs and never mutated.
 They replace MetaGraphsNext label-to-code hashing with flat array indexing.
-Unlike `EndpointSplit.origin_copy` and `destination_copy` (user ids to copy ids, including nodes without a hub), `hub_origin_copy` and `hub_destination_copy` are indexed by spatial code and only cover hubs.
+Unlike the construction-time `EndpointSplit` fields `origin_copy` and `destination_copy` (user ids to copy ids, including nodes without a hub), `hub_origin_copy` and `hub_destination_copy` are indexed by spatial code and only cover hubs.
 
 # Fields
 $TYPEDFIELDS
@@ -98,7 +98,7 @@ $TYPEDSIGNATURES
 Whether the travel-time edge `u -> v` (codes) is a virtual arc of an endpoint split.
 Shortcut edges (same spatial node) have no arc and are not virtual.
 """
-@inline function _is_virtual_edge(cache::IndexCache, u::Int, v::Int)
+@inline function _is_virtual_ttg_edge(cache::IndexCache, u::Int, v::Int)
     arc = ttg_edge_arc(cache, u, v)
     return !isnothing(arc) && _is_virtual(arc)
 end

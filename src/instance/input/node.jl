@@ -1,8 +1,8 @@
 """
 $TYPEDEF
 
-User-facing description of a node of the network, converted to a [`NetworkNode`](@ref)
-by [`collect_nodes`](@ref) when an [`Instance`](@ref) is built.
+User-facing description of a node of the network, converted to one or more [`NetworkNode`](@ref)s
+(a hub and endpoint copies when it is split, or two unconnected copies and no hub for a `transit=false` node that is both origin and destination) when an [`Instance`](@ref) is built.
 
 The role of a node is derived when the instance is built, from the commodities that start or
 end at it and from the arcs that enter or leave it. A node that is both a commodity endpoint
@@ -10,6 +10,7 @@ and a crossing point is split internally into a hub and endpoint copies linked b
 arcs, without any change of cost. With `transit=false` the node can never be an intermediate
 node of a route: the arcs that could only be used to cross it (an incoming arc when no
 commodity ends there, an outgoing arc when no commodity starts there) are not created.
+Arcs from a node to itself are ignored with a warning and do not count.
 
 # Fields
 $TYPEDFIELDS
@@ -82,6 +83,7 @@ Collect nodes into a type-stable vector with the specified node cost types.
 Converts the user [`Node`](@ref)s to [`NetworkNode`](@ref)s, keeping their positions
 (the `input_index` of each converted node is its position). The converted nodes are typed
 `:other`, the roles are derived when the instance is built (see [`Node`](@ref)).
+[`build_instance`](@ref) only uses the result as a base and derives the instance nodes from it.
 Mirrors [`collect_arcs`](@ref): when an instance mixes several
 [`AbstractNodeCostFunction`](@ref) subtypes, the resulting `Vector{NetworkNode{J, CostUnion}}`
 keeps Julia's small-union optimization in play (up to 4 concrete types).
