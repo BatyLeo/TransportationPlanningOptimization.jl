@@ -55,7 +55,7 @@ Result of [`iterated_local_search!`](@ref).
 $TYPEDFIELDS
 """
 struct ILSResult
-    "Total cost improvement (non-negative, 0.0 if reverted)"
+    "Total cost improvement (non-negative)"
     improvement::Float64
     "Cost of the best solution found"
     best_cost::Float64

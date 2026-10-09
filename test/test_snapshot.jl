@@ -218,3 +218,52 @@ end
     @test isempty(slot.commodities) && isempty(slot.bins)
     @test slot.arc_cost == 0.0 && slot.node_cost == 0.0 && slot.total_size == 0.0
 end
+
+mutable struct MutableInfo
+    tag::Int
+end
+
+@testset "snapshot and restore keep commodity equality with a mutable info" begin
+    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(c),
+            travel_time=Day(d),
+            capacity=10,
+        ) for (c, d) in ((10.0, 1), (5.0, 2))
+    ]
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="B",
+            quantity=2,
+            departure_date=DateTime(2024, 1, d),
+            max_delivery_time=Day(5),
+            size=1.0,
+            info=MutableInfo(d),
+        ) for d in 1:3
+    ]
+    instance = Instance(nodes, arcs, commodities, Day(1); allow_multimodal=true)
+    sol = greedy_heuristic(instance; show_progress=false)
+    original_cost = cost(sol)
+    original_paths = deepcopy(sol.bundle_paths)
+    @test is_feasible(sol, instance)
+
+    snap = snapshot_solution(sol, instance)
+    @test is_feasible(snap, instance)
+    local_search!(sol, instance; time_limit=1.0)
+    TPO.remove_bundle_path!(sol, instance, 1)
+
+    for _ in 1:2
+        restore_solution!(sol, snap, instance)
+        @test is_feasible(sol, instance)
+        @test cost(sol) ≈ original_cost
+        @test sol.bundle_paths == original_paths
+        # Mutating the restored state must not alter the snapshot
+        TPO.remove_bundle_path!(sol, instance, 1)
+    end
+    @test cost(snap) ≈ original_cost
+    @test is_feasible(snap, instance)
+end

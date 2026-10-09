@@ -9,7 +9,8 @@ isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
 
 # A perturbation that never changes anything (used to exercise the
-# no_change / max_no_change convergence path)
+# no_change / max_no_change convergence path). It loops until the perturbation
+# time limit, so tests must use a small `perturbation_time_limit`.
 struct DegradingPerturbation <: AbstractPerturbation end
 
 function TransportationPlanningOptimization.perturbate!(
@@ -98,7 +99,7 @@ end
     @test is_feasible(sol, instance)
 end
 
-@testset "ILS reverts on degradation" begin
+@testset "ILS never ends worse than the start" begin
     instance = TestFixtures.small_instance()
     sol = TestFixtures.small_greedy()
     local_search!(sol, instance; time_limit=3.0)
@@ -108,10 +109,64 @@ end
         sol,
         instance,
         [DegradingPerturbation()];
-        config=ILSConfig(; time_limit=5, max_no_change=1),
+        config=ILSConfig(;
+            time_limit=5, perturbation_time_limit=0.2, ls_time_limit=1, max_no_change=1
+        ),
         verbose=false,
     )
 
     @test result.improvement == 0.0 || result.best_cost <= start_cost + 1e-6
+    @test is_feasible(sol, instance)
+end
+
+# Reports one changed bundle per call without touching the solution, and counts the calls.
+# The infinite improvement ends the round after a single call (cost threshold reached).
+struct CountingPerturbation <: AbstractPerturbation
+    calls::Base.RefValue{Int}
+end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::CountingPerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+)
+    p.calls[] += 1
+    return (Inf, 1)
+end
+
+@testset "ILS runs local search only once the accumulated change threshold is reached" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    perturbation = CountingPerturbation(Ref(0))
+
+    # cost_update! runs once before the loop, then once after each local search phase
+    calls_at_update = Int[]
+    function record_update!(inst, s)
+        push!(calls_at_update, perturbation.calls[])
+        return nothing
+    end
+
+    result = iterated_local_search!(
+        sol,
+        instance,
+        [perturbation];
+        config=ILSConfig(;
+            time_limit=30,
+            perturbation_time_limit=1,
+            ls_time_limit=1,
+            change_threshold_ratio=3 / bundle_count(instance),
+            max_no_improv=3,
+        ),
+        (cost_update!)=record_update!,
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+
+    @test length(calls_at_update) >= 2
+    @test calls_at_update[1] == 0
+    @test calls_at_update == 3 .* (0:(length(calls_at_update) - 1))
+    @test perturbation.calls[] == result.iterations
     @test is_feasible(sol, instance)
 end

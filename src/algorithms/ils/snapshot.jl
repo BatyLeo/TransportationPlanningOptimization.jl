@@ -6,7 +6,7 @@ Create an independent copy of `sol` that can be restored later via
 do not affect the returned copy.
 """
 function snapshot_solution(sol::SolutionState, instance::Instance)
-    return deepcopy(sol)
+    return copy(sol)
 end
 
 """
@@ -19,8 +19,9 @@ After restoration, `sol` is equivalent to `snapshot` at the time it was
 taken. The `snapshot` object remains valid and may be reused.
 """
 function restore_solution!(sol::SolutionState, snapshot::SolutionState, instance::Instance)
-    copy!(sol.bundle_paths, snapshot.bundle_paths)
+    fresh = copy(snapshot)
+    copy!(sol.bundle_paths, fresh.bundle_paths)
     empty!(sol.assignments)
-    merge!(sol.assignments, deepcopy(snapshot.assignments))
+    merge!(sol.assignments, fresh.assignments)
     return sol
 end
