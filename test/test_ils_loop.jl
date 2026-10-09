@@ -120,7 +120,7 @@ end
 end
 
 # Reports one changed bundle per call without touching the solution, and counts the calls.
-# The infinite improvement ends the round after a single call (cost threshold reached).
+# The infinite cost increase ends the round after a single call (cost threshold reached).
 struct CountingPerturbation <: AbstractPerturbation
     calls::Base.RefValue{Int}
 end
@@ -169,4 +169,61 @@ end
     @test calls_at_update == 3 .* (0:(length(calls_at_update) - 1))
     @test perturbation.calls[] == result.iterations
     @test is_feasible(sol, instance)
+end
+
+# Reports a cost increase of a fixed fraction of the current cost and no changed bundle.
+struct FixedIncreasePerturbation <: AbstractPerturbation
+    calls::Base.RefValue{Int}
+    fraction::Float64
+end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::FixedIncreasePerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+)
+    p.calls[] += 1
+    return (p.fraction * cost(sol), 0)
+end
+
+@testset "ILS cost threshold only counts cost increases" begin
+    instance = TestFixtures.small_instance()
+
+    # A cheaper perturbation never reaches the cost threshold, so the phase runs until its time limit
+    sol = TestFixtures.small_greedy()
+    cheaper = FixedIncreasePerturbation(Ref(0), -0.6)
+    result = iterated_local_search!(
+        sol,
+        instance,
+        [cheaper];
+        config=ILSConfig(;
+            time_limit=5, perturbation_time_limit=0.05, ls_time_limit=1, max_no_change=1
+        ),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+    @test result.iterations == 1
+    @test cheaper.calls[] > 1
+
+    # A large cost increase ends the phase after a single call
+    sol = TestFixtures.small_greedy()
+    costlier = FixedIncreasePerturbation(Ref(0), 0.6)
+    result = iterated_local_search!(
+        sol,
+        instance,
+        [costlier];
+        config=ILSConfig(;
+            time_limit=5,
+            perturbation_time_limit=0.05,
+            ls_time_limit=1,
+            cost_threshold_ratio=0.5,
+            max_no_change=1,
+        ),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+    @test result.iterations == 1
+    @test costlier.calls[] == 1
 end

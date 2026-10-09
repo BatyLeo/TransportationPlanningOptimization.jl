@@ -113,7 +113,7 @@ function TransportationPlanningOptimization.perturbate!(
     if !isempty(path)
         TransportationPlanningOptimization.add_bundle_path!(sol, instance, idx, path)
     end
-    return (before - cost(sol), 1)
+    return (cost(sol) - before, 1)
 end
 
 tiny_parsed() = _parsed("tiny")

@@ -5,7 +5,7 @@ Run Iterated Local Search on `sol`.
 
 Cycles through `perturbations` round-robin. Each round repeats the perturbation until the accumulated
 number of changed bundles reaches the change threshold, or the accumulated cost
-improvement reaches the cost threshold, or the perturbation time limit is hit.
+increase reaches the cost threshold, or the perturbation time limit is hit.
 The accumulators are only reset after a local search phase.
 A round with no accumulated change counts toward `max_no_change`.
 Local search runs only once the change threshold is reached, followed by a second
@@ -50,7 +50,7 @@ function iterated_local_search!(
     cost_threshold = config.cost_threshold_ratio * best_cost
 
     changed = 0
-    cost_added = 0.0
+    accumulated_increase = 0.0
     no_change = 0
     no_improv = 0
     iteration = 0
@@ -62,10 +62,10 @@ function iterated_local_search!(
 
         perturbation_start = time()
         while (time() - perturbation_start) < config.perturbation_time_limit
-            improv, n = perturbate!(sol, instance, perturbation; rng, verbose)
+            cost_increase, n = perturbate!(sol, instance, perturbation; rng, verbose)
             changed += n
-            cost_added += improv
-            if changed >= change_threshold || cost_added >= cost_threshold
+            accumulated_increase += cost_increase
+            if changed >= change_threshold || accumulated_increase >= cost_threshold
                 break
             end
         end
@@ -81,7 +81,7 @@ function iterated_local_search!(
                 sol, instance, mode_selector; time_limit=config.ls_time_limit, rng
             )
             changed = 0
-            cost_added = 0.0
+            accumulated_increase = 0.0
 
             current_cost = cost(sol)
             if current_cost > best_cost && current_cost < 1.00025 * best_cost

@@ -69,7 +69,7 @@ function _perturbate_bundle_group!(
         TPO.restore_solution!(sol, snap, instance)
         return (0.0, 0)
     end
-    return (before - after, length(bundle_idxs))
+    return (after - before, length(bundle_idxs))
 end
 
 function TPO.perturbate!(
@@ -650,8 +650,8 @@ function TPO.perturbate!(
         return (0.0, 0)
     end
 
-    improvement = before - after
+    cost_increase = after - before
     n_changed = sum(changed_mask)
-    verbose && @info "MILP perturbation accepted" improvement n_changed
-    return (improvement, n_changed)
+    verbose && @info "MILP perturbation accepted" cost_increase n_changed
+    return (cost_increase, n_changed)
 end

@@ -40,7 +40,7 @@ function TransportationPlanningOptimization.perturbate!(
         restore_solution!(sol, snap, instance)
         return (0.0, 0)
     end
-    return (before - after, 1)
+    return (after - before, 1)
 end
 
 function build_small_instance()

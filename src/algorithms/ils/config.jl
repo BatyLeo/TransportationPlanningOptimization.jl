@@ -18,7 +18,7 @@ struct ILSConfig
     ls_time_limit::Float64
     "Fraction of bundles that must change to trigger local search"
     change_threshold_ratio::Float64
-    "Fraction of cost change that triggers local search"
+    "Fraction of the best cost that the cost increase must reach to end a perturbation"
     cost_threshold_ratio::Float64
     "Stop after this many consecutive perturbation rounds with zero changes"
     max_no_change::Int
