@@ -18,6 +18,8 @@ withenv("DATADEPS_ALWAYS_ACCEPT" => "true") do
                 f in ("nodes", "legs", "commodities")
             )...,
         )
+        # the `cross_plat` platform loops are dropped by the parser
+        @test all(a -> a.origin_id != a.destination_id, arcs)
         expected = Instance(nodes, arcs, commodities, Week(1); wrap_time=true)
         @test bundle_count(instance) == bundle_count(expected)
         @test commodity_count(instance) == commodity_count(expected)

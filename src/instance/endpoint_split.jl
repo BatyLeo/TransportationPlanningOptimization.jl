@@ -13,21 +13,15 @@ struct EndpointSplit
     origin_copy::Dict{String,String}
     "id of the destination copy of the user nodes that have one, bundles ending there are rooted on it"
     destination_copy::Dict{String,String}
-    "user nodes without a hub (`transit=false` origin and destination), mapped to their `(origin copy, destination copy)` ids"
-    hubless::Dict{String,Tuple{String,String}}
+    "ids of the user nodes without a hub (`transit=false` origin and destination), their copies are in `origin_copy` and `destination_copy`"
+    hubless::Set{String}
     "user node id of every copy"
     user_id::Dict{String,String}
-    "`(origin, destination)` user ids of the input arcs that were skipped"
-    skipped_arcs::Set{Tuple{String,String}}
 end
 
 function EndpointSplit()
     return EndpointSplit(
-        Dict{String,String}(),
-        Dict{String,String}(),
-        Dict{String,Tuple{String,String}}(),
-        Dict{String,String}(),
-        Set{Tuple{String,String}}(),
+        Dict{String,String}(), Dict{String,String}(), Set{String}(), Dict{String,String}()
     )
 end
 
@@ -37,27 +31,26 @@ $TYPEDSIGNATURES
 Translate the forbidden constraints of a bundle to the nodes of `split` that have no hub.
 Forbidding such a node `v` forbids both its copies, the forbidden arc `(u, v)` becomes
 `(u, v_d)` and `(v, w)` becomes `(v_o, w)`. Forbidding a node that has a hub changes nothing
-(it blocks both virtual arcs). The forbidden arcs that match a skipped input arc are dropped.
+(it blocks both virtual arcs). A forbidden arc on a skipped input arc between distinct nodes is kept,
+it is harmless because it matches no internal arc. Loop arcs are dropped before this translation.
 """
 function _translate_forbidden(split::EndpointSplit, forbidden_nodes, forbidden_arcs)
-    isempty(split.hubless) &&
-        isempty(split.skipped_arcs) &&
-        return forbidden_nodes, forbidden_arcs
+    isempty(split.hubless) && return forbidden_nodes, forbidden_arcs
     nodes = Set{String}()
     for id in forbidden_nodes
-        copies = get(split.hubless, id, nothing)
-        isnothing(copies) ? push!(nodes, id) : union!(nodes, copies)
+        if id in split.hubless
+            push!(nodes, split.origin_copy[id], split.destination_copy[id])
+        else
+            push!(nodes, id)
+        end
     end
     arcs = Set{Tuple{String,String}}()
     for (u, v) in forbidden_arcs
-        (u, v) in split.skipped_arcs && continue
-        u_copies = get(split.hubless, u, nothing)
-        v_copies = get(split.hubless, v, nothing)
         push!(
             arcs,
             (
-                isnothing(u_copies) ? u : first(u_copies),
-                isnothing(v_copies) ? v : last(v_copies),
+                u in split.hubless ? split.origin_copy[u] : u,
+                v in split.hubless ? split.destination_copy[v] : v,
             ),
         )
     end
@@ -99,11 +92,11 @@ commodity ends at `v`:
   `v_d` if `D`, linked by virtual arcs `v_o -> v` and `v -> v_d` (see [`VirtualArcCost`](@ref)).
   The copies have no node cost, so the split does not change any cost.
 
-The internal arcs keep the position of their input arc as `input_index`. The skipped arcs
-(including the loops on `transit=false` nodes) have no internal arc and a warning reports
-them. The arcs that make a `transit=true` node crossable are the kept ones that are not
-loops. Duplicated node ids are rejected. The node cost and arc types are widened with
-the types of the copies and virtual arcs only when some are created.
+The internal arcs keep the position of their input arc as `input_index`. Every loop arc
+(origin id equal to destination id) is ignored, as are the arcs skipped by the `transit=false`
+rules. Ignored arcs have no internal arc and a separate warning reports each kind.
+Duplicated node ids are rejected. The node cost and arc types are widened with the types of the
+copies and virtual arcs only when some are created.
 """
 function _derive_network(
     nodes::Vector{<:Node}, arcs::Vector{Tuple{String,String,NA}}, order_dict
@@ -124,8 +117,9 @@ function _derive_network(
     destinations = Set(key[3] for key in keys(order_dict))
 
     # Skipped arcs depend only on the commodities: a `transit=false` node keeps an incoming
-    # arc only if it is a destination, an outgoing arc only if it is an origin, and no loop.
-    # A loop on a `transit=true` node is kept but does not make the node crossable.
+    # arc only if it is a destination and an outgoing arc only if it is an origin.
+    # Every loop is ignored first, a path never uses an arc from a node to itself.
+    loops = Tuple{Int,String,String}[]
     skipped = Tuple{Int,String,String}[]
     kept = Int[]
     has_in = Set{String}()
@@ -138,23 +132,24 @@ function _derive_network(
                 ),
             )
         end
-        if (!by_id[o].transit && (o == d || !(o in origins))) ||
+        if o == d
+            push!(loops, (i, o, d))
+            continue
+        end
+        if (!by_id[o].transit && !(o in origins)) ||
             (!by_id[d].transit && !(d in destinations))
             push!(skipped, (i, o, d))
             continue
         end
         push!(kept, i)
-        if o != d
-            push!(has_out, o)
-            push!(has_in, d)
-        end
+        push!(has_out, o)
+        push!(has_in, d)
     end
 
     taken = Set(keys(by_id))
     split = EndpointSplit()
-    union!(split.skipped_arcs, (o, d) for (_, o, d) in skipped)
-    # (input node index, id, node_type, node cost is dropped)
-    specs = Tuple{Int,String,Symbol,Bool}[]
+    # one entry per internal node, `keep_cost` tells whether it keeps the node cost of its user node
+    specs = @NamedTuple{k::Int, id::String, node_type::Symbol, keep_cost::Bool}[]
     hub_copies = Tuple{String,String,Bool}[]  # (hub id, copy id, copy is an origin)
     n_isolated = 0
 
@@ -166,33 +161,37 @@ function _derive_network(
             if is_origin && is_destination
                 d_id = _copy_id!(taken, id, "_d")
                 o_id = _copy_id!(taken, id, "_o")
-                push!(specs, (k, d_id, :destination, false), (k, o_id, :origin, true))
+                push!(
+                    specs,
+                    (; k, id=d_id, node_type=:destination, keep_cost=true),
+                    (; k, id=o_id, node_type=:origin, keep_cost=false),
+                )
                 split.origin_copy[id], split.destination_copy[id] = o_id, d_id
-                split.hubless[id] = (o_id, d_id)
+                push!(split.hubless, id)
                 split.user_id[o_id], split.user_id[d_id] = id, id
             elseif is_origin
-                push!(specs, (k, id, :origin, false))
+                push!(specs, (; k, id, node_type=:origin, keep_cost=true))
             elseif is_destination
-                push!(specs, (k, id, :destination, false))
+                push!(specs, (; k, id, node_type=:destination, keep_cost=true))
             else
-                push!(specs, (k, id, :other, false))
+                push!(specs, (; k, id, node_type=:other, keep_cost=true))
                 n_isolated += 1
             end
         elseif !is_origin && !is_destination
-            push!(specs, (k, id, :other, false))
+            push!(specs, (; k, id, node_type=:other, keep_cost=true))
         elseif is_origin && !is_destination && !(id in has_in)
-            push!(specs, (k, id, :origin, false))
+            push!(specs, (; k, id, node_type=:origin, keep_cost=true))
         elseif is_destination && !is_origin && !(id in has_out)
-            push!(specs, (k, id, :destination, false))
+            push!(specs, (; k, id, node_type=:destination, keep_cost=true))
         else
-            push!(specs, (k, id, :other, false))
+            push!(specs, (; k, id, node_type=:other, keep_cost=true))
             for (is_role, suffix, node_type, role_dict) in (
                 (is_origin, "_o", :origin, split.origin_copy),
                 (is_destination, "_d", :destination, split.destination_copy),
             )
                 is_role || continue
                 copy_id = _copy_id!(taken, id, suffix)
-                push!(specs, (k, copy_id, node_type, true))
+                push!(specs, (; k, id=copy_id, node_type, keep_cost=false))
                 push!(hub_copies, (id, copy_id, node_type == :origin))
                 role_dict[id] = copy_id
                 split.user_id[copy_id] = id
@@ -212,8 +211,8 @@ function _derive_network(
             info=a.info,
             input_index=i,
         )
-        arc_tail = haskey(split.hubless, o) ? first(split.hubless[o]) : o
-        arc_head = haskey(split.hubless, d) ? last(split.hubless[d]) : d
+        arc_tail = o in split.hubless ? split.origin_copy[o] : o
+        arc_head = d in split.hubless ? split.destination_copy[d] : d
         push!(indexed_arcs, (arc_tail, arc_head, arc))
     end
     for (hub_id, copy_id, is_origin) in hub_copies
@@ -224,12 +223,27 @@ function _derive_network(
         )
     end
 
+    if !isempty(loops)
+        i, o, d = first(loops)
+        @warn "$(length(loops)) loop arc(s) ignored: an arc from a node to itself is never used (waiting at a node will be modeled by inventory), for example arc $i ($(repr(o)) -> $(repr(d)))"
+    end
+    messages = String[]
     if !isempty(skipped)
         examples = join(
             ("arc $i ($(repr(o)) -> $(repr(d)))" for (i, o, d) in first(skipped, 3)), ", "
         )
-        @warn "$(length(skipped)) input arc(s) skipped because they cross or loop on a node with `transit=false` (for example $examples), $n_isolated such node(s) are neither the origin nor the destination of a commodity"
+        push!(
+            messages,
+            "$(length(skipped)) input arc(s) skipped because they cross a node with `transit=false` (for example $examples)",
+        )
     end
+    if n_isolated > 0
+        push!(
+            messages,
+            "$n_isolated node(s) with `transit=false` are neither the origin nor the destination of a commodity",
+        )
+    end
+    isempty(messages) || @warn join(messages, ", ")
     return network_nodes, indexed_arcs, split
 end
 
@@ -251,12 +265,13 @@ end
 """
 $TYPEDSIGNATURES
 
-Internal nodes from the `specs` `(input node index, id, node_type, node cost is dropped)`.
-The node cost types are widened with [`NoNodeCost`](@ref) when a copy drops its node cost.
+Internal nodes from the `specs` named tuples `(; k, id, node_type, keep_cost)`, where `k` is the
+input node index and `keep_cost` tells whether the internal node keeps the node cost of the user
+node. The node cost types are widened with [`NoNodeCost`](@ref) when some node does not keep it.
 """
 function _collect_network_nodes(nodes::Vector{<:Node}, specs)
     cost_types = infer_node_cost_types(nodes)
-    if any(last, specs)
+    if any(s -> !s.keep_cost, specs)
         cost_types = Tuple(unique((cost_types..., NoNodeCost)))
     end
     base = collect_nodes(cost_types, nodes; validate=false)
@@ -266,8 +281,8 @@ function _collect_network_nodes(nodes::Vector{<:Node}, specs)
             node_type,
             base[k].capacity,
             base[k].info,
-            dropped ? NoNodeCost() : base[k].node_cost,
+            keep_cost ? base[k].node_cost : NoNodeCost(),
             k,
-        ) for (k, id, node_type, dropped) in specs
+        ) for (; k, id, node_type, keep_cost) in specs
     ]
 end

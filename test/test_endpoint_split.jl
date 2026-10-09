@@ -168,9 +168,9 @@ end
         _arc("U", "R"),  # 6: skipped, U is isolated
     ]
     commodities = [_com("Q", "P"), _com("P", "R")]
-    instance = @test_logs (:warn, r"4 input arc\(s\) skipped.*1 such node") _instance(
-        nodes, arcs, commodities
-    )
+    instance = @test_logs (
+        :warn, r"4 input arc\(s\) skipped.*1 node\(s\) with `transit=false` are neither"
+    ) _instance(nodes, arcs, commodities)
     # P is both an origin and a destination: two disconnected nodes without hub
     @test _types(instance) == Dict(
         "Q" => :origin,
@@ -453,26 +453,33 @@ end
     nodes = [Node(; id="O"), Node(; id="X", transit=false), Node(; id="D")]
     arcs = [_arc("O", "D"), _arc("X", "O"), _arc("O", "X"), _arc("O", "O"), _arc("X", "X")]
     commodities = [_com("O", "D"), _com("O", "X")]
-    instance = @test_logs (:warn, r"2 input arc\(s\) skipped") _instance(
-        nodes, arcs, commodities
-    )
+    instance = @test_logs (:warn, r"2 loop arc\(s\) ignored.*arc 4 \(\"O\" -> \"O\"\)") (
+        :warn, r"1 input arc\(s\) skipped"
+    ) match_mode = :any _instance(nodes, arcs, commodities)
     @test _types(instance) == Dict("O" => :origin, "X" => :destination, "D" => :destination)
     indexed, virtual = _arcs(instance)
     @test isempty(virtual)
-    # The loop on the transit=true node is kept, the loop on X and the arc X -> O are skipped
-    @test indexed == Dict(("O", "D") => 1, ("O", "X") => 3, ("O", "O") => 4)
+    # Every loop and the arc X -> O are skipped, the other arcs keep their input index
+    @test indexed == Dict(("O", "D") => 1, ("O", "X") => 3)
 
-    # A loop on a transit=false node that is an origin and a destination is skipped
+    # A loop on a transit=false node that is an origin and a destination is ignored
     nodes = [Node(; id="Q"), Node(; id="P", transit=false), Node(; id="R")]
     arcs = [_arc("Q", "P"), _arc("P", "R"), _arc("P", "P")]
-    instance = @test_logs (:warn, r"1 input arc\(s\) skipped") _instance(
+    instance = @test_logs (:warn, r"1 loop arc\(s\) ignored") match_mode = :any _instance(
         nodes, arcs, [_com("Q", "P"), _com("P", "R")]
     )
     indexed, _ = _arcs(instance)
     @test indexed == Dict(("Q", "P_d") => 1, ("P_o", "R") => 2)
+
+    # A transit=false node with no commodity and only a loop is still reported as isolated
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="U", transit=false)]
+    arcs = [_arc("A", "B"), _arc("U", "U")]
+    @test_logs (:warn, r"1 loop arc\(s\) ignored") (
+        :warn, r"^1 node\(s\) with `transit=false` are neither"
+    ) _instance(nodes, arcs, [_com("A", "B")])
 end
 
-@testset "Forbidden arcs of skipped input arcs are dropped" begin
+@testset "Forbidden arcs of skipped input arcs are kept and harmless" begin
     nodes = [
         Node(; id="A"),
         Node(; id="B", transit=false),
@@ -493,7 +500,59 @@ end
     bundle = only(
         b for b in instance.bundles if (b.origin_id, b.destination_id) == ("A", "C")
     )
-    @test bundle.forbidden_arcs == Set([("A", "B_d")])
+    @test bundle.forbidden_arcs == Set([("E", "B_d"), ("A", "B_d")])
+    @test is_feasible(greedy_heuristic(instance; show_progress=false), instance)
+end
+
+@testset "Forbidden loop arcs are dropped and do not block waiting" begin
+    loop_warning = (:warn, r"1 loop arc\(s\) ignored")
+    # Arrival mode, loop on the transit=false origin
+    nodes = [Node(; id="A", transit=false), Node(; id="B"), Node(; id="C")]
+    arcs = [_arc("A", "B"), _arc("B", "C"), _arc("A", "A")]
+    com = _com("A", "C"; days=4, arrival=true, forbidden_arcs=[("A", "A")])
+    instance = @test_logs loop_warning match_mode = :any _instance(nodes, arcs, [com])
+    @test first(_arcs(instance)) == Dict(("A", "B") => 1, ("B", "C") => 2)
+    @test isempty(only(instance.bundles).forbidden_arcs)
+    solution = greedy_heuristic(instance; show_progress=false)
+    @test is_feasible(solution, instance)
+    @test cost(solution) == 2.0
+
+    # Departure mode, loop on the transit=false destination
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C", transit=false)]
+    arcs = [_arc("A", "B"), _arc("B", "C"), _arc("C", "C")]
+    com = _com("A", "C"; days=4, forbidden_arcs=[("C", "C")])
+    instance = @test_logs loop_warning match_mode = :any _instance(nodes, arcs, [com])
+    @test isempty(only(instance.bundles).forbidden_arcs)
+    solution = greedy_heuristic(instance; show_progress=false)
+    @test is_feasible(solution, instance)
+    @test cost(solution) == 2.0
+
+    # Loop on a transit node, which is not a usable arc either, forbidden or not
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
+    arcs = [_arc("A", "B"), _arc("B", "C"), _arc("A", "A")]
+    for arrival in (true, false), forbidden in (Tuple{String,String}[], [("A", "A")])
+        com = _com("A", "C"; days=4, arrival, forbidden_arcs=forbidden)
+        instance = @test_logs loop_warning match_mode = :any _instance(nodes, arcs, [com])
+        @test first(_arcs(instance)) == Dict(("A", "B") => 1, ("B", "C") => 2)
+        @test isempty(only(instance.bundles).forbidden_arcs)
+        solution = greedy_heuristic(instance; show_progress=false)
+        @test is_feasible(solution, instance)
+        @test cost(solution) == 2.0
+    end
+end
+
+@testset "A plan with a leg on an ignored loop arc is rejected" begin
+    nodes = [Node(; id="A"), Node(; id="B")]
+    arcs = [_arc("A", "A"), _arc("A", "B")]
+    instance = @test_logs (:warn, r"1 loop arc\(s\) ignored") match_mode = :any _instance(
+        nodes, arcs, [_com("A", "B")]
+    )
+    leg = TPO.Leg(;
+        arc=1, departure=DateTime(2021, 1, 1), arrival=DateTime(2021, 1, 2), quantity=1
+    )
+    @test_throws r"input arc 1 has no arc in the instance" SolutionState(
+        TPO.Solution([[leg]], TPO.ArcFlow[]), instance
+    )
 end
 
 @testset "A filtered instance keeps a forbidden node that was dropped" begin

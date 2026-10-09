@@ -424,7 +424,7 @@ end
     with(k, legs) = [i == k ? legs : r for (i, r) in enumerate(routes)]
     cases = [
         ("dropped by the instance", with(dropped, routes[kept])),
-        ("not in the instance", with(kept, [edit(routes[kept][1]; arc=1)])),
+        ("has no arc in the instance", with(kept, [edit(routes[kept][1]; arc=1)])),
     ]
     for (fragment, plan) in cases
         @test_throws rejects(fragment) rebuild(sub_instance, plan)

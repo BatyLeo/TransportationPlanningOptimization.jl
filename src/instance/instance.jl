@@ -380,6 +380,9 @@ function _build_bundles(
             )
         end
 
+        # Loop arcs are never created, so a forbidden loop is meaningless, and keeping it
+        # would only block the waiting shortcuts, which have the same spatial id at both ends
+        filter!(arc -> arc[1] != arc[2], forbidden_arcs)
         forbidden_nodes, forbidden_arcs = _translate_forbidden(
             split, forbidden_nodes, forbidden_arcs
         )
@@ -679,6 +682,7 @@ bundle and order in `instance.commodity_to_order`.
 Commodities with their origin equal to their destination are dropped: they never move and cost
 nothing, so they are mapped to `(0, 0)` in `instance.commodity_to_order`, get an empty route in a
 [`Solution`](@ref) and are ignored by the time grid.
+Arcs from a node to itself are ignored with a warning.
 An `ArgumentError` is thrown if every commodity is dropped, or if a commodity endpoint is not a
 node id of `nodes`, or if a forbidden node or arc endpoint is not a node id of `nodes`.
 """

@@ -4,6 +4,7 @@ $TYPEDSIGNATURES
 Build the [`SolutionState`](@ref) of the plan `solution` on `instance`, the reverse of `Solution(solution_state, instance)`.
 The routes are the source of truth and give the paths and the input arcs (modes) of every commodity.
 The `arc_flows` are ignored, and the capacity reserved for commodities dropped by an extraction is not rebuilt.
+A leg on an input arc with no arc in the instance (a loop, a skipped `transit=false` arc or an arc dropped by an extraction) is rejected.
 Commodities not routed by the instance (mapped to `(0, 0)`, such as the ones with their origin equal to their destination) must have an empty route.
 Every slot of every edge is repacked by first-fit decreasing, so bins and costs only equal those of the original state for linear costs (up to floating point summation order).
 Capacity is not checked, run [`is_feasible`](@ref) on the result.
@@ -87,7 +88,7 @@ function SolutionState(
 end
 
 # Input arc `index` as `(origin, destination, transit, slot, bin_capacity)`: spatial codes of its ends, transit steps,
-# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros (and an infinite bin capacity) if the arc is not in the instance.
+# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros (and an infinite bin capacity) if the arc has no arc in the instance (loop, skipped `transit=false` arc or dropped by an extraction).
 function _arc_locations(instance::Instance)
     ng = instance.network_graph.graph
     locations = fill(
@@ -161,7 +162,8 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
             fail(i, "arc index $(leg.arc) is out of range 1:$(length(locations))")
         location = locations[leg.arc]
         iszero(location.origin) && fail(
-            i, "input arc $(leg.arc) is not in the instance (dropped by an extraction)"
+            i,
+            "input arc $(leg.arc) has no arc in the instance (ignored at construction as a loop or a skipped transit=false arc, or dropped by an extraction)",
         )
         leg.quantity >= 1 || fail(i, "quantity $(leg.quantity) is not positive")
         leg.quantity <= commodity.quantity || fail(
