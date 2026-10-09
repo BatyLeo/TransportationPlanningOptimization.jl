@@ -144,6 +144,9 @@ using .TestFixtures
         @testset "ILS types" begin
             include("test_ils_types.jl")
         end
+        @testset "ILS perturbations" begin
+            include("test_ils_perturbations.jl")
+        end
         @testset "ILS loop" begin
             include("test_ils_loop.jl")
         end

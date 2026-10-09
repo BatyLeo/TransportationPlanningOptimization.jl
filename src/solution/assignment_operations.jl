@@ -209,7 +209,7 @@ end
 """
 $TYPEDSIGNATURES
 
-Take `removed` out of the bins of `slot` in place (STP-style). `removed` must already be gone
+Take `removed` out of the bins of `slot` in place. `removed` must already be gone
 from `slot.commodities`, which must be sorted. Drops the bins that become empty. Then
 repacks from scratch only when the bins exceed the lower bound
 `ceil((total_size - EPS) / cap)` and first-fit-decreasing on the remaining commodities is

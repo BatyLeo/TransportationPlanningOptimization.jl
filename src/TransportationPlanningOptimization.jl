@@ -75,6 +75,8 @@ include("algorithms/ils/perturbation.jl")
 include("algorithms/ils/config.jl")
 include("algorithms/ils/snapshot.jl")
 include("algorithms/ils/large_local_search.jl")
+include("algorithms/ils/perturbations/common.jl")
+include("algorithms/ils/perturbations/group_reinsertion.jl")
 include("algorithms/ils/slope_scaling.jl")
 include("algorithms/ils/iterated_local_search.jl")
 
@@ -110,6 +112,7 @@ export AbstractPerturbation, perturbate!
 export ILSConfig, ILSResult
 export snapshot_solution, restore_solution!
 export large_local_search!
+export GroupReinsertPerturbation
 export slope_scaling_update!
 export iterated_local_search!
 
