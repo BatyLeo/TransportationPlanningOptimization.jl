@@ -17,7 +17,9 @@ using .TestFixtures
     filt = lower_bound_filtering(instance; show_progress=false)
     sub = TPO.extract_filtered_instance(instance, filt)
 
-    expected_kept = count(p -> length(p) > 2, filt.bundle_paths)
+    expected_kept = count(
+        p -> TPO._direct_arc_position(instance.index_cache, p) == 0, filt.bundle_paths
+    )
     @test bundle_count(sub) == expected_kept
     @test bundle_count(sub) <= bundle_count(instance)
 

@@ -455,7 +455,7 @@ end
     commodities = [_com("O", "D"), _com("O", "X")]
     instance = @test_logs (:warn, r"2 loop arc\(s\) ignored.*arc 4 \(\"O\" -> \"O\"\)") (
         :warn, r"1 input arc\(s\) skipped"
-    ) match_mode = :any _instance(nodes, arcs, commodities)
+    ) _instance(nodes, arcs, commodities)
     @test _types(instance) == Dict("O" => :origin, "X" => :destination, "D" => :destination)
     indexed, virtual = _arcs(instance)
     @test isempty(virtual)
@@ -465,7 +465,7 @@ end
     # A loop on a transit=false node that is an origin and a destination is ignored
     nodes = [Node(; id="Q"), Node(; id="P", transit=false), Node(; id="R")]
     arcs = [_arc("Q", "P"), _arc("P", "R"), _arc("P", "P")]
-    instance = @test_logs (:warn, r"1 loop arc\(s\) ignored") match_mode = :any _instance(
+    instance = @test_logs (:warn, r"1 loop arc\(s\) ignored") _instance(
         nodes, arcs, [_com("Q", "P"), _com("P", "R")]
     )
     indexed, _ = _arcs(instance)
@@ -510,7 +510,7 @@ end
     nodes = [Node(; id="A", transit=false), Node(; id="B"), Node(; id="C")]
     arcs = [_arc("A", "B"), _arc("B", "C"), _arc("A", "A")]
     com = _com("A", "C"; days=4, arrival=true, forbidden_arcs=[("A", "A")])
-    instance = @test_logs loop_warning match_mode = :any _instance(nodes, arcs, [com])
+    instance = @test_logs loop_warning _instance(nodes, arcs, [com])
     @test first(_arcs(instance)) == Dict(("A", "B") => 1, ("B", "C") => 2)
     @test isempty(only(instance.bundles).forbidden_arcs)
     solution = greedy_heuristic(instance; show_progress=false)
@@ -521,7 +521,7 @@ end
     nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C", transit=false)]
     arcs = [_arc("A", "B"), _arc("B", "C"), _arc("C", "C")]
     com = _com("A", "C"; days=4, forbidden_arcs=[("C", "C")])
-    instance = @test_logs loop_warning match_mode = :any _instance(nodes, arcs, [com])
+    instance = @test_logs loop_warning _instance(nodes, arcs, [com])
     @test isempty(only(instance.bundles).forbidden_arcs)
     solution = greedy_heuristic(instance; show_progress=false)
     @test is_feasible(solution, instance)
@@ -532,7 +532,7 @@ end
     arcs = [_arc("A", "B"), _arc("B", "C"), _arc("A", "A")]
     for arrival in (true, false), forbidden in (Tuple{String,String}[], [("A", "A")])
         com = _com("A", "C"; days=4, arrival, forbidden_arcs=forbidden)
-        instance = @test_logs loop_warning match_mode = :any _instance(nodes, arcs, [com])
+        instance = @test_logs loop_warning _instance(nodes, arcs, [com])
         @test first(_arcs(instance)) == Dict(("A", "B") => 1, ("B", "C") => 2)
         @test isempty(only(instance.bundles).forbidden_arcs)
         solution = greedy_heuristic(instance; show_progress=false)
@@ -544,7 +544,7 @@ end
 @testset "A plan with a leg on an ignored loop arc is rejected" begin
     nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [_arc("A", "A"), _arc("A", "B")]
-    instance = @test_logs (:warn, r"1 loop arc\(s\) ignored") match_mode = :any _instance(
+    instance = @test_logs (:warn, r"1 loop arc\(s\) ignored") _instance(
         nodes, arcs, [_com("A", "B")]
     )
     leg = TPO.Leg(;
@@ -603,5 +603,211 @@ end
         @test_throws pattern _instance(
             nodes, arcs, [_com("A", "B"; kwargs...), _com("H", "B")]
         )
+    end
+end
+
+# ttg edge (u, v) of a bundle whose spatial ids are (o, d)
+function _ttg_edge(instance, bundle_idx, o, d)
+    ttg = instance.travel_time_graph.graph
+    spatial(code) = MetaGraphsNext.label_for(ttg, code)[1]
+    return only(
+        (u, v) for (u, v) in instance.travel_time_graph.bundle_arcs[bundle_idx] if
+        spatial(u) == o && spatial(v) == d
+    )
+end
+
+# Bundle index of the input commodity k
+_bundle_of(instance, k) = instance.commodity_to_order[k][1]
+
+@testset "Direct arc position of a bundle path" begin
+    for arrival in (true, false)
+        # No split: a path of length 2 is direct
+        nodes = [Node(; id="A"), Node(; id="B")]
+        instance = _instance(nodes, [_arc("A", "B")], [_com("A", "B"; arrival)])
+        cache = instance.index_cache
+        path = greedy_heuristic(instance; show_progress=false).bundle_paths[1]
+        @test length(path) == 2
+        @test TPO._direct_arc_position(cache, path) == 1
+
+        # S -> A -> B -> T: A and B are split by the commodities A -> B, S -> A and B -> T
+        nodes = [Node(; id=id) for id in ("S", "A", "B", "T")]
+        arcs = [_arc("S", "A"), _arc("A", "B"), _arc("B", "T")]
+        commodities = [
+            _com("A", "B"; arrival),
+            _com("S", "A"; arrival),
+            _com("B", "T"; arrival),
+            _com("S", "T"; arrival, days=4),
+        ]
+        instance = _instance(nodes, arcs, commodities)
+        cache = instance.index_cache
+        paths = greedy_heuristic(instance; show_progress=false).bundle_paths
+        position(k) = TPO._direct_arc_position(cache, paths[_bundle_of(instance, k)])
+        @test length(paths[_bundle_of(instance, 1)]) == 4  # both ends split
+        @test position(1) == 2
+        @test length(paths[_bundle_of(instance, 2)]) == 3  # split destination
+        @test position(2) == 1
+        @test length(paths[_bundle_of(instance, 3)]) == 3  # split origin
+        @test position(3) == 2
+        @test length(paths[_bundle_of(instance, 4)]) == 4  # three real arcs
+        @test position(4) == 0
+        @test TPO._direct_arc_position(cache, Int[]) == 0
+    end
+end
+
+@testset "A direct bundle into a split hub is filtered and preloaded on its real arc" begin
+    for arrival in (true, false)
+        # B is an origin and a destination, so A -> B ends with the virtual arc B -> B_d
+        nodes = [Node(; id=id) for id in ("A", "B", "C")]
+        arcs = [_arc("A", "B"), _arc("B", "C")]
+        commodities = [
+            _com("A", "B"; arrival),
+            _com("B", "C"; arrival),
+            _com("A", "C"; arrival, days=3),
+        ]
+        instance = _instance(nodes, arcs, commodities)
+        result = solve_filtered(instance; show_progress=false)
+        cache = instance.index_cache
+        positions = [
+            TPO._direct_arc_position(cache, p) for p in result.filtering_state.bundle_paths
+        ]
+        @test positions[_bundle_of(instance, 1)] == 1
+        @test positions[_bundle_of(instance, 2)] == 2
+        @test positions[_bundle_of(instance, 3)] == 0
+
+        sub = result.sub_instance
+        @test length(sub.bundles) == 1
+        ng = sub.network_graph.graph
+        @test haskey(ng, "B") && !haskey(ng, "B_d") && !haskey(ng, "B_o")
+        # The two filtered bundles sit on the real arcs A -> B and B -> C of the sub-instance
+        start = TPO.preload_filtered_bundles(result.filtering_state, instance, sub)
+        tsg = sub.time_space_graph.graph
+        loaded = [
+            (MetaGraphsNext.label_for(tsg, u)[1], MetaGraphsNext.label_for(tsg, v)[1]) for
+            ((u, v), a) in start.assignments if !isempty(a.commodities)
+        ]
+        @test sort(loaded) == [("A", "B"), ("B", "C")]
+        @test cost(start) == 2.0
+        state = solve_state(instance; show_progress=false, max_iter=10)
+        @test is_feasible(state, instance)
+        @test cost(state) == 4.0
+    end
+end
+
+# Two bundles of size 3 from A to B (split into bundles by `info`) on an A -> B arc of
+# capacity `cap` with an optional detour through H. S -> A makes A a hub, so
+# A_o is a split origin copy.
+function _two_direct_bundles(cap; with_hub::Bool, arrival::Bool=false)
+    nodes = [Node(; id=id) for id in ("S", "A", "B")]
+    arcs = [
+        _arc("S", "A"),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=cap,
+        ),
+    ]
+    if with_hub
+        push!(nodes, Node(; id="H"))
+        push!(arcs, _arc("A", "H"), _arc("H", "B"))
+    end
+    commodities = [
+        _com("A", "B"; arrival, size=3.0, days=with_hub ? 2 : 1, info="p$k") for k in 1:2
+    ]
+    return _instance(nodes, arcs, commodities; group_by=c -> c.info)
+end
+
+@testset "Lower bound filtering gates the real arc of direct bundles from a split origin" begin
+    for arrival in (true, false)
+        instance = _two_direct_bundles(5; with_hub=true, arrival)
+        @test "A_o" in MetaGraphsNext.labels(instance.network_graph.graph)
+        filt = lower_bound_filtering(instance; show_progress=false)
+        cache = instance.index_cache
+        positions = [TPO._direct_arc_position(cache, p) for p in filt.bundle_paths]
+        # Only one of the bundles fits on the arc, the other one takes the detour
+        @test count(!=(0), positions) == 1
+        @test count(==(0), positions) == 1
+        @test is_feasible(filt, instance)
+
+        res = solve_filtered(instance; show_progress=false)
+        @test length(res.sub_instance.bundles) == 1
+        merged = TPO.merge_solutions(filt, res.solution_state, instance, res.sub_instance)
+        @test is_feasible(merged, instance)
+        @test cost(merged) == 9.0
+
+        # Without the detour the second bundle has no path left
+        @test_throws "No feasible filtering path" lower_bound_filtering(
+            _two_direct_bundles(5; with_hub=false, arrival); show_progress=false
+        )
+        # A roomy arc fixes both bundles
+        roomy = _two_direct_bundles(1000; with_hub=true, arrival)
+        filt = lower_bound_filtering(roomy; show_progress=false)
+        @test all(
+            p -> TPO._direct_arc_position(roomy.index_cache, p) != 0, filt.bundle_paths
+        )
+    end
+end
+
+@testset "Lower bound and filtering price the direct real arc of a split endpoint like a plain one" begin
+    cost_fn = BinPackingArcCost(10.0, 10.0)
+    for arrival in (true, false)
+        a_b = _arc("A", "B"; cost=cost_fn)
+        main = _com("A", "B"; arrival, size=3.0)
+        nodes(ids) = [Node(; id=string(id)) for id in ids]
+        variants = (
+            # no split
+            "plain" => (nodes("AB"), [a_b], [main], ()),
+            # B_d: B is also an origin
+            "split destination" => (
+                nodes("ABC"),
+                [a_b, _arc("B", "C")],
+                [main, _com("B", "C"; arrival)],
+                ("B_d",),
+            ),
+            # A_o: A is crossable through S -> A
+            "split origin" => (nodes("SAB"), [_arc("S", "A"), a_b], [main], ("A_o",)),
+            # A_o and B_d
+            "both split" => (
+                nodes("SABC"),
+                [_arc("S", "A"), a_b, _arc("B", "C")],
+                [main, _com("B", "C"; arrival)],
+                ("A_o", "B_d"),
+            ),
+        )
+        for (name, (ns, arcs, commodities, copy_ids)) in variants
+            instance = _instance(ns, arcs, commodities)
+            labels = MetaGraphsNext.labels(instance.network_graph.graph)
+            @test all(in(labels), copy_ids)
+            i = _bundle_of(instance, 1)
+            u, v = _ttg_edge(instance, i, "A", "B")
+            for price in
+                (TPO.compute_ttg_edge_lower_bound_cost, TPO.compute_ttg_edge_filtering_cost)
+                @test price(SolutionState(instance), instance, instance.bundles[i], u, v) ==
+                    10.0
+            end
+        end
+    end
+end
+
+@testset "Two-node candidate pairs exclude the virtual arcs" begin
+    for arrival in (true, false)
+        nodes = [Node(; id=id) for id in ("A", "B", "C")]
+        arcs = [_arc("A", "B"), _arc("B", "C"), _arc("A", "C")]
+        commodities = [
+            _com("A", "B"; arrival), _com("B", "C"; arrival), _com("A", "C"; arrival)
+        ]
+        instance = _instance(nodes, arcs, commodities)
+        g = instance.travel_time_graph.graph
+        cache = instance.index_cache
+        spatial(code) = MetaGraphsNext.label_for(g, code)[1]
+        pairs = TPO.compute_candidate_nodes(instance)
+        @test !isempty(pairs)
+        @test all(((s, d),) -> !TPO._is_virtual_edge(cache, s, d), pairs)
+        # The hub B has the virtual arc B -> B_d, which is a TTG edge but not a candidate
+        @test any(MetaGraphsNext.edge_labels(g)) do (u, v)
+            u[1] == "B" && v[1] == "B_d"
+        end
+        @test !any(((s, d),) -> spatial(d) == "B_d", pairs)
     end
 end

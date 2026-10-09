@@ -148,13 +148,15 @@ Return the valid `(src, dst)` pairs for the two-node consolidation move.
 Source candidates are all TTG node codes whose spatial node has
 `node_type == :other` (intermediate hubs). Destination candidates are those
 plus all codes with `node_type == :destination`. A pair is valid when
-`src != dst` and the edge exists in the TTG.
+`src != dst`, the edge exists in the TTG and it is not a virtual arc of an endpoint split
+(there is nothing to consolidate between a hub and its endpoint copy).
 
 Mirrors Renault's `compute_src_dst_nodes` (`commonNodes` plus `commonNodes`
 union `plant_nodes`) in TPO's typology.
 """
-function compute_candidate_nodes(ttg::TravelTimeGraph)
-    g = ttg.graph
+function compute_candidate_nodes(instance::Instance)
+    g = instance.travel_time_graph.graph
+    cache = instance.index_cache
     src_codes = Int[]
     dst_codes = Int[]
     for label in MetaGraphsNext.labels(g)
@@ -169,7 +171,10 @@ function compute_candidate_nodes(ttg::TravelTimeGraph)
     end
     valid_pairs = Tuple{Int,Int}[]
     for s in src_codes, d in dst_codes
-        s != d && Graphs.has_edge(g, s, d) && push!(valid_pairs, (s, d))
+        s != d &&
+            Graphs.has_edge(g, s, d) &&
+            !_is_virtual_edge(cache, s, d) &&
+            push!(valid_pairs, (s, d))
     end
     return valid_pairs
 end
@@ -378,7 +383,7 @@ function loop_two_nodes!(
     refine::Bool=true,
     rng::Random.AbstractRNG=Random.default_rng(),
 )
-    valid_pairs = compute_candidate_nodes(instance.travel_time_graph)
+    valid_pairs = compute_candidate_nodes(instance)
     isempty(valid_pairs) && return 0.0
 
     cost_threshold = cost_threshold_relative * cost(sol)

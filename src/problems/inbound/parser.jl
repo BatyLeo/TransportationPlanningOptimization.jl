@@ -10,7 +10,7 @@ Returns a named tuple `(; nodes, arcs, commodities)` containing:
 
 The function performs deduplication of arcs (keeps only the first arc for each
 origin-destination pair) and handles heterogeneous cost function types.
-Legs from a platform to itself are dropped.
+Legs from a node to itself (the `cross_plat` platform loops) are dropped.
 
 By default (`dates_from_time_step=true`), the commodity dates are rewritten to
 `minimum(delivery_date) + Week(delivery_time_step)`, so the `delivery_time_step` column

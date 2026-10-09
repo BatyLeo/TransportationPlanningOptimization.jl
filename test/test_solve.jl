@@ -116,7 +116,10 @@ end
     sol = TPO.solve_state(instance; time_limit=1.0, max_iter=50, show_progress=false)
 
     @test TPO.is_feasible(sol, instance; verbose=true)
-    filtered = findfirst(p -> 0 < length(p) <= 2, filtering_solution.bundle_paths)
+    filtered = findfirst(
+        p -> TPO._direct_arc_position(instance.index_cache, p) != 0,
+        filtering_solution.bundle_paths,
+    )
     @test !isnothing(filtered)
     @test sol.bundle_paths[filtered] == filtering_solution.bundle_paths[filtered]
 end

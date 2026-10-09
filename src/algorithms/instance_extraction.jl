@@ -1,7 +1,25 @@
 """
 $TYPEDSIGNATURES
 
-Build a sub-instance that retains only bundles whose filtering path are not direct paths.
+Position `k` of the direct arc `path[k] -> path[k + 1]` of a bundle path, or `0` if the path is
+not direct. A path is direct if it has a single real arc once at most one virtual arc of an
+endpoint split is dropped at its front and one at its back (virtual arcs only sit at the ends
+of a path). The path must already be stripped of shortcut nodes, as the stored bundle paths
+are. An empty path is not direct.
+"""
+function _direct_arc_position(cache::IndexCache, path::AbstractVector{Int})
+    lo, hi = 1, length(path)
+    lo < hi || return 0
+    _is_virtual_edge(cache, path[lo], path[lo + 1]) && (lo += 1)
+    lo < hi && _is_virtual_edge(cache, path[hi - 1], path[hi]) && (hi -= 1)
+    return hi - lo == 1 ? lo : 0
+end
+
+"""
+$TYPEDSIGNATURES
+
+Build a sub-instance that retains only bundles whose filtering path is not direct
+(see [`_direct_arc_position`](@ref)).
 The returned [`NetworkGraph`](@ref) keeps every intermediate node (`node_type == :other`)
 from the original network so consolidation hubs remain available to the retained bundles,
 and drops only `:origin` and `:destination` nodes that no kept bundle references. The
@@ -18,7 +36,10 @@ If no bundles survive filtering, an info message is logged and the returned inst
 has an empty `bundles` vector.
 """
 function extract_filtered_instance(instance::Instance, filtering_solution::SolutionState)
-    keep_idxs = findall(p -> length(p) > 2, filtering_solution.bundle_paths)
+    keep_idxs = findall(
+        p -> _direct_arc_position(instance.index_cache, p) == 0,
+        filtering_solution.bundle_paths,
+    )
 
     if isempty(keep_idxs)
         @info "All bundles are fixed by filtering, the sub-instance is empty"
@@ -92,12 +113,14 @@ $TYPEDSIGNATURES
 
 Build a fresh `SolutionState` on `sub_instance` that reserves the capacity and
 cost of every bundle of `full_instance` that `extract_filtered_instance`
-dropped (the direct-path bundles, i.e. `filtering_sol.bundle_paths[i]` of
-length 2).
+dropped (the direct-path bundles, i.e. `filtering_sol.bundle_paths[i]` with a single real
+arc, see [`_direct_arc_position`](@ref)).
 
 For each dropped bundle, commits its full-instance path load onto the
 matching `sub_instance` time-space edges (via `_foreach_path_edge`), skipping
-edges that were pruned from `sub_instance`. These reserved commodities belong to no
+edges that were pruned from `sub_instance`. The real arc of a direct path is thus committed on
+the sub-instance, and the virtual arcs of an endpoint split are skipped when their copy was
+dropped, or become zero-cost reservations. These reserved commodities belong to no
 `sub_instance` bundle, which is how [`is_feasible`](@ref) tells them apart from the
 load of the bundle paths. Does not set `bundle_paths`: the
 returned solution is meant as the `start` argument of
@@ -115,7 +138,10 @@ function preload_filtered_bundles(
     sub_tsg = sub_instance.time_space_graph.graph
     sub_cache = sub_instance.index_cache
 
-    dropped_idxs = findall(p -> length(p) <= 2, filtering_sol.bundle_paths)
+    dropped_idxs = findall(
+        p -> _direct_arc_position(full_instance.index_cache, p) != 0,
+        filtering_sol.bundle_paths,
+    )
     for i in dropped_idxs
         bundle = full_instance.bundles[i]
         _foreach_path_edge(

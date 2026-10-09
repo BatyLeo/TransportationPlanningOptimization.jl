@@ -3,6 +3,8 @@ using TransportationPlanningOptimization
 using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
 using Dates
 
+const TPO = TransportationPlanningOptimization
+
 isdefined(Main, :TestFixtures) || include("fixtures.jl")
 using .TestFixtures
 
@@ -37,7 +39,9 @@ end
 
     @test all(!isempty, filt.bundle_paths)
     # On tiny, at least some bundle should choose a multi-hop path
-    @test any(length(p) > 2 for p in filt.bundle_paths)
+    @test any(
+        TPO._direct_arc_position(instance.index_cache, p) == 0 for p in filt.bundle_paths
+    )
 end
 
 # Two same-OD commodities of size 3, split into two bundles by a custom `group_by`,
@@ -89,8 +93,12 @@ end
     instance = two_bundle_direct_instance(5; with_hub=true)
     filt = lower_bound_filtering(instance; show_progress=false)
     @test is_feasible(filt, instance)
-    @test count(p -> length(p) == 2, filt.bundle_paths) == 1
-    @test count(p -> length(p) > 2, filt.bundle_paths) == 1
+    @test count(
+        p -> TPO._direct_arc_position(instance.index_cache, p) != 0, filt.bundle_paths
+    ) == 1
+    @test count(
+        p -> TPO._direct_arc_position(instance.index_cache, p) == 0, filt.bundle_paths
+    ) == 1
 
     res = TransportationPlanningOptimization.solve_filtered(instance; show_progress=false)
     @test length(res.sub_instance.bundles) == 1
@@ -104,7 +112,9 @@ end
 @testset "lower_bound_filtering fixes every bundle on a roomy direct arc" begin
     instance = two_bundle_direct_instance(1000; with_hub=true)
     filt = lower_bound_filtering(instance; show_progress=false)
-    @test all(p -> length(p) == 2, filt.bundle_paths)
+    @test all(
+        p -> TPO._direct_arc_position(instance.index_cache, p) != 0, filt.bundle_paths
+    )
     @test is_feasible(filt, instance)
 end
 
@@ -143,7 +153,9 @@ end
         nodes, arcs, commodities, Day(1); group_by=c -> c.info, allow_multimodal=true
     )
     filt = lower_bound_filtering(instance; show_progress=false)
-    @test all(p -> length(p) == 2, filt.bundle_paths)
+    @test all(
+        p -> TPO._direct_arc_position(instance.index_cache, p) != 0, filt.bundle_paths
+    )
     @test is_feasible(filt, instance)
 end
 

@@ -224,8 +224,10 @@ function _derive_network(
     end
 
     if !isempty(loops)
-        i, o, d = first(loops)
-        @warn "$(length(loops)) loop arc(s) ignored: an arc from a node to itself is never used (waiting at a node will be modeled by inventory), for example arc $i ($(repr(o)) -> $(repr(d)))"
+        examples = join(
+            ("arc $i ($(repr(o)) -> $(repr(d)))" for (i, o, d) in first(loops, 3)), ", "
+        )
+        @warn "$(length(loops)) loop arc(s) ignored: an arc from a node to itself is never used (for example $examples)"
     end
     messages = String[]
     if !isempty(skipped)

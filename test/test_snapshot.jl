@@ -186,7 +186,7 @@ end
     sol = TestFixtures.small_greedy()
     rng = MersenneTwister(3)
     Random.seed!(3)
-    pairs = TPO.compute_candidate_nodes(instance.travel_time_graph)
+    pairs = TPO.compute_candidate_nodes(instance)
     n_accepted = 0
     for _ in 1:150
         src, dst = rand(rng, pairs)
