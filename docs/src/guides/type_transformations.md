@@ -72,7 +72,8 @@ All orders in a bundle follow the same spatial path but with order-specific timi
 
 [`Node`](@ref) is the user-facing input type, converted to a [`NetworkNode`](@ref) by [`collect_nodes`](@ref TransportationPlanningOptimization.collect_nodes) during instance construction.
 Its fields are copied as is, except that `node_cost` is narrowed to a union type for type stability across heterogeneous cost functions.
-The i-th `Node` becomes the i-th `NetworkNode`, which links back to it through its `input_index`.
+Each `NetworkNode` links back to its `Node` through its `input_index`.
+The role of a node (hub, plain origin or destination, or split into a hub and endpoint copies) is derived from the commodities and arcs, see the [Getting Started](../getting_started.md) page.
 The `info` type parameter is taken from the first node, so all nodes must share one `info` type.
 
 ## Arc pipeline
@@ -95,7 +96,7 @@ The network is expanded into three graph representations, each serving a differe
 
 ### NetworkGraph
 
-The spatial network: nodes and arcs as provided, without time expansion.
+The spatial network: the converted nodes and arcs (plus the endpoint copies and virtual arcs of split nodes), without time expansion.
 Built directly from the converted `Vector{NetworkNode}` and the converted `NetworkArc` tuples.
 
 ### TimeSpaceGraph

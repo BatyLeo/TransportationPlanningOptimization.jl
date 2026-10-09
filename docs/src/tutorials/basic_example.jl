@@ -31,7 +31,7 @@ using Dates
 
 # ## Define Network Nodes
 #
-# Create nodes with unique IDs and appropriate node types:
+# Create nodes with unique IDs (their roles are derived from the commodities and arcs):
 
 nodes = [
     Node(; id="A1", node_type=:origin),
