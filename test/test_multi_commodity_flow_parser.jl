@@ -2,6 +2,7 @@ using TransportationPlanningOptimization
 using TransportationPlanningOptimization.Problems.MultiCommodityFlow
 using Graphs
 using Test
+using Logging
 
 # 3 nodes, two commodities.
 # Commodity 1 (1 -> 3, demand 10): direct arc 1->3 is cheap per unit but has
@@ -18,6 +19,13 @@ MULTIGEN.DAT:
    1   3   10
    2   3   5
 """
+
+@testset "Parsing emits no warning, such as the node_type deprecation" begin
+    # Under --depwarn=yes a deprecation is a warning
+    @test_logs min_level = Logging.Warn MultiCommodityFlow.parse_canad_instance(
+        IOBuffer(dow)
+    )
+end
 
 @testset "Tiny hand-written instance (network design)" begin
     instance = MultiCommodityFlow.parse_canad_instance(IOBuffer(dow); network_design=true)
@@ -49,8 +57,8 @@ end
     withenv("DATADEPS_ALWAYS_ACCEPT" => "true") do
         instance = load_instance(CanadC(), "c33"; network_design=true)
 
-        @test Graphs.nv(instance.network_graph.graph) == 20
-        @test Graphs.ne(instance.network_graph.graph) == 228
+        @test Graphs.nv(instance.network_graph.graph) == 52
+        @test Graphs.ne(instance.network_graph.graph) == 260
         @test commodity_count(instance) == 39
 
         sol = greedy_heuristic(instance; show_progress=false)

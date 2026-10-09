@@ -263,6 +263,24 @@ function _expand_commodities(
 end
 
 """
+    _user_id(instance::Instance, code::Integer)
+    _user_id(instance::Instance, id::AbstractString)
+
+User id of the network node with spatial code `code` or label `id`, which is the id of its hub
+for the endpoint copies of a split node. Falls back to the label if the node has no input node,
+and returns `id` itself if it is not a node label of the graph.
+"""
+function _user_id(instance::Instance, code::Integer)
+    ng = instance.network_graph.graph
+    node = ng[MetaGraphsNext.label_for(ng, code)]
+    return iszero(node.input_index) ? node.id : instance.input.nodes[node.input_index].id
+end
+function _user_id(instance::Instance, id::AbstractString)
+    ng = instance.network_graph.graph
+    return haskey(ng, id) ? _user_id(instance, MetaGraphsNext.code_for(ng, id)) : id
+end
+
+"""
 $TYPEDSIGNATURES
 
 Map each input commodity to its `(bundle_idx, order_idx)` in `bundles`, given the order key of
@@ -407,13 +425,20 @@ Check that every bundle can reach its destination from its origin in the travel-
 under its forbidden constraints (via [`validate_bundle_feasibility`](@ref)).
 
 Returns `nothing` when all bundles are feasible, otherwise throws an `ArgumentError` listing
-the infeasible bundles.
+the infeasible bundles, named by user node ids.
 """
-function _validate_bundles_feasibility(ttg::TravelTimeGraph, bundles)
+function _validate_bundles_feasibility(ttg::TravelTimeGraph, bundles, split::EndpointSplit)
     infeasible_bundles = Tuple{Int,String,String}[]
     for (bundle_idx, bundle) in enumerate(bundles)
         if !validate_bundle_feasibility(ttg, bundle_idx, bundle)
-            push!(infeasible_bundles, (bundle_idx, bundle.origin_id, bundle.destination_id))
+            push!(
+                infeasible_bundles,
+                (
+                    bundle_idx,
+                    get(split.user_id, bundle.origin_id, bundle.origin_id),
+                    get(split.user_id, bundle.destination_id, bundle.destination_id),
+                ),
+            )
         end
     end
 
@@ -585,7 +610,7 @@ function _assemble_instance(
     )
     travel_time_graph = TravelTimeGraph(network_graph, bundles)
     if check_bundle_feasibility
-        _validate_bundles_feasibility(travel_time_graph, bundles)
+        _validate_bundles_feasibility(travel_time_graph, bundles, split)
     end
     index_cache = build_index_cache(network_graph, travel_time_graph, time_space_graph)
     return Instance(;

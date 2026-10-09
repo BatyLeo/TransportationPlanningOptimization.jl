@@ -7,6 +7,9 @@ using Random
 
 const TPO = TransportationPlanningOptimization
 
+isdefined(Main, :TestFixtures) || include("fixtures.jl")
+using .TestFixtures
+
 # A node cost with a fixed part, so that a wrongly charged edge shows up in the cost.
 if !isdefined(Main, :SplitFixedNodeCost)
     struct SplitFixedNodeCost <: AbstractNodeCostFunction
@@ -809,5 +812,286 @@ end
             u[1] == "B" && v[1] == "B_d"
         end
         @test !any(((s, d),) -> spatial(d) == "B_d", pairs)
+    end
+end
+
+# Round trip of `state` through `Solution`, `SolutionState` and CSV, with routes free of virtual arcs.
+function _check_split_round_trip(state, instance)
+    TestFixtures.check_round_trip(state, instance; same_cost=true)
+    ns = Solution(state, instance)
+    TestFixtures.check_routes(ns, state, instance)
+    TestFixtures.check_flows(ns, state, instance)
+    n_arcs = length(instance.input.arcs)
+    @test all(leg -> 1 <= leg.arc <= n_arcs, leg for route in ns.routes for leg in route)
+    @test all(f -> 1 <= f.arc <= n_arcs, ns.arc_flows)
+    mktempdir() do dir
+        path = joinpath(dir, "solution.csv")
+        write_solution_csv(path, ns)
+        @test read_solution_csv(path, instance).routes == ns.routes
+    end
+    return ns
+end
+
+@testset "Round trip of split instances" begin
+    hub_cost = SplitFixedNodeCost(100.0, 10.0)
+    arcs = [_arc("A", "H"), _arc("H", "B"), _arc("Z1", "Z2")]
+    for arrival in (false, true), wrap_time in (false, true)
+        mode = "$(arrival ? "arrival" : "departure") date, wrap_time=$wrap_time"
+        com(o, d, day, size, days) =
+            _com(o, d; day=day + (arrival ? days : 0), size, days, arrival)
+        # A far away commodity widens the horizon, as wrap_time needs
+        filler = com("Z1", "Z2", 7, 1.0, 1)
+        nodes = [
+            Node(; id="A"),
+            Node(; id="H", node_cost=hub_cost),
+            Node(; id="B"),
+            Node(; id="Z1"),
+            Node(; id="Z2"),
+        ]
+        cases = [
+            ("starts at the hub", [com("H", "B", 1, 2.0, 1)]),
+            ("ends at the hub", [com("A", "H", 1, 2.0, 1)]),
+            ("crosses a hub", [com("A", "B", 1, 2.0, 2)]),
+            (
+                "crosses, starts and ends at the hub",
+                [
+                    com("A", "B", 1, 2.0, 2),
+                    com("H", "B", 2, 1.0, 1),
+                    com("A", "H", 1, 1.0, 1),
+                ],
+            ),
+        ]
+        for (name, commodities) in cases
+            @testset "$name ($mode)" begin
+                instance = _instance(nodes, arcs, [commodities; filler]; wrap_time)
+                state = greedy_heuristic(instance; show_progress=false)
+                _check_split_round_trip(state, instance)
+                ns = Solution(state, instance)
+                @test isempty(_virtual_assignments(state, instance)) ==
+                    (name == "crosses a hub")
+                @test all(f -> f.arc > 0, ns.arc_flows)
+            end
+        end
+        @testset "transit=false node, origin and destination ($mode)" begin
+            no_transit = [
+                Node(; id="A"),
+                Node(; id="H", node_cost=hub_cost, transit=false),
+                Node(; id="B"),
+                Node(; id="Z1"),
+                Node(; id="Z2"),
+            ]
+            commodities = [com("A", "H", 1, 3.0, 1), com("H", "B", 2, 2.0, 1), filler]
+            instance = _instance(no_transit, arcs, commodities; wrap_time)
+            state = greedy_heuristic(instance; show_progress=false)
+            _check_split_round_trip(state, instance)
+        end
+    end
+
+    @testset "extracted sub-instances drop the unused copies and keep the used ones" begin
+        # (arcs, commodities as (origin, destination, days), copies kept in the sub-instance)
+        cases = [
+            (
+                "no copy kept",
+                [("A", "H"), ("H", "B")],
+                [("A", "B", 2), ("H", "B", 1), ("A", "H", 1)],
+                String[],
+            ),
+            (
+                "kept bundle starting at the hub",
+                [("A", "H"), ("H", "B"), ("B", "C")],
+                [("H", "C", 2), ("A", "H", 1)],
+                ["H_o"],
+            ),
+            (
+                "kept bundle ending at the hub",
+                [("Z", "A"), ("A", "H"), ("H", "B")],
+                [("Z", "H", 2), ("H", "B", 1)],
+                ["H_d"],
+            ),
+        ]
+        for arrival in (false, true), (name, arc_ids, specs, kept) in cases
+            @testset "$name ($(arrival ? "arrival" : "departure") date)" begin
+                ids = sort!(unique(vcat(collect.(arc_ids)...)))
+                nodes = [Node(; id) for id in ids]
+                arcs = [_arc(o, d) for (o, d) in arc_ids]
+                commodities = [
+                    _com(o, d; day=1 + (arrival ? days : 0), days, arrival) for
+                    (o, d, days) in specs
+                ]
+                instance = _instance(nodes, arcs, commodities)
+                @test haskey(instance.network_graph.graph, "H_o") ||
+                    haskey(instance.network_graph.graph, "H_d")
+                filtering = lower_bound_filtering(instance; show_progress=false)
+                sub = TPO.extract_filtered_instance(instance, filtering)
+                labels = Set(MetaGraphsNext.labels(sub.network_graph.graph))
+                @test intersect(labels, ["H_o", "H_d"]) == Set(kept)
+                @test "H" in labels
+                state = greedy_heuristic(sub; show_progress=false)
+                if isempty(kept)
+                    @test bundle_count(sub) == 1
+                else
+                    # the kept bundle goes through the hop
+                    @test !isempty(_virtual_assignments(state, sub))
+                end
+                _check_split_round_trip(state, sub)
+            end
+        end
+    end
+end
+
+@testset "Multi-modal arcs next to virtual edges" begin
+    modes = [(10.0, 3), (5.0, 3), (20.0, 100)]
+    mode_arcs(o, d) = [
+        Arc(;
+            origin_id=o,
+            destination_id=d,
+            cost=LinearArcCost(c),
+            travel_time=Day(1),
+            capacity=cap,
+        ) for (c, cap) in modes
+    ]
+    nodes = [Node(; id="A"), Node(; id="H"), Node(; id="B")]
+    arcs = [mode_arcs("A", "H"); mode_arcs("H", "B")]
+    for arrival in (false, true), selector in (CheapestMode(), FillThenSpillMode())
+        @testset "$(nameof(typeof(selector))) ($(arrival ? "arrival" : "departure") date)" begin
+            commodities = [
+                _com("A", "H"; arrival, day=1, days=1, quantity=4),
+                _com("H", "B"; arrival, day=1 + (arrival ? 1 : 0), days=1, quantity=4),
+                _com("A", "B"; arrival, day=1 + (arrival ? 2 : 0), days=2, quantity=2),
+            ]
+            instance = _instance(nodes, arcs, commodities; allow_multimodal=true)
+            state = greedy_heuristic(instance; mode_selector=selector, show_progress=false)
+            @test !isempty(_virtual_assignments(state, instance))
+            ns = _check_split_round_trip(state, instance)
+            rebuilt = SolutionState(ns, instance)
+            @test TestFixtures.edge_multisets(rebuilt) == TestFixtures.edge_multisets(state)
+            @test cost(rebuilt) ≈ cost(state)
+        end
+    end
+end
+
+@testset "Two orders of one bundle on a split instance" begin
+    hub_cost = SplitFixedNodeCost(100.0, 10.0)
+    nodes = [
+        Node(; id="A"),
+        Node(; id="H", node_cost=hub_cost),
+        Node(; id="B"),
+        Node(; id="Z1"),
+        Node(; id="Z2"),
+    ]
+    arcs = [_arc("A", "H"), _arc("H", "B"), _arc("Z1", "Z2")]
+    for arrival in (false, true), wrap_time in (false, true)
+        mode = "$(arrival ? "arrival" : "departure") date, wrap_time=$wrap_time"
+        com(o, d, day, size) =
+            _com(o, d; day=day + (arrival ? 1 : 0), size, days=1, arrival)
+        @testset "starting at the hub ($mode)" begin
+            commodities = [
+                com("H", "B", 1, 2.0),
+                com("H", "B", 3, 1.0),
+                com("A", "H", 1, 1.0),
+                com("Z1", "Z2", 7, 1.0),
+            ]
+            instance = _instance(nodes, arcs, commodities; wrap_time)
+            @test any(b -> length(b.orders) == 2, instance.bundles)
+            state = greedy_heuristic(instance; show_progress=false)
+            _check_split_round_trip(state, instance)
+        end
+        @testset "ending at the hub ($mode)" begin
+            commodities = [
+                com("A", "H", 1, 2.0),
+                com("A", "H", 3, 1.0),
+                com("H", "B", 1, 1.0),
+                com("Z1", "Z2", 7, 1.0),
+            ]
+            instance = _instance(nodes, arcs, commodities; wrap_time)
+            @test any(b -> length(b.orders) == 2, instance.bundles)
+            state = greedy_heuristic(instance; show_progress=false)
+            _check_split_round_trip(state, instance)
+        end
+    end
+end
+
+# The message of the `ArgumentError` thrown when rebuilding the state of the `routes`.
+function _rebuild_message(instance, routes)
+    try
+        SolutionState(Solution(routes, TPO.ArcFlow[]), instance)
+    catch e
+        return e isa ArgumentError ? e.msg : rethrow()
+    end
+    return error("the plan was not rejected")
+end
+
+@testset "Rejected plans on split instances name user ids" begin
+    leg(arc, day) = TPO.Leg(;
+        arc,
+        departure=DateTime(2021, 1, day),
+        arrival=DateTime(2021, 1, day + 1),
+        quantity=1,
+    )
+    function check(instance, routes, fragment)
+        message = _rebuild_message(instance, routes)
+        @test occursin(fragment, message)
+        @test !occursin(r"_[od]\b", message)
+    end
+    nodes = [Node(; id="A"), Node(; id="H"), Node(; id="B")]
+    arcs = [_arc("A", "H"), _arc("H", "B"), _arc("A", "B")]
+    commodities = [
+        _com("A", "B"; days=2, forbidden_node_ids=["H"]),
+        _com("H", "B"; days=1),
+        _com("A", "H"; days=1),
+    ]
+    instance = _instance(nodes, arcs, commodities)
+    valid = [[leg(3, 1)], [leg(2, 1)], [leg(1, 1)]]
+    @test is_feasible(SolutionState(Solution(valid, TPO.ArcFlow[]), instance), instance)
+    check(instance, [valid[1], [leg(1, 1)], valid[3]], "not at the commodity origin H")
+    check(instance, [[leg(1, 1), leg(2, 3)], valid[2], valid[3]], "waits at H")
+    check(instance, [[leg(1, 1), leg(2, 2)], valid[2], valid[3]], "forbidden node H")
+    check(instance, [valid[1], valid[2], [leg(3, 1)]], "not at the commodity destination H")
+
+    @testset "transit=false nodes" begin
+        nodes = [Node(; id="A"), Node(; id="X", transit=false), Node(; id="B")]
+        arcs = [_arc("A", "X"), _arc("X", "B")]
+        commodities = [_com("A", "X"), _com("X", "B"), _com("A", "B"; days=2)]
+        instance = _instance(nodes, arcs, commodities; check_bundle_feasibility=false)
+        check(
+            instance,
+            [[leg(1, 1)], [leg(2, 1)], [leg(1, 1), leg(2, 2)]],
+            "the route crosses node X, which has `transit=false`",
+        )
+
+        # P is neither an origin nor a destination, its arcs are never created
+        nodes = [Node(; id="A"), Node(; id="P", transit=false), Node(; id="B")]
+        arcs = [_arc("A", "P"), _arc("P", "B")]
+        instance = @test_logs (:warn, r"2 input arc\(s\) skipped") _instance(
+            nodes, arcs, [_com("A", "B"; days=2)]; check_bundle_feasibility=false
+        )
+        check(instance, [[leg(1, 1), leg(2, 2)]], "input arc 1 has no arc in the instance")
+
+        # The forbidden arc (A, X) enters the hubless node X
+        nodes = [
+            Node(; id="A"), Node(; id="Y"), Node(; id="X", transit=false), Node(; id="B")
+        ]
+        arcs = [_arc("A", "X"), _arc("A", "Y"), _arc("Y", "X"), _arc("X", "B")]
+        commodities = [_com("A", "X"; days=2, forbidden_arcs=[("A", "X")]), _com("X", "B")]
+        instance = _instance(nodes, arcs, commodities)
+        alternative = [[leg(2, 1), leg(3, 2)], [leg(4, 1)]]
+        @test is_feasible(
+            SolutionState(Solution(alternative, TPO.ArcFlow[]), instance), instance
+        )
+        check(instance, [[leg(1, 1)], [leg(4, 1)]], "forbidden arc (\"A\", \"X\")")
+    end
+
+    @testset "construction feasibility message" begin
+        nodes = [Node(; id="A"), Node(; id="H"), Node(; id="B")]
+        arcs = [_arc("A", "H"), _arc("H", "B")]
+        commodities = [_com("A", "H"), _com("H", "B"; forbidden_arcs=[("H", "B")])]
+        message = try
+            _instance(nodes, arcs, commodities)
+            ""
+        catch e
+            e.msg
+        end
+        @test occursin("H → B", message)
+        @test !occursin(r"_[od]\b", message)
     end
 end

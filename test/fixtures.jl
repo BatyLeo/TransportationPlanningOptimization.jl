@@ -286,17 +286,23 @@ end
 const _TRUCK_TRAIN_MODES = [(10.0, 1, 10), (5.0, 2, 10)]
 
 # Check the arc flows of `ns` against `sol`: costs, volume, bins and unique rows.
-function check_flows(ns, sol)
+# The virtual edges of split endpoints have no row, so their assignments are skipped.
+function check_flows(ns, sol, instance)
+    TPO = TransportationPlanningOptimization
     flows = ns.arc_flows
+    real = [
+        a for (edge, a) in sol.assignments if
+        !TPO._is_virtual(TPO.tsg_edge_arc(instance.index_cache, edge...))
+    ]
     @test cost(ns) ≈ cost(sol)
     @test total_arc_cost(ns) ≈ total_arc_cost(sol)
     @test total_node_cost(ns) ≈ total_node_cost(sol)
     @test sum(f -> f.volume, flows; init=0.0) ≈
-        sum(total_size_of(a) for a in values(sol.assignments); init=0.0)
+        sum(total_size_of(a) for a in real; init=0.0)
     @test allunique((f.arc, f.departure) for f in flows)
     @test issorted(flows; by=f -> (f.arc, f.departure))
     slots = [
-        slot for a in values(sol.assignments) for slot in
+        slot for a in real for slot in
         (a isa TransportationPlanningOptimization.MultiAssignment ? a.per_mode : [a]) if
         !isempty(slot.commodities)
     ]

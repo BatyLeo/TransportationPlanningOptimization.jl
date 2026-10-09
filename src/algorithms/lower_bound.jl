@@ -35,10 +35,10 @@ function _shortest_path_assign!(
             throw(
                 ArgumentError(
                     "No feasible $label path for bundle $i: " *
-                    "$(bundle.origin_id) -> $(bundle.destination_id), " *
+                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
                     "max_transit_steps=$(max_steps), " *
-                    "forbidden_nodes=$(bundle.forbidden_nodes), " *
-                    "forbidden_arcs=$(bundle.forbidden_arcs), " *
+                    "forbidden_nodes=$(Set(_user_id(instance, id) for id in bundle.forbidden_nodes)), " *
+                    "forbidden_arcs=$(Set((_user_id(instance, u), _user_id(instance, v)) for (u, v) in bundle.forbidden_arcs)), " *
                     "no elementary path from origin to destination" *
                     (
                         label == "filtering" ?

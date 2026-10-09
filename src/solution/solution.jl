@@ -55,6 +55,7 @@ Arcs and commodities are identified by their index in the input vectors, and dat
   Waiting is the gap before the first leg or after the last one.
 - `arc_flows` gives the load and costs per input arc and departure, and sums to `cost(solution_state)` (up to floating point summation order).
   With `wrap_time`, its departures are cyclic while route dates are not.
+  The virtual arcs of split endpoints have no row.
 
 See [Reading a solution on the input network](@ref solution_guide) for the date
 conventions, how to match routes with flows, and how identical copies are attributed.
@@ -265,6 +266,7 @@ function _arc_flows(sol::SolutionState, instance::Instance, start, Δ)
         arc = tsg_edge_arc(cache, u, v)
         isnothing(arc) &&
             throw(ArgumentError("assignment on a time-space edge with no network arc"))
+        _is_virtual(arc) && continue
         t = cache.tsg_code_to_time[u]
         _arc_flow_rows!(rows, assignment, arc, start, Δ, t)
     end

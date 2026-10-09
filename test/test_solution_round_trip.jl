@@ -182,7 +182,8 @@ end
     state = rebuild(instance, [route((5, 8)), route((5, 10))])
     @test is_feasible(state, instance)
     @test Solution(state, instance).routes == [route((5, 8)), route((5, 10))]
-    @test length(only(state.bundle_paths)) == 2
+    # A is the head of the arc B -> A, so it is split: the path is direct through its virtual arcs.
+    @test TPO._direct_arc_position(instance.index_cache, only(state.bundle_paths)) != 0
 end
 
 @testset "Rejected plans" begin
@@ -269,24 +270,30 @@ end
 end
 
 @testset "Rejected plans, node that routes cannot cross" begin
-    # Arcs: 1 A -> B, 2 B -> D, 3 D -> B (1 day each), the route 1, 2, 3, 2 is within the 4 allowed
-    # days but crosses the destination D two days before its arrival date.
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="D", node_type=:destination),
-    ]
+    # Arcs: 1 A -> B, 2 B -> D, 3 D -> B (1 day each). D is both a destination and an origin and
+    # has transit=false, so it is two disconnected nodes. The route A -> B -> D -> B leaves the
+    # destination copy of D through its origin copy, which is a crossing.
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="D", transit=false)]
     arc(o, d) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
-    commodity = Commodity(;
-        origin_id="A",
-        destination_id="D",
-        arrival_date=DateTime(2024, 1, 10),
-        max_delivery_time=Day(4),
-        size=1.0,
-    )
+    commodities = [
+        Commodity(;
+            origin_id="A",
+            destination_id="D",
+            arrival_date=DateTime(2024, 1, 10),
+            max_delivery_time=Day(4),
+            size=1.0,
+        ),
+        Commodity(;
+            origin_id="D",
+            destination_id="B",
+            arrival_date=DateTime(2024, 1, 5),
+            max_delivery_time=Day(1),
+            size=1.0,
+        ),
+    ]
     instance = Instance(
-        nodes, [arc("A", "B"), arc("B", "D"), arc("D", "B")], [commodity], Day(1)
+        nodes, [arc("A", "B"), arc("B", "D"), arc("D", "B")], commodities, Day(1)
     )
     leg(a, day) = TPO.Leg(;
         arc=a,
@@ -294,8 +301,8 @@ end
         arrival=DateTime(2024, 1, day + 1),
         quantity=1,
     )
-    @test_throws rejects("routes cannot cross at this date") rebuild(
-        instance, [[leg(1, 6), leg(2, 7), leg(3, 8), leg(2, 9)]]
+    @test_throws rejects("the route crosses node D, which has `transit=false`") rebuild(
+        instance, [[leg(1, 6), leg(2, 7), leg(3, 8), leg(2, 9)], [leg(3, 4)]]
     )
 end
 

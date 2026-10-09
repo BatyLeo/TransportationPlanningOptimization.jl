@@ -87,7 +87,7 @@ end
     terms::Tuple, comms::Vector{C}, total_size::Float64
 ) where {C<:LightCommodity}
     return _evaluate_with_total_size(first(terms), comms, total_size; presorted=true) +
-        _sum_evaluate_with_total_size(Base.tail(terms), comms, total_size)
+           _sum_evaluate_with_total_size(Base.tail(terms), comms, total_size)
 end
 
 # Term costs of a slot whose `bins` are freshly packed: the bin-packing term reuses the
@@ -321,7 +321,7 @@ end
 @inline _sum_frozen_commit!(::SingleAssignment, ::Tuple{}, ::Vector) = 0.0
 @inline _sum_frozen_commit!(slot::SingleAssignment, terms::Tuple, new_comms::Vector) =
     _frozen_term_commit!(slot, first(terms), new_comms) +
-        _sum_frozen_commit!(slot, Base.tail(terms), new_comms)
+    _sum_frozen_commit!(slot, Base.tail(terms), new_comms)
 
 function _frozen_commit_single_assignment!(
     slot::SingleAssignment{C}, arc_f::SumArcCost, new_comms::Vector{C}
