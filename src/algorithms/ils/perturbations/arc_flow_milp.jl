@@ -50,13 +50,9 @@ end
 
 function _milp_bundle_arcs(instance::Instance, bundle_idx::Int)
     cache = instance.index_cache
-    ng = instance.network_graph.graph
     bundle = instance.bundles[bundle_idx]
     # Same filter as the cost matrix update: forbidden arcs and nodes are not allowed.
-    fn = Set{Int}(code_for(ng, id) for id in bundle.forbidden_nodes)
-    fa = Set{Tuple{Int,Int}}(
-        (code_for(ng, u), code_for(ng, v)) for (u, v) in bundle.forbidden_arcs
-    )
+    fn, fa = _forbidden_codes(instance, bundle)
     arcs = _MilpArcs(Int[], Int[], Vector{Tuple{Int,Int}}[], Bool[])
     for (u, v) in instance.travel_time_graph.bundle_arcs[bundle_idx]
         su = cache.ttg_code_to_spatial_code[u]
@@ -154,15 +150,7 @@ function _arc_flow_model(
     cache = instance.index_cache
     removed = _milp_background_loads(sol, instance, selected)
 
-    model = JuMP.Model(p.optimizer)
-    JuMP.set_silent(model)
-    JuMP.set_time_limit_sec(model, p.time_limit)
-    JuMP.set_attribute(model, JuMP.MOI.RelativeGapTolerance(), p.mip_gap)
-    try
-        JuMP.set_attribute(model, JuMP.MOI.NumberOfThreads(), 1)
-    catch err
-        err isa JuMP.MOI.UnsupportedAttribute || rethrow()
-    end
+    model = _milp_model(p.optimizer, p.time_limit, p.mip_gap)
 
     x = @variable(model, [1:sum(b -> length(arcs_of[b].u), selected)], Bin)
     # Bin variables count the bins of the whole edge, background included, so the relative
@@ -191,28 +179,18 @@ function _arc_flow_model(
             arc = ttg_edge_arc(cache, u, v)
             JuMP.add_to_expression!(get!(JuMP.AffExpr, entering, sv), 1.0, x[i])
 
-            scaling = get(ttg.cost_scaling, ttg_edge_key(cache, u, v), 1.0)
-            node_cost = cache.spatial_code_to_node_cost[sv]
-            coefficient = 0.0
-            for order in bundle.orders
-                coefficient += scaling * _milp_linear_cost(arc.cost, order)
-                coefficient += _node_lower_bound_incremental_cost(
-                    node_cost, nothing, order.commodities, order.total_size
-                )
-            end
-            JuMP.add_to_expression!(objective, coefficient, x[i])
+            JuMP.add_to_expression!(
+                objective, _milp_arc_coefficient(instance, bundle, u, v), x[i]
+            )
 
             isempty(arcs.edges[k]) && continue
-            bin = _bin_packing_cost_of(arc.cost)
+            scaling = get(ttg.cost_scaling, ttg_edge_key(cache, u, v), 1.0)
             for (order, e) in zip(bundle.orders, arcs.edges[k])
                 JuMP.add_to_expression!(
                     get!(JuMP.AffExpr, loads, e), order.total_size, x[i]
                 )
                 edge_arc[e] = arc
-                if !isnothing(bin) && !haskey(tau, e)
-                    tau[e] = @variable(model, lower_bound = 0, integer = true)
-                    JuMP.add_to_expression!(objective, scaling * bin.cost_per_bin, tau[e])
-                end
+                _milp_add_bins!(model, tau, objective, e, arc, scaling)
             end
         end
         for (node, expr) in balance
@@ -225,16 +203,11 @@ function _arc_flow_model(
         end
     end
 
-    for (e, expr) in loads
-        arc = edge_arc[e]
-        current = haskey(sol.assignments, e) ? total_size_of(sol.assignments[e]) : 0.0
-        background = max(0.0, current - get(removed, e, 0.0))
-        bin = _bin_packing_cost_of(arc.cost)
-        isnothing(bin) ||
-            @constraint(model, expr - bin.bin_capacity * tau[e] <= -background)
-        arc.capacity == typemax(Int) ||
-            @constraint(model, expr <= arc.capacity - background)
-    end
+    background = Dict(
+        e => max(0.0, _milp_current_load(sol, e) - get(removed, e, 0.0)) for
+        e in keys(loads)
+    )
+    _milp_add_packing!(model, loads, tau, edge_arc, background)
     @objective(model, Min, objective)
     p.warm_start && _set_start_values!(model, x, tau, sol, instance, selected, arcs_of)
     return model, x
@@ -276,11 +249,7 @@ function _set_start_values!(model, x, tau, sol, instance, selected, arcs_of)
             JuMP.set_start_value(x[i], (arcs.u[k], arcs.v[k]) in on ? 1.0 : 0.0)
         end
     end
-    for (e, var) in tau
-        bin = _bin_packing_cost_of(tsg_edge_arc(instance.index_cache, e[1], e[2]).cost)
-        current = haskey(sol.assignments, e) ? total_size_of(sol.assignments[e]) : 0.0
-        JuMP.set_start_value(var, ceil(max(0.0, current / bin.bin_capacity - 1e-9)))
-    end
+    _milp_start_bins!(tau, sol, instance)
     return nothing
 end
 

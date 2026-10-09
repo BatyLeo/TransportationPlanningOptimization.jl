@@ -380,6 +380,178 @@ end
     @test_throws ArgumentError perturbate!(sol, instance, ArcFlowMILPPerturbation())
 end
 
+# TTG arc `from -> to` between the labeled nodes, as codes.
+function hub_arc(instance, from, to)
+    g = instance.travel_time_graph.graph
+    return (MetaGraphsNext.code_for(g, from), MetaGraphsNext.code_for(g, to))
+end
+
+# Bundle indices of O1 and O2 (the bundles are not listed in origin order).
+function hub_bundles(instance)
+    return (
+        findfirst(b -> b.origin_id == "O1", instance.bundles),
+        findfirst(b -> b.origin_id == "O2", instance.bundles),
+    )
+end
+
+@testset "Attract and reduce paths of an arc" begin
+    instance = hub_instance()
+    sol = hub_solution(instance)
+    sol0 = copy(sol)
+    o1, o2 = hub_bundles(instance)
+    arc = hub_arc(instance, ("H", 1), ("D", 2))
+    paths = TPO._attract_reduce_paths(sol, instance, arc, [o1, o2], Set([o2]))
+    # O1 is attracted to the hub, O2 is pushed off it.
+    @test spatial_ids(instance, paths[o1]) == ["O1", "H", "D"]
+    @test spatial_ids(instance, paths[o2]) == ["O2", "D"]
+    @test TestFixtures.same_state(sol, sol0)
+end
+
+@testset "Attract consolidates bundles onto the hub" begin
+    instance = hub_instance()
+    sol = hub_solution(instance)
+    @test cost(sol) ≈ 21.0
+    before = cost(sol)
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
+    @test n == 1
+    @test inc ≈ -9.0
+    @test cost(sol) - before ≈ inc
+    @test all("H" in spatial_ids(instance, path) for path in sol.bundle_paths)
+    @test is_feasible(sol, instance)
+    @test elementary_paths(sol, instance)
+end
+
+@testset "Reduce moves a bundle off an expensive arc" begin
+    # O1 may not use the hub, so only O2 can be pushed off H -> D.
+    instance = hub_instance(; forbidden_node_ids=["H"])
+    sol = hub_solution(instance)
+    o1, o2 = hub_bundles(instance)
+    before = cost(sol)
+    paths = TPO._attract_reduce_paths(
+        sol, instance, hub_arc(instance, ("H", 1), ("D", 2)), [o1, o2], Set([o2])
+    )
+    @test collect(keys(paths)) == [o2]
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
+    @test (n, inc) == (1, -1.0)
+    @test cost(sol) - before ≈ inc
+    @test spatial_ids(instance, sol.bundle_paths[o2]) == ["O2", "D"]
+    @test !("H" in spatial_ids(instance, sol.bundle_paths[o1]))
+    @test is_feasible(sol, instance)
+end
+
+@testset "Attract reduce model chooses by cost" begin
+    instance = hub_instance()
+    sol = hub_solution(instance)
+    o1, o2 = hub_bundles(instance)
+    arc = hub_arc(instance, ("H", 1), ("D", 2))
+    paths = TPO._attract_reduce_paths(sol, instance, arc, [o1, o2], Set([o2]))
+    p = AttractReduceMILPPerturbation(; time_limit=10.0, warm_start=true)
+    # Alone, pushing O2 off the hub saves 1. With both, attracting O1 saves 9.
+    model, z = TPO._attract_reduce_model(p, sol, instance, [o2], paths)
+    JuMP.optimize!(model)
+    @test JuMP.value.(z) ≈ [1.0]
+    @test JuMP.objective_value(model) ≈ 9.0
+    model, z = TPO._attract_reduce_model(p, sol, instance, sort([o1, o2]), paths)
+    JuMP.optimize!(model)
+    @test JuMP.value.(z) ≈ [b == o1 ? 1.0 : 0.0 for b in sort([o1, o2])]
+end
+
+@testset "Attract reduce respects finite capacities" begin
+    instance = hub_instance(; hub_capacity=7)
+    sol = hub_solution(instance)
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    before = cost(sol)
+    (inc, _) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
+    @test cost(sol) - before ≈ inc
+    @test is_feasible(sol, instance)
+    @test count(path -> "H" in spatial_ids(instance, path), sol.bundle_paths) <= 1
+end
+
+@testset "Attract reduce changes nothing without a gain or a candidate" begin
+    instance = hub_instance()
+    # Both bundles direct: the only moves cost 11 against 10.
+    sol = greedy_heuristic(instance; show_progress=false)
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    sol0 = copy(sol)
+    @test perturbate!(sol, instance, p; rng=Random.MersenneTwister(1)) == (0.0, 0)
+    @test TestFixtures.same_state(sol, sol0)
+    # No routed bundle, so no candidate arc.
+    sol = TPO.SolutionState(instance)
+    @test perturbate!(sol, instance, p; rng=Random.MersenneTwister(1)) == (0.0, 0)
+end
+
+@testset "Attract reduce falls back on the arc with the most new paths" begin
+    # H -> D could take both bundles, but O1 may not use the hub, so only one gets a path.
+    instance = hub_instance(; forbidden_node_ids=["H"])
+    sol = hub_solution(instance)
+    p = AttractReduceMILPPerturbation(; time_limit=10.0, min_candidate_ratio=0.6)
+    @test perturbate!(sol, instance, p; rng=Random.MersenneTwister(1)) == (-1.0, 1)
+    @test is_feasible(sol, instance)
+end
+
+@testset "The candidate ratio must be below one" begin
+    @test_throws ArgumentError AttractReduceMILPPerturbation(; min_candidate_ratio=1.0)
+    @test_throws ArgumentError AttractReduceMILPPerturbation(; min_candidate_ratio=-0.1)
+    @test AttractReduceMILPPerturbation(; min_candidate_ratio=0.0).min_candidate_ratio ==
+        0.0
+end
+
+@testset "Pricing stops once the best count cannot be beaten" begin
+    instance = hub_instance()
+    sol = hub_solution(instance)
+    arc = hub_arc(instance, ("H", 1), ("D", 2))
+    o1, o2 = hub_bundles(instance)
+    full = TPO._attract_reduce_paths(sol, instance, arc, [o1, o2], Set([o2]))
+    @test length(full) == 2
+    early = TPO._attract_reduce_paths(sol, instance, arc, [o1, o2], Set([o2]); to_beat=2)
+    @test isempty(early)
+end
+
+@testset "An attract path through a full arc is still generated" begin
+    # H -> D (capacity 7) already carries O2, O1 does not fit next to it but may swap in.
+    instance = hub_instance(; hub_capacity=7)
+    sol = hub_solution(instance)
+    o1, o2 = hub_bundles(instance)
+    arc = hub_arc(instance, ("H", 1), ("D", 2))
+    paths = TPO._attract_reduce_paths(sol, instance, arc, [o1], Set{Int}())
+    @test spatial_ids(instance, paths[o1]) == ["O1", "H", "D"]
+end
+
+@testset "Attract reduce model enforces the arc capacity" begin
+    instance = hub_instance(; hub_capacity=7)
+    sol = greedy_heuristic(instance; show_progress=false)
+    modeled = [1, 2]
+    new_paths = Dict(
+        b => hub_path(instance, instance.bundles[b].origin_id, true) for b in modeled
+    )
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    model, z = TPO._attract_reduce_model(p, sol, instance, modeled, new_paths)
+    JuMP.optimize!(model)
+    # Both on the hub costs 12 but needs 10 > 7, one alone costs 11 against 10.
+    @test JuMP.value.(z) ≈ [0.0, 0.0]
+end
+
+@testset "Attract reduce on a benchmark instance" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    before = cost(sol)
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
+    @test cost(sol) - before ≈ inc
+    @test inc <= p.tolerance * before
+    @test n >= 0
+    @test is_feasible(sol, instance)
+    @test elementary_paths(sol, instance)
+end
+
+@testset "Attract reduce rejects multimodal arcs" begin
+    instance = TestFixtures._leg_instance([(10.0, 1, 10), (5.0, 1, 10)], 1)
+    sol = greedy_heuristic(instance; show_progress=false)
+    @test_throws ArgumentError perturbate!(sol, instance, AttractReduceMILPPerturbation())
+end
+
 @testset "ILS with the MILP perturbation never ends worse" begin
     instance = TestFixtures.tiny_instance()
     sol = TestFixtures.tiny_greedy()
@@ -387,7 +559,10 @@ end
     result = iterated_local_search!(
         sol,
         instance,
-        [ArcFlowMILPPerturbation(; time_limit=2.0)];
+        [
+            ArcFlowMILPPerturbation(; time_limit=2.0),
+            AttractReduceMILPPerturbation(; time_limit=2.0),
+        ];
         config=ILSConfig(; time_limit=4, perturbation_time_limit=3, ls_time_limit=1),
         rng=Random.MersenneTwister(5),
         verbose=false,
