@@ -46,6 +46,7 @@ makedocs(;
         "Guides" => [
             "Algorithm Pipeline" => "guides/algorithm_pipeline.md",
             "Cost Functions" => "guides/cost_functions.md",
+            "Iterated Local Search" => "guides/iterated_local_search.md",
             "Forbidden Constraints" => "guides/forbidden_constraints.md",
             "Multi-Modal Arcs" => "guides/multi_modal_arcs.md",
             "Solution I/O" => "guides/solution_io.md",

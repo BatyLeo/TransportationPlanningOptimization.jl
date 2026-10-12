@@ -7,10 +7,10 @@ based on the bin utilization of `sol`.
 For each solution edge backed by a `BinPackingArcCost` (directly, or as a term inside a
 `SumArcCost`), the scaling factor is `n_bins / n_bins_continuous`, where
 `n_bins_continuous = ceil(total_volume / bin_capacity)` is the number of bins the
-continuous (fractional) relaxation would need. A factor above `1.0` means the arc is
-under-utilized relative to the continuous relaxation (more bins are open than the volume
-strictly requires) and should be discouraged; a factor below `1.0` means it is well packed
-and should be encouraged. The factor is clamped to `(0.0, 2.0]`.
+continuous (fractional) relaxation would need. The factor is at least `1.0` since the
+bins hold the volume, and above `1.0` means the arc is under-utilized relative to the
+continuous relaxation (more bins are open than the volume strictly requires), so it is
+made more expensive. The factor is clamped to at most `2.0`.
 
 Edges with no volume, no bin-packing cost component, or a factor of exactly `1.0` (a no-op)
 are left out of the dict, keeping `cost_matrix_update`'s hot-path lookup cheap.

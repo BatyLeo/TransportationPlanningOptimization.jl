@@ -34,8 +34,6 @@ Find the cheapest path for a bundle in the TravelTimeGraph and add it to the cur
 solution. Returns `false` without modifying `current_solution` if Dijkstra finds no
 feasible path, `true` otherwise. When `snapshots` is given, the edges of the new path are
 snapshotted into it before the insertion (see `_snapshot_path_assignments`).
-`workspace` is reused by the shortest path search, and the cost matrix is filled in
-parallel through `buffer_pool` when it is given and several threads are available.
 """
 function _try_insert_bundle!(
     current_solution::SolutionState,
@@ -44,24 +42,16 @@ function _try_insert_bundle!(
     mode_selector::AbstractModeSelector=CheapestMode();
     buffer::BinPackingBuffer=BinPackingBuffer(),
     snapshots::Union{Dict,Nothing}=nothing,
-    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
-    buffer_pool::Union{Vector{<:BinPackingBuffer},Nothing}=nothing,
 )
     ttg = instance.travel_time_graph
-    if Threads.nthreads() > 1 && !isnothing(buffer_pool)
-        parallel_update_bundle_cost_matrix!(
-            current_solution, instance, bundle_idx, mode_selector, buffer_pool
-        )
-    else
-        update_bundle_cost_matrix!(
-            current_solution, instance, bundle_idx, mode_selector; buffer=buffer
-        )
-    end
+    update_bundle_cost_matrix!(
+        current_solution, instance, bundle_idx, mode_selector; buffer=buffer
+    )
 
     origin = ttg.origin_codes[bundle_idx]
     destination = ttg.destination_codes[bundle_idx]
 
-    path = bundle_shortest_path(instance, origin, destination; workspace)
+    path = bundle_shortest_path(instance, origin, destination)
 
     isempty(path) && return false
 
