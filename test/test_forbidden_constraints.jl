@@ -6,12 +6,7 @@ using MetaGraphsNext
 # Setup: Simple network with 4 nodes in a diamond shape
 # A -> B -> D
 # A -> C -> D
-nodes = [
-    Node(; id="A", node_type=:origin),
-    Node(; id="B", node_type=:other),
-    Node(; id="C", node_type=:other),
-    Node(; id="D", node_type=:destination),
-]
+nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C"), Node(; id="D")]
 
 arcs = [
     Arc(; origin_id="A", destination_id="B", cost=LinearArcCost(0.0), travel_time=Day(1)),

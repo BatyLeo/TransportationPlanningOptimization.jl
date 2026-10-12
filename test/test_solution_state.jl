@@ -9,9 +9,9 @@ using MetaGraphsNext
     @testset "Basic solution with LinearArcCost" begin
         # 1. Create a dummy instance
         nodes = [
-            Node(; id="A", node_type=:origin, capacity=0),
-            Node(; id="B", node_type=:other, capacity=0),
-            Node(; id="C", node_type=:destination, capacity=0),
+            Node(; id="A", capacity=0),
+            Node(; id="B", capacity=0),
+            Node(; id="C", capacity=0),
         ]
 
         # Arc A->B
@@ -102,7 +102,7 @@ using MetaGraphsNext
     end
 
     @testset "BinPackingArcCost" begin
-        nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+        nodes = [Node(; id="A"), Node(; id="B")]
 
         # Arc with bin-packing cost: 100 per bin, capacity 10
         arc_ab = Arc(;
@@ -178,11 +178,7 @@ using MetaGraphsNext
 
     @testset "Multiple commodities with different sizes" begin
         # 1. Create a dummy instance
-        nodes = [
-            Node(; id="A", node_type=:origin),
-            Node(; id="B", node_type=:other),
-            Node(; id="C", node_type=:destination),
-        ]
+        nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
 
         # Arcs A->B and B->C
         arc_ab = Arc(;
@@ -237,11 +233,7 @@ using MetaGraphsNext
     end
 
     @testset "SolutionState with Arrival Date Commodities" begin
-        nodes = [
-            Node(; id="A", node_type=:origin),
-            Node(; id="B", node_type=:other),
-            Node(; id="C", node_type=:destination),
-        ]
+        nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
 
         # Arcs with Day(1) travel time
         arc_ab = Arc(;
@@ -317,11 +309,7 @@ end
     # With wrap_time the horizon is the last order step (4 here), so on the path
     # O -> X -> Y -> X -> Y the order at step 1 uses edge (X,4)->(Y,1) at its
     # fourth arc, which is also the second arc of the order at step 3.
-    nodes = [
-        Node(; id="O", node_type=:origin),
-        Node(; id="X", node_type=:other),
-        Node(; id="Y", node_type=:destination),
-    ]
+    nodes = [Node(; id="O"), Node(; id="X"), Node(; id="Y")]
     arc(o, d) = Arc(;
         origin_id=o,
         destination_id=d,
@@ -390,7 +378,7 @@ mutable struct MInfo
 end
 
 @testset "copy of a SolutionState" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)

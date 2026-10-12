@@ -33,8 +33,8 @@ $TYPEDSIGNATURES
 
 Keyword constructor for [`Node`](@ref).
 
-The `node_type` keyword is deprecated and ignored, node roles are now derived from the
-commodities and arcs (use `transit=false` to forbid crossing a node).
+The former `node_type` keyword was removed: node roles are derived from the commodities and
+arcs (use `transit=false` to forbid crossing a node).
 """
 function Node(;
     id::AbstractString,
@@ -42,12 +42,7 @@ function Node(;
     info=nothing,
     node_cost::AbstractNodeCostFunction=NoNodeCost(),
     transit::Bool=true,
-    node_type=nothing,
 )
-    isnothing(node_type) || Base.depwarn(
-        "the `node_type` keyword of `Node` is ignored, node roles are now derived from the commodities and arcs (use `transit=false` for a node that cannot be crossed)",
-        :Node,
-    )
     return Node{typeof(info),typeof(node_cost)}(
         String(id), capacity, info, node_cost, transit
     )

@@ -102,11 +102,7 @@ end
 @testset "splice_path strips the shortcut nodes of the new sub-path only" begin
     # Arrival mode: the origin node of the TTG is followed by a shortcut to the first
     # timed node, which a splice at lo == 1 removes and the suffix keeps its length.
-    nodes = [
-        Node(; id="O", node_type=:origin),
-        Node(; id="H", node_type=:other),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="O"), Node(; id="H"), Node(; id="D")]
     arc(o, d) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
     commodity = Commodity(;
@@ -130,7 +126,7 @@ end
     @test TPO.splice_path(clean, 1, 2, clean[1:2], ttg) == (clean, 2)
 end
 
-@testset "compute_candidate_nodes filters by node_type" begin
+@testset "compute_candidate_nodes filters by internal node role" begin
     instance = TestFixtures.small_instance()
     valid_pairs = TPO.compute_candidate_nodes(instance)
 
@@ -196,12 +192,12 @@ end
     # but above either order alone (1.5), so pre-fix pricing (one order at a
     # time) wrongly accepts the detour and overflows H->Z.
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="H", node_type=:other),
-        Node(; id="Z", node_type=:other),
-        Node(; id="C", node_type=:other),
-        Node(; id="B", node_type=:destination),
-        Node(; id="D", node_type=:destination),
+        Node(; id="A"),
+        Node(; id="H"),
+        Node(; id="Z"),
+        Node(; id="C"),
+        Node(; id="B"),
+        Node(; id="D"),
     ]
     arcs = [
         Arc(;
@@ -390,9 +386,9 @@ end
 function chain_instance(; arrival::Bool, bin_packing::Bool)
     arc_cost(c) = bin_packing ? BinPackingArcCost(c, 10) : LinearArcCost(c)
     nodes = [
-        [Node(; id="O$k", node_type=:origin) for k in 1:3]
-        [Node(; id=id, node_type=:other) for id in ("H1", "H2", "H3", "X")]
-        [Node(; id="D$k", node_type=:destination) for k in 1:3]
+        [Node(; id="O$k") for k in 1:3]
+        [Node(; id=id) for id in ("H1", "H2", "H3", "X")]
+        [Node(; id="D$k") for k in 1:3]
     ]
     legs = [
         ("O1", "H1", 1),
@@ -508,12 +504,7 @@ end
     # H -> D takes 3 days but H -> Y -> D takes 2. In departure mode the destination is then
     # reached early and the shortcut arcs ride on to the old arrival time, which the
     # stored path and the assignments must not contain.
-    nodes = [
-        Node(; id="O", node_type=:origin),
-        Node(; id="H", node_type=:other),
-        Node(; id="Y", node_type=:other),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="O"), Node(; id="H"), Node(; id="Y"), Node(; id="D")]
     arc(o, d, c, days) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(c), travel_time=Day(days))
     arcs = [

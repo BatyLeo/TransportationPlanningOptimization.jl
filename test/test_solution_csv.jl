@@ -54,7 +54,7 @@ end
 
 @testset "Dates round trip exactly" begin
     @testset "Hour(6) time step" begin
-        nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+        nodes = [Node(; id="A"), Node(; id="B")]
         arcs = [
             Arc(;
                 origin_id="A",

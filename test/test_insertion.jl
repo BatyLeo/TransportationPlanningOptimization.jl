@@ -6,12 +6,7 @@ using MetaGraphsNext
 
 @testset "Greedy Insertion" begin
     # 1. Setup a simple network: A -> B -> C
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="C", node_type=:destination),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C"), Node(; id="D")]
 
     # Arcs A->B, B->C, B->D
     arc_ab = Arc(;

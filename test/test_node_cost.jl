@@ -31,7 +31,7 @@ end
 end
 
 @testset "Node defaults node_cost to NoNodeCost" begin
-    n = Node(; id="A", node_type=:other)
+    n = Node(; id="A")
     @test n.node_cost isa NoNodeCost
 end
 
@@ -128,10 +128,10 @@ end
 
 function _nonlinear_shared_arc_instance()
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other, node_cost=FixedPlusLinearNodeCost(100.0, 1.0)),
-        Node(; id="C", node_type=:destination),
-        Node(; id="D", node_type=:destination),
+        Node(; id="A"),
+        Node(; id="B", node_cost=FixedPlusLinearNodeCost(100.0, 1.0)),
+        Node(; id="C"),
+        Node(; id="D"),
     ]
     arcs = [
         Arc(;
@@ -234,10 +234,7 @@ end
 end
 
 @testset "_direct_arc_lb_cost includes the destination node cost" begin
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:destination, node_cost=LinearNodeCost(5.0)),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B", node_cost=LinearNodeCost(5.0))]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(2.0), travel_time=Day(1)
@@ -268,9 +265,7 @@ end
 
 function _through_node_instance()
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="H", node_type=:other, node_cost=LinearNodeCost(100.0)),
-        Node(; id="C", node_type=:destination),
+        Node(; id="A"), Node(; id="H", node_cost=LinearNodeCost(100.0)), Node(; id="C")
     ]
     arcs = [
         Arc(;
@@ -342,10 +337,7 @@ end
 # ── (e) MultiAssignment: node cost charged once across modes. ──────────────────
 
 function _multimodal_node_cost_network()
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other, node_cost=FixedPlusLinearNodeCost(100.0, 1.0)),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B", node_cost=FixedPlusLinearNodeCost(100.0, 1.0))]
     arcs = [
         Arc(;
             origin_id="A",
@@ -466,10 +458,7 @@ end
     struct _BrokenNodeCost <: AbstractNodeCostFunction end
     TPO.evaluate(::_BrokenNodeCost, ::Vector{<:LightCommodity}) = 1.0
 
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:destination, node_cost=_BrokenNodeCost()),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B", node_cost=_BrokenNodeCost())]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)

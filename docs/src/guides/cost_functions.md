@@ -149,7 +149,7 @@ By default, nodes use [`NoNodeCost`](@ref) (zero cost).
 To add a node cost, pass a `node_cost` keyword to [`Node`](@ref):
 
 ```julia
-Node(; id="Hub", node_type=:other, node_cost=my_custom_cost)
+Node(; id="Hub", node_cost=my_custom_cost)
 ```
 
 ### LinearNodeCost
@@ -157,7 +157,7 @@ Node(; id="Hub", node_type=:other, node_cost=my_custom_cost)
 [`LinearNodeCost`](@ref) is a built-in node cost proportional to total volume:
 
 ```julia
-Node(; id="Hub", node_type=:other, node_cost=LinearNodeCost(2.0))
+Node(; id="Hub", node_cost=LinearNodeCost(2.0))
 ```
 
 The cost is `cost_per_unit_size * sum(commodity.size)` for all commodities transiting the node.

@@ -20,8 +20,8 @@ MULTIGEN.DAT:
    2   3   5
 """
 
-@testset "Parsing emits no warning, such as the node_type deprecation" begin
-    # Under --depwarn=yes a deprecation is a warning
+@testset "Parsing emits no warning" begin
+    # Guards against deprecated keywords or other warnings in the parser
     @test_logs min_level = Logging.Warn MultiCommodityFlow.parse_canad_instance(
         IOBuffer(dow)
     )

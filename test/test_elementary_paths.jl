@@ -15,11 +15,7 @@ using .TestFixtures
 # bin by looping X -> Y -> X until day 3, which raw Dijkstra does.
 function looping_instance()
     nodes = [
-        Node(; id="O1", node_type=:origin),
-        Node(; id="O2", node_type=:origin),
-        Node(; id="X", node_type=:other),
-        Node(; id="Y", node_type=:other),
-        Node(; id="D", node_type=:destination),
+        Node(; id="O1"), Node(; id="O2"), Node(; id="X"), Node(; id="Y"), Node(; id="D")
     ]
     arcs = [
         Arc(;
@@ -123,12 +119,12 @@ function splice_instance(;
     with_detour::Bool, with_shortcut::Bool=true, hc_capacity::Int=typemax(Int)
 )
     nodes = [
-        Node(; id="O", node_type=:origin),
-        Node(; id="P", node_type=:other),
-        Node(; id="H", node_type=:other),
-        Node(; id="C", node_type=:other),
-        Node(; id="Q", node_type=:other),
-        Node(; id="D", node_type=:destination),
+        Node(; id="O"),
+        Node(; id="P"),
+        Node(; id="H"),
+        Node(; id="C"),
+        Node(; id="Q"),
+        Node(; id="D"),
     ]
     arc(o, d, c, t=Day(1), cap=typemax(Int)) = Arc(;
         origin_id=o,
@@ -257,9 +253,9 @@ end
     # segment H -> P -> C (cost 0) loops on P. The fallback must avoid P (prefix) and
     # may reuse M (old interior): H -> M -> C (2) beats H -> C (10).
     nodes = [
-        Node(; id="O", node_type=:origin),
-        [Node(; id=id, node_type=:other) for id in ("P", "H", "M", "N", "C")]...,
-        Node(; id="D", node_type=:destination),
+        Node(; id="O"),
+        [Node(; id=id) for id in ("P", "H", "M", "N", "C")]...,
+        Node(; id="D"),
     ]
     arc(o, d, c, t=Day(1)) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(c), travel_time=t)
