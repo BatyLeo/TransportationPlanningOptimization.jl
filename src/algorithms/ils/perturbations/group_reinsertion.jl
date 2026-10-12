@@ -2,9 +2,9 @@
 $TYPEDEF
 
 Perturbation that removes every bundle of one randomly chosen group and reinserts
-them one by one in random order along their cheapest paths (given the current, possibly
-slope-scaled, costs). The default groups bundles by destination node, so a whole
-destination is rerouted at once. For an origin grouping use `group_by = b -> b.origin_id`.
+them one by one in random order along their cheapest paths for the current costs.
+The default groups bundles by destination node, so a whole destination
+is rerouted at once. For an origin grouping use `group_by = b -> b.origin_id`.
 
 The new routing is kept if the cost increase is at most `tolerance * cost(sol)`,
 otherwise the solution is left unchanged and the perturbation reports no change.

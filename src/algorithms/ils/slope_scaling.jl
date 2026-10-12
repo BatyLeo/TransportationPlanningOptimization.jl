@@ -13,7 +13,9 @@ continuous relaxation (more bins are open than the volume strictly requires), so
 made more expensive. The factor is clamped to at most `2.0`.
 
 Edges with no volume, no bin-packing cost component, or a factor of exactly `1.0` (a no-op)
-are left out of the dict, keeping `cost_matrix_update`'s hot-path lookup cheap.
+are left out of the dict.
+The factors only enter the objectives of the MILP perturbations. Local search, greedy
+insertion and every shortest path search use the true costs.
 `instance.travel_time_graph.cost_scaling` is cleared before being repopulated, so calling
 this on an empty `sol` leaves it empty.
 
@@ -21,7 +23,8 @@ Multi-modal edges (`MultiAssignment`) are skipped: `cost_scaling` is keyed per e
 (spatial pair and transit time), not per mode, so a single scaling factor cannot represent
 modes with distinct bin capacities. Left as a future extension.
 
-This is the slope scaling callback for [`iterated_local_search!`](@ref).
+This is the slope scaling callback for [`iterated_local_search!`](@ref), which resets
+the factors when it returns.
 Pass as `cost_update! = slope_scaling_update!`.
 """
 function slope_scaling_update!(instance::Instance, sol::SolutionState)

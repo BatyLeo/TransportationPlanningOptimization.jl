@@ -10,8 +10,9 @@ Local search then runs only once the change threshold is reached, so small pertu
 A solution cheaper than the best one becomes the new best, and the best solution is restored and polished at the end.
 The search stops on `time_limit`, or after `max_no_change` rounds without change, or after `max_no_improv` local searches without a new best (all fields of [`ILSConfig`](@ref)).
 
-Pass `cost_update! = slope_scaling_update!` to rescale the costs of the arcs by their bin utilization before the loop and after every local search, which makes under-filled bin-packing arcs more expensive (factor `n_bins / ceil(volume / capacity)`, at most 2) in the path searches of the perturbations and local searches (see [Cost Functions](@ref cost_functions_guide)).
-Acceptance always uses the real cost.
+Pass `cost_update! = slope_scaling_update!` to rescale the costs of the arcs by their bin utilization before the loop and after every local search, which makes under-filled bin-packing arcs more expensive (factor `n_bins / ceil(volume / capacity)`, at most 2) in the objectives of the MILP perturbations only (see [Cost Functions](@ref cost_functions_guide)).
+Local search, insertions and acceptance always use the real cost.
+The cost scaling factors of the travel time graph are always emptied when [`iterated_local_search!`](@ref) returns, also when it throws, including factors set by the caller.
 
 ## Workflow
 

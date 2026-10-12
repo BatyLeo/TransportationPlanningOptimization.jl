@@ -86,12 +86,6 @@ function compute_ttg_edge_incremental_cost(
         )
     end
 
-    # Slope scaling is an arc-only relaxation heuristic, node costs are never scaled.
-    if !isempty(instance.travel_time_graph.cost_scaling)
-        factor = get(instance.travel_time_graph.cost_scaling, edge_key, 1.0)
-        arc_part *= factor
-    end
-
     return arc_part + node_part
 end
 

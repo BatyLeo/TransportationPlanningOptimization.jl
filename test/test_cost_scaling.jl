@@ -15,7 +15,7 @@ const TPO = TransportationPlanningOptimization
     @test isempty(ttg.cost_scaling)
 end
 
-@testset "cost_scaling multiplies edge cost" begin
+@testset "cost_scaling does not change the incremental edge cost" begin
     instance = TestFixtures.tiny_instance()
     TestFixtures.reset!()  # start from a clean scaling dict
     sol = SolutionState(instance)
@@ -32,14 +32,9 @@ end
     # Compute baseline cost (no scaling)
     baseline = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)
 
-    # Set scaling factor = 2.0 on the edge group
+    # Path searches use true costs: a scaling factor of 2.0 changes nothing
     ttg.cost_scaling[TPO.ttg_edge_key(cache, u, v)] = 2.0
-
     scaled = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)
-    @test scaled ≈ 2.0 * baseline atol = 1e-6
-
-    # Clear scaling and verify it reverts
+    @test scaled == baseline
     empty!(ttg.cost_scaling)
-    reset = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, u, v)
-    @test reset ≈ baseline atol = 1e-6
 end
