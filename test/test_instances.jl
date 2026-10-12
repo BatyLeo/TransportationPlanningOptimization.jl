@@ -472,11 +472,12 @@ end
     for node in nodes
         network_node = instance.network_graph.graph[node.id]
         @test network_node isa NetworkNode
-        for field in fieldnames(Node)
+        for field in (:id, :capacity, :info, :node_cost)
             @test getfield(network_node, field) == getfield(node, field)
         end
     end
-    @test_throws ArgumentError Node(; id="X", node_type=:bad)
+    @test Node(; id="X").transit
+    @test !Node(; id="X", transit=false).transit
 end
 
 @testset "Input links of nodes and arc modes" begin
@@ -598,6 +599,9 @@ end
                 net_nodes, [("A", "B", arc), bad]
             )
         end
+        @test_throws ArgumentError NetworkGraph(
+            [net_nodes; NetworkNode(; id="A", node_type=:origin)], [("A", "B", arc)]
+        )
     end
 end
 

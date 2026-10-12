@@ -23,6 +23,8 @@ end
     instance = TestFixtures.shared_arc_instance()
 
     result = TPO.solve_filtered(instance; show_progress=false)
+    # Something is really filtered out
+    @test length(result.sub_instance.bundles) < length(instance.bundles)
     TPO.local_search!(result.solution_state, result.sub_instance; time_limit=1.0)
     @test TPO.is_feasible(result.solution_state, result.sub_instance; verbose=true)
     merged = TPO.merge_solutions(

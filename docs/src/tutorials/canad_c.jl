@@ -51,8 +51,10 @@ list_instances(CanadC())
 # [`LinearArcCost`](@ref) on the routed volume, with a hard capacity.
 # Each commodity forms its own bundle, so commodities with the same endpoints can take
 # different paths.
-# The instance is generated randomly, so its realized size (20 nodes, 228 arcs, 39
+# The instance is generated randomly, so its realized size (20 input nodes, 228 input arcs, 39
 # commodities) differs slightly from the nominal name.
+# Every node is the origin or the destination of some commodity (17 origins, 15 destinations, 12 both).
+# So each role gets an endpoint copy and a virtual arc, which gives 52 nodes and 260 arcs internally.
 
 instance = load_instance(CanadC(), "c33")
 

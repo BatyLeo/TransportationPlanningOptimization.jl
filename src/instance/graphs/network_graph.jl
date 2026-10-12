@@ -71,11 +71,11 @@ function _fill_network_graph!(network_graph, nodes, arcs; allow_multimodal::Bool
         if haskey(network_graph, node.id)
             prev_idx = findfirst(x -> x.id == node.id, nodes)
             prev_node = isnothing(prev_idx) ? "unknown" : nodes[prev_idx]
-            throw(ErrorException("""Duplicate node id detected:
+            throw(ArgumentError("""Duplicate node id detected:
                   - node id           : $(node.id)
                   - first occurrence  : index $(prev_idx), record: $(prev_node)
                   - duplicate record  : $(node)
-                Please ensure each row has a unique 'id' value.
+                Please ensure each node has a unique 'id' value.
             """))
         end
         Graphs.add_vertex!(network_graph, node.id, node)

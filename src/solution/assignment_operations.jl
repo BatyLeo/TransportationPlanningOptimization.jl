@@ -462,7 +462,7 @@ function _add_order_to_assignment!(
         return SingleAssignment{C}()
     end::SingleAssignment{C}
     arc_delta = _commit_new_to_slot!(assignment, arc.cost, new_commodities)
-    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    node_delta = _is_virtual(arc) ? 0.0 : _refresh_node_cost!(assignment, node_costs[sv])
     return arc_delta + node_delta
 end
 
@@ -576,7 +576,7 @@ function _remove_commodities_from_assignment!(
     isempty(assignment.commodities) && (assignment.total_size = 0.0)
     _update_cost_after_removal!(assignment, arc.cost, removed_comms)
     arc_delta = assignment.arc_cost - before
-    node_delta = _refresh_node_cost!(assignment, node_costs[sv])
+    node_delta = _is_virtual(arc) ? 0.0 : _refresh_node_cost!(assignment, node_costs[sv])
     return arc_delta + node_delta
 end
 
@@ -848,7 +848,7 @@ function _filled_assignment(
     arc::NetworkArc, loads::Vector{Vector{C}}, node_f::AbstractNodeCostFunction
 ) where {C<:LightCommodity}
     assignment = _fill_slot!(SingleAssignment{C}(), only(loads), arc.cost)
-    _refresh_node_cost!(assignment, node_f)
+    _is_virtual(arc) || _refresh_node_cost!(assignment, node_f)
     return assignment
 end
 

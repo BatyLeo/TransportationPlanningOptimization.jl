@@ -2,6 +2,7 @@
 $TYPEDEF
 
 Representation of an arc in the network graph.
+An arc from a node to itself (equal origin and destination ids) is ignored with a warning.
 
 # Fields
 $TYPEDFIELDS

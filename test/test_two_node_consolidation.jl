@@ -132,7 +132,7 @@ end
 
 @testset "compute_candidate_nodes filters by node_type" begin
     instance = TestFixtures.small_instance()
-    valid_pairs = TPO.compute_candidate_nodes(instance.travel_time_graph)
+    valid_pairs = TPO.compute_candidate_nodes(instance)
 
     g = instance.travel_time_graph.graph
     @test !isempty(valid_pairs)

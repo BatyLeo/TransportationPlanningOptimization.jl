@@ -4,6 +4,7 @@ $TYPEDSIGNATURES
 Build the [`SolutionState`](@ref) of the plan `solution` on `instance`, the reverse of `Solution(solution_state, instance)`.
 The routes are the source of truth and give the paths and the input arcs (modes) of every commodity.
 The `arc_flows` are ignored, and the capacity reserved for commodities dropped by an extraction is not rebuilt.
+A leg on an input arc with no arc in the instance (a loop, a skipped `transit=false` arc or an arc dropped by an extraction) is rejected.
 Commodities not routed by the instance (mapped to `(0, 0)`, such as the ones with their origin equal to their destination) must have an empty route.
 Every slot of every edge is repacked by first-fit decreasing, so bins and costs only equal those of the original state for linear costs (up to floating point summation order).
 Capacity is not checked, run [`is_feasible`](@ref) on the result.
@@ -14,11 +15,11 @@ An `ArgumentError` is thrown for the first rule a route breaks, checked in this 
 - a wrong number of routes, a route for a dropped commodity or an empty route for a kept one,
 - an arc index out of range or absent from `instance`, a non-positive quantity or a leg quantity above the commodity quantity, a commodity size above the bin capacity of the arc, dates off the time grid or a transit time different from the arc one,
 - copies not adding up to the commodity quantity (also when they are split across legs between two nodes that differ in dates or are not consecutive),
-- a route that does not start at the commodity origin, legs that are not connected, wait anywhere but before the first leg (arrival-date instances) or after the last leg (departure-date instances), or overlap,
+- a route that does not start at the commodity origin (a hub of an endpoint copy counts as the origin, and likewise for the destination), legs that are not connected (also a route crossing a `transit=false` node), wait anywhere but before the first leg (arrival-date instances) or after the last leg (departure-date instances), or overlap,
 - a route that does not end at the commodity destination,
 - a route not pinned to the order date, which is its arrival in arrival-date mode and its departure in departure-date mode,
 - a route longer than the maximum delivery time of its commodity group,
-- a route that leaves the time horizon of the instance when `wrap_time` is off, or passes through an origin or destination node that routes cannot cross at that date,
+- a route that leaves the time horizon of the instance when `wrap_time` is off (defensively, also a node that routes cannot cross at that date),
 - a route through a forbidden node or arc, or not elementary,
 - commodities of one group (same origin, destination and group key) that do not follow the same path (same nodes and transit times) at the same offsets from their order date.
 """
@@ -62,8 +63,8 @@ function SolutionState(
                 throw(
                     ArgumentError(
                         "input commodities $reference and $k are grouped together " *
-                        "(same origin $(bundle.origin_id), destination " *
-                        "$(bundle.destination_id) and group key) but do not follow the " *
+                        "(same origin $(_user_id(instance, bundle.origin_id)), destination " *
+                        "$(_user_id(instance, bundle.destination_id)) and group key) but do not follow the " *
                         "same path (same nodes and transit times) at the same offsets " *
                         "from their order date",
                     ),
@@ -87,7 +88,7 @@ function SolutionState(
 end
 
 # Input arc `index` as `(origin, destination, transit, slot, bin_capacity)`: spatial codes of its ends, transit steps,
-# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros (and an infinite bin capacity) if the arc is not in the instance.
+# slot in the `modes` of its per-transit-time sub-arc and bin capacity (infinite without bin packing). All zeros (and an infinite bin capacity) if the arc has no arc in the instance (loop, skipped `transit=false` arc or dropped by an extraction).
 function _arc_locations(instance::Instance)
     ng = instance.network_graph.graph
     locations = fill(
@@ -150,8 +151,9 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     start, Δ = instance.time_step_to_date[1], instance.time_step
+    input_index(s) = ng[MetaGraphsNext.label_for(ng, s)].input_index
     commodity = instance.input.commodities[k]
-    name(s) = MetaGraphsNext.label_for(ng, s)
+    name(s) = _user_id(instance, s)
     date(t) = _step_date(start, Δ, t)
     fail(i, message) = throw(ArgumentError("route of input commodity $k, leg $i: $message"))
     isempty(legs) && throw(ArgumentError("route of input commodity $k: the route is empty"))
@@ -161,7 +163,8 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
             fail(i, "arc index $(leg.arc) is out of range 1:$(length(locations))")
         location = locations[leg.arc]
         iszero(location.origin) && fail(
-            i, "input arc $(leg.arc) is not in the instance (dropped by an extraction)"
+            i,
+            "input arc $(leg.arc) has no arc in the instance (ignored at construction as a loop or a skipped transit=false arc, or dropped by an extraction)",
         )
         leg.quantity >= 1 || fail(i, "quantity $(leg.quantity) is not positive")
         leg.quantity <= commodity.quantity || fail(
@@ -227,14 +230,25 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
             )
         end
         if p == 1
-            position.origin == cache.ttg_code_to_spatial_code[ttg.origin_codes[b]] || fail(
-                position.leg,
-                "the route starts at $(name(position.origin)), " *
-                "not at the commodity origin $(instance.bundles[b].origin_id)",
-            )
+            # a route starting at the hub of the bundle origin copy is re-rooted on the copy
+            o = cache.ttg_code_to_spatial_code[ttg.origin_codes[b]]
+            position.origin == o ||
+                cache.hub_origin_copy[position.origin] == o ||
+                fail(
+                    position.leg,
+                    "the route starts at $(name(position.origin)), " *
+                    "not at the commodity origin $(commodity.origin_id)",
+                )
             continue
         end
         previous = positions[p - 1]
+        previous.destination != position.origin &&
+            !iszero(input_index(position.origin)) &&
+            input_index(previous.destination) == input_index(position.origin) &&
+            fail(
+                position.leg,
+                "the route crosses node $(name(position.origin)), which has `transit=false`",
+            )
         previous.destination == position.origin || fail(
             position.leg,
             "the leg starts at $(name(position.origin)) but the previous leg " *
@@ -253,11 +267,13 @@ function _route_positions(instance::Instance, locations, b::Int, k::Int, order::
         )
     end
     last_position = positions[end]
-    last_position.destination == cache.ttg_code_to_spatial_code[ttg.destination_codes[b]] ||
+    d = cache.ttg_code_to_spatial_code[ttg.destination_codes[b]]
+    last_position.destination == d ||
+        cache.hub_destination_copy[last_position.destination] == d ||
         fail(
             last_position.leg,
             "the route ends at $(name(last_position.destination)), " *
-            "not at the commodity destination $(instance.bundles[b].destination_id)",
+            "not at the commodity destination $(commodity.destination_id)",
         )
     return positions
 end
@@ -267,7 +283,6 @@ end
 function _position_codes(instance::Instance, b::Int, order::Order, k::Int, positions)
     cache = instance.index_cache
     start, Δ = instance.time_step_to_date[1], instance.time_step
-    ng = instance.network_graph.graph
     leg, step, after, before = _order_end(order, positions)
     step == order.time_step || throw(
         ArgumentError(
@@ -282,7 +297,8 @@ function _position_codes(instance::Instance, b::Int, order::Order, k::Int, posit
     maximum(o.max_transit_steps for o in bundle.orders) && throw(
         ArgumentError(
             "route of input commodity $k: the route is longer than the maximum delivery " *
-            "time of its commodity group ($(bundle.origin_id) -> $(bundle.destination_id))",
+            "time of its commodity group ($(_user_id(instance, bundle.origin_id)) -> " *
+            "$(_user_id(instance, bundle.destination_id)))",
         ),
     )
     codes = Int[]
@@ -292,26 +308,33 @@ function _position_codes(instance::Instance, b::Int, order::Order, k::Int, posit
             throw(
                 ArgumentError(
                     "route of input commodity $k, leg $leg: node " *
-                    "$(MetaGraphsNext.label_for(ng, node)) at $(_step_date(start, Δ, t)) is " *
+                    "$(_user_id(instance, node)) at $(_step_date(start, Δ, t)) is " *
                     "outside the time horizon $(first(instance.time_step_to_date)) to " *
                     "$(last(instance.time_step_to_date)) of the instance",
                 ),
             )
         code = ttg_code_at(cache, node, _order_tau(order, t))
+        # defensive: the pinned order date and the horizon check leave no absent code for a valid route
         iszero(code) && throw(
             ArgumentError(
                 "route of input commodity $k, leg $leg: node " *
-                "$(MetaGraphsNext.label_for(ng, node)) at $(_step_date(start, Δ, t)) " *
+                "$(_user_id(instance, node)) at $(_step_date(start, Δ, t)) " *
                 "is not allowed, the route passes through an origin or destination node " *
                 "that routes cannot cross at this date",
             ),
         )
         return push!(codes, code)
     end
+    # the virtual hops from the origin copy and to the destination copy of a hub
+    o = cache.ttg_code_to_spatial_code[instance.travel_time_graph.origin_codes[b]]
+    d = cache.ttg_code_to_spatial_code[instance.travel_time_graph.destination_codes[b]]
+    positions[1].origin == o || push_node!(positions[1].leg, o, positions[1].departure)
     push_node!(positions[1].leg, positions[1].origin, positions[1].departure)
     for position in positions
         push_node!(position.leg, position.destination, position.arrival)
     end
+    positions[end].destination == d ||
+        push_node!(positions[end].leg, d, positions[end].arrival)
     return codes
 end
 
@@ -323,14 +346,20 @@ function _check_bundle_path(instance::Instance, b::Int, k::Int, path::Vector{Int
     spatial = instance.index_cache.ttg_code_to_spatial_code
     ids = [MetaGraphsNext.label_for(ttg.graph, code)[1] for code in path]
     fail(message) = throw(ArgumentError("route of input commodity $k: $message"))
+    user(id) = _user_id(instance, id)
     for id in ids[2:(end - 1)]
-        id in bundle.forbidden_nodes && fail("the route uses forbidden node $id")
+        id in bundle.forbidden_nodes && fail("the route uses forbidden node $(user(id))")
     end
-    for arc in zip(ids[1:(end - 1)], ids[2:end])
-        arc in bundle.forbidden_arcs && fail("the route uses forbidden arc $arc")
+    for (u, v) in zip(ids[1:(end - 1)], ids[2:end])
+        (u, v) in bundle.forbidden_arcs &&
+            fail("the route uses forbidden arc $((user(u), user(v)))")
     end
-    is_elementary_path(path, spatial) ||
-        fail("the route is not elementary, it revisits a node of $ids")
+    if !is_elementary_path(path, spatial)
+        # a hub and its copies are consecutive, so the user ids list each node once
+        users = user.(ids)
+        users = [u for (i, u) in enumerate(users) if i == 1 || u != users[i - 1]]
+        fail("the route is not elementary, it revisits a node of $users")
+    end
     return nothing
 end
 
@@ -345,16 +374,22 @@ function _place_copies!(
 ) where {C<:LightCommodity}
     cache = instance.index_cache
     light = _light_commodity(commodity)
-    for (p, position) in enumerate(positions)
-        u, v = codes[p], codes[p + 1]
+    p = 0
+    for i in 1:(length(codes) - 1)
+        u, v = codes[i], codes[i + 1]
         arc = ttg_edge_arc(cache, u, v)
         edge = (
             project_to_time_space_graph(u, order, instance),
             project_to_time_space_graph(v, order, instance),
         )
         edge_loads = get!(() -> [C[] for _ in 1:_slot_count(arc)], loads, edge)
-        for (slot, copies) in position.slots
-            append!(edge_loads[slot], Iterators.repeated(light, copies))
+        if _is_virtual_ttg_edge(cache, u, v)
+            append!(edge_loads[1], Iterators.repeated(light, commodity.quantity))
+        else
+            p += 1
+            for (slot, copies) in positions[p].slots
+                append!(edge_loads[slot], Iterators.repeated(light, copies))
+            end
         end
     end
     return nothing

@@ -11,13 +11,13 @@ $TYPEDFIELDS
 struct Bundle{O<:Order,G}
     "list of orders in the bundle"
     orders::Vector{O}
-    "id of the origin node"
+    "id of the origin node (the endpoint copy for a split node)"
     origin_id::String
-    "id of the destination node"
+    "id of the destination node (the endpoint copy for a split node)"
     destination_id::String
     "set of node IDs that are forbidden for this bundle (cannot be traversed)"
     forbidden_nodes::Set{String}
-    "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle"
+    "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle (both sets are translated for nodes without a hub)"
     forbidden_arcs::Set{Tuple{String,String}}
     "grouping key shared by all commodities in the bundle (from `group_by`); `nothing` under the default grouping"
     group::G

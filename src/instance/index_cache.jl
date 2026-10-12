@@ -3,6 +3,7 @@ $TYPEDEF
 
 Precomputed integer-indexed lookup tables, derived once from the instance graphs and never mutated.
 They replace MetaGraphsNext label-to-code hashing with flat array indexing.
+Unlike the construction-time `EndpointSplit` fields `origin_copy` and `destination_copy` (user ids to copy ids, including nodes without a hub), `hub_origin_copy` and `hub_destination_copy` are indexed by spatial code and only cover hubs.
 
 # Fields
 $TYPEDFIELDS
@@ -24,6 +25,10 @@ struct IndexCache{ARC,NC}
     edge_group_to_arc::Dict{Tuple{Int,Int,Int},ARC}
     "spatial code to destination node cost"
     spatial_code_to_node_cost::Vector{NC}
+    "spatial code of a hub to that of its origin copy (0 if none)"
+    hub_origin_copy::Vector{Int}
+    "spatial code of a hub to that of its destination copy (0 if none)"
+    hub_destination_copy::Vector{Int}
     "length of the time horizon of the time-space graph"
     time_horizon_length::Int
     "whether transit times wrap around the time horizon"
@@ -85,6 +90,17 @@ Edge arc of the travel-time edge `u -> v` (codes), or `nothing` if absent.
 """
 @inline function ttg_edge_arc(cache::IndexCache, u::Int, v::Int)
     return get(cache.edge_group_to_arc, ttg_edge_key(cache, u, v), nothing)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Whether the travel-time edge `u -> v` (codes) is a virtual arc of an endpoint split.
+Shortcut edges (same spatial node) have no arc and are not virtual.
+"""
+@inline function _is_virtual_ttg_edge(cache::IndexCache, u::Int, v::Int)
+    arc = ttg_edge_arc(cache, u, v)
+    return !isnothing(arc) && _is_virtual(arc)
 end
 
 """
@@ -154,6 +170,19 @@ function build_index_cache(
     ARC = Union{(typeof(arc) for (_, arc) in entries)...}
     edge_group_to_arc = Dict{Tuple{Int,Int,Int},ARC}(entries)
 
+    # Endpoint copies of the hubs, read off the virtual arcs `v_o -> v` and `v -> v_d`.
+    hub_origin_copy = zeros(Int, n_net)
+    hub_destination_copy = zeros(Int, n_net)
+    for (u, v) in MetaGraphsNext.edge_labels(ng)
+        _is_virtual(ng[u, v]) || continue
+        cu, cv = MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)
+        if ng[u].node_type == :origin
+            hub_origin_copy[cv] = cu
+        else
+            hub_destination_copy[cu] = cv
+        end
+    end
+
     # Union of the concrete `node_cost` types actually present, narrower than `AbstractNodeCostFunction` for mixed instances, regardless of how `ng` was built.
     NC = if n_net == 0
         AbstractNodeCostFunction
@@ -173,6 +202,8 @@ function build_index_cache(
         tsg_code_to_time,
         edge_group_to_arc,
         spatial_code_to_node_cost,
+        hub_origin_copy,
+        hub_destination_copy,
         time_horizon_length,
         wrap_time,
     )

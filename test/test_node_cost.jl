@@ -87,13 +87,13 @@ end
 function _instance_with_node_cost(name::String)
     (; nodes, arcs, commodities) =
         name == "small" ? TestFixtures.small_parsed() : TestFixtures.tiny_parsed()
+    destination_ids = Set(c.destination_id for c in commodities)
     nodes_with_cost = [
         Node(;
             id=n.id,
-            node_type=n.node_type,
             capacity=n.capacity,
             info=n.info,
-            node_cost=(n.node_type == :destination ? LinearNodeCost(1.0) : NoNodeCost()),
+            node_cost=(n.id in destination_ids ? LinearNodeCost(1.0) : NoNodeCost()),
         ) for n in nodes
     ]
     return Instance(nodes_with_cost, arcs, commodities, Week(1); wrap_time=true)

@@ -128,11 +128,12 @@ small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 # Four-node instance where F (A->B, size 3) is filtered out as a direct path and
 # K (A->D2, size 4) is kept: K's cheap route through B shares the capacity-5
 # arc A->B with F, so it must route around it through C.
-# With `b_type=:destination`, B belongs to F alone and the filtering drops it with its arcs.
-function shared_arc_instance(; b_type::Symbol=:other)
+# With `transit=false`, B belongs to F alone (its outgoing arc is not created) and the filtering
+# drops it with its arcs.
+function shared_arc_instance(; transit::Bool=true)
     nodes = [
         Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=b_type),
+        Node(; id="B", node_type=:other, transit=transit),
         Node(; id="C", node_type=:other),
         Node(; id="D2", node_type=:destination),
     ]
@@ -285,17 +286,23 @@ end
 const _TRUCK_TRAIN_MODES = [(10.0, 1, 10), (5.0, 2, 10)]
 
 # Check the arc flows of `ns` against `sol`: costs, volume, bins and unique rows.
-function check_flows(ns, sol)
+# The virtual edges of split endpoints have no row, so their assignments are skipped.
+function check_flows(ns, sol, instance)
+    TPO = TransportationPlanningOptimization
     flows = ns.arc_flows
+    real = [
+        a for (edge, a) in sol.assignments if
+        !TPO._is_virtual(TPO.tsg_edge_arc(instance.index_cache, edge...))
+    ]
     @test cost(ns) ≈ cost(sol)
     @test total_arc_cost(ns) ≈ total_arc_cost(sol)
     @test total_node_cost(ns) ≈ total_node_cost(sol)
     @test sum(f -> f.volume, flows; init=0.0) ≈
-        sum(total_size_of(a) for a in values(sol.assignments); init=0.0)
+        sum(total_size_of(a) for a in real; init=0.0)
     @test allunique((f.arc, f.departure) for f in flows)
     @test issorted(flows; by=f -> (f.arc, f.departure))
     slots = [
-        slot for a in values(sol.assignments) for slot in
+        slot for a in real for slot in
         (a isa TransportationPlanningOptimization.MultiAssignment ? a.per_mode : [a]) if
         !isempty(slot.commodities)
     ]

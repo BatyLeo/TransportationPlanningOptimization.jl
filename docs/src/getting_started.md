@@ -20,16 +20,25 @@ Instance(
 
 #### `nodes::Vector{Node}`
 
-Physical locations in your network. Each node represents:
-- **Origins** (`:origin`): where commodities start
-- **Destinations** (`:destination`): where commodities need to be delivered
-- **Intermediate locations** (`:other`): intermediate platforms
+Physical locations in your network.
+There is no node type to choose: the role of a node is derived when the instance is built, from the commodities and the arcs.
+
+- A node that is not the origin or destination of any commodity is a hub, where routes can cross and freight can be consolidated.
+- A pure endpoint stays a plain origin or destination.
+  This is a commodity origin without incoming arcs, or a commodity destination without outgoing arcs.
+- A crossable endpoint is a commodity origin or destination that routes can also cross.
+  Internally it is split into a hub and endpoint copies linked by free virtual arcs.
+  The split is invisible in the user-facing `Solution` and does not change any cost.
+- `transit=false` forbids crossing the node, so it can only be the start or the end of a route.
+  Its arcs that could only be used to cross it (an incoming arc when no commodity ends there, an outgoing arc when no commodity starts there) are ignored with a warning.
+- Arcs from a node to itself are ignored with a warning.
+- The `node_type` keyword is deprecated and ignored.
 
 ```julia
 Node(;
     id::String,                                        # Unique identifier
-    node_type::Symbol,                                 # :origin, :destination, or :other
     capacity::Int = typemax(Int),                      # Maximum throughput
+    transit::Bool = true,                              # Whether routes may cross the node
     info = nothing,                                    # Optional metadata
     node_cost::AbstractNodeCostFunction = NoNodeCost() # Per-node cost function
 )
