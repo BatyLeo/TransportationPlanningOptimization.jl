@@ -230,3 +230,21 @@ end
     @test !is_feasible(SolutionState(overloaded, instance), instance)
     @test_throws ArgumentError TPO.solve(instance; start=overloaded, show_progress=false)
 end
+
+@testset "solve rebuilds the merged state with mode_selector" begin
+    # Two modes with the same travel time: a cheap one of capacity 1 and an expensive one.
+    # The direct bundle is fixed by filtering, then rebuilt by the merge.
+    modes = [(5.0, 1, 1), (10.0, 1, 100)]
+    instance = TestFixtures._leg_instance(modes, 3; quantity=3)
+    kwargs = (; LS..., rng=MersenneTwister(0), show_progress=false)
+
+    spill = TPO.solve(instance; mode_selector=FillThenSpillMode(), kwargs...)
+    @test is_feasible(spill, instance; verbose=true)
+    @test sort([f.volume for f in spill.arc_flows]) == [1.0, 2.0]
+    @test cost(spill) ≈ 1 * 5 + 2 * 10
+
+    cheapest = TPO.solve(instance; kwargs...)
+    @test is_feasible(cheapest, instance; verbose=true)
+    @test [f.volume for f in cheapest.arc_flows] == [3.0]
+    @test cost(cheapest) ≈ 3 * 10
+end

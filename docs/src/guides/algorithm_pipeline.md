@@ -127,7 +127,7 @@ println("Cost: ", cost(solution))
 
 Running [`greedy_heuristic`](@ref) on the full instance is much slower on large instances, because its cost scales with the number of unit commodities times the number of bundle arcs.
 On a very large instance the difference is hours against a couple of minutes.
-`time_limit` only covers local search, and `solve` uses [`CheapestMode`](@ref) for every step.
+`time_limit` only covers local search.
 
 For small instances you can skip filtering with `filtering=false`, which runs construction and local search on the full instance:
 
@@ -137,18 +137,22 @@ solution = solve(instance; filtering=false)
 
 ### Manual pipeline with filtering
 
-Use the building blocks when you need another local search, such as [`iterated_local_search!`](@ref), on the sub-instance:
+Use the building blocks when you need another local search, such as [`iterated_local_search!`](@ref), on the sub-instance.
+With a non-default `mode_selector`, pass the same one to `solve_filtered`, to `local_search!` (positional) and to `merge_solutions` (keyword):
 
 ```julia
 # Filter, build the sub-instance, pre-load, construct the initial solution
-result = solve_filtered(instance)
+mode_selector = FillThenSpillMode()
+result = solve_filtered(instance; mode_selector)
 
 # Improve the sub-instance solution (or use iterated_local_search!)
-stats = local_search!(result.solution_state, result.sub_instance; time_limit=300.0)
+stats = local_search!(
+    result.solution_state, result.sub_instance, mode_selector; time_limit=300.0
+)
 
 # Stitch back onto the full instance
 solution_state = merge_solutions(
-    result.filtering_state, result.solution_state, instance, result.sub_instance
+    result.filtering_state, result.solution_state, instance, result.sub_instance; mode_selector
 )
 solution = Solution(solution_state, instance)
 
@@ -196,9 +200,10 @@ When arcs carry a [`MultiModalArc`](@ref) (multiple transport modes on the same 
 - [`CheapestMode()`](@ref) (default): place everything on the single cheapest mode that has enough capacity.
 - [`FillThenSpillMode()`](@ref): fill the cheapest mode to capacity, spill overflow to the next cheapest.
 
-Pass via the `mode_selector` keyword (the function [`solve`](@ref) always uses `CheapestMode()`):
+Pass via the `mode_selector` keyword, which [`solve`](@ref) applies to every step:
 
 ```julia
+solution = solve(instance; mode_selector=FillThenSpillMode())
 solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 ```
 

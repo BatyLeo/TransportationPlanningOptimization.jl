@@ -43,12 +43,15 @@ For case 1, use different `travel_time` values (e.g. `Day(1)` for truck and `Day
 
 ## Cost Evaluation and Mode Selection
 
-The `greedy_heuristic` accepts a `mode_selector` keyword that controls how commodities are distributed across modes on a multi-modal edge. Two strategies are available, both subtypes of [`AbstractModeSelector`](@ref):
+The `solve` function and the `greedy_heuristic` accept a `mode_selector` keyword.
+It controls how commodities are distributed across modes on a multi-modal edge.
+Two strategies are available, both subtypes of [`AbstractModeSelector`](@ref):
 
 - [`CheapestMode`](@ref) (default): each bundle's order is placed entirely on the cheapest mode whose remaining capacity can absorb it. Modes that would overflow are skipped. If no mode on an edge has enough capacity, the edge is treated as infeasible (Inf cost) and Dijkstra routes around it. If no feasible path exists, `greedy_heuristic` throws `ArgumentError`.
 - [`FillThenSpillMode`](@ref): fill the cheapest mode up to its capacity, then spill overflow to the next-cheapest mode on the same edge, and so on. Unlike `CheapestMode`, this can split a single order's commodities across modes that share the same transit time. If the combined capacity across all modes on an edge is below the load, the edge is also treated as infeasible.
 
 ```julia
+solution = solve(instance; mode_selector=FillThenSpillMode())                        # full pipeline
 solution_state = greedy_heuristic(instance)                                          # CheapestMode (default)
 solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())       # capacity-aware
 cost(solution_state)
