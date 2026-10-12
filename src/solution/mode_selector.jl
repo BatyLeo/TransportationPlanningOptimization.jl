@@ -10,7 +10,12 @@ insertion. Concrete subtypes:
   spills overflow to the next-cheapest mode on the same edge.
 
 New strategies are added as additional subtypes plus the matching methods on
-`_edge_incremental_cost` and `_add_order_to_assignment!`.
+`_edge_incremental_cost`, `_add_order_to_assignment!`, `_edge_lower_bound_cost`
+and `_direct_arc_order_lb_cost`.
+The bound of `FillThenSpillMode` sums, over the commodities, the cheapest
+`lower_bound_commodity_cost` among the modes that can carry the commodity alone,
+which holds for any split.
+A mode without such a bound contributes `0` for the commodities it can carry.
 """
 abstract type AbstractModeSelector end
 

@@ -1,7 +1,9 @@
 using Test
 using TransportationPlanningOptimization
-using TransportationPlanningOptimization.Problems.Inbound: parse_inbound_instance
+using TransportationPlanningOptimization.Problems.Inbound:
+    parse_inbound_instance, StockArcCost, InboundCommodityInfo
 using Dates
+using Random
 
 const TPO = TransportationPlanningOptimization
 
@@ -338,6 +340,256 @@ end
     @test TransportationPlanningOptimization._direct_arc_order_lb_cost(
         too_small_both, order, CheapestMode()
     ) == Inf
+end
+
+# Cost with no commodity bound (default hook returns `nothing`).
+struct _NonAdditiveArcCost <: TransportationPlanningOptimization.AbstractArcCostFunction end
+function TransportationPlanningOptimization.evaluate(
+    ::_NonAdditiveArcCost, comms::Vector{<:LightCommodity}; presorted::Bool=false
+)
+    return 2.0 * sqrt(sum(c.size for c in comms; init=0.0))
+end
+
+function _fts_comm(size, stock=0.0)
+    return LightCommodity(;
+        origin_id="A",
+        destination_id="B",
+        size=Float64(size),
+        info=InboundCommodityInfo(stock),
+    )
+end
+_fts_order(comms) = Order(; commodities=comms, time_step=1, max_transit_steps=1)
+_fts_hook(f, c) = TransportationPlanningOptimization.lower_bound_commodity_cost(f, c)
+_fts_mode(cost, cap) = NetworkArc(; travel_time_steps=1, cost, capacity=cap)
+
+@testset "FillThenSpillMode lower bound hand cases" begin
+    TPO = TransportationPlanningOptimization
+    lb(arc, order) = TPO._edge_lower_bound_cost(arc, nothing, order, FillThenSpillMode())
+
+    # StockArcCost: the per-commodity bound is exact, unlike the min of whole-order bounds.
+    m1 = _fts_mode(TPO.SumArcCost((LinearArcCost(1.0), StockArcCost(1.0))), 10)
+    m2 = _fts_mode(TPO.SumArcCost((LinearArcCost(20.0), StockArcCost(0.0))), 100)
+    arc = MultiModalArc([m1, m2])
+    comms = [_fts_comm(10.0, 0.0), _fts_comm(1.0, 100.0)]
+    order = _fts_order(comms)
+    true_cost = TPO._edge_incremental_cost(arc, nothing, comms, FillThenSpillMode())
+    @test true_cost ≈ 30.0
+    @test lb(arc, order) ≈ 30.0
+    @test lb(arc, order) <= true_cost + 1e-9
+
+    # Fractional bins: a direct-arc ceil would give 2.0 above the true cost of 1.5.
+    b1 = _fts_mode(BinPackingArcCost(1.0, 10), 10)
+    b2 = _fts_mode(BinPackingArcCost(0.5, 1), 100)
+    bp_arc = MultiModalArc([b1, b2])
+    bp_comms = [_fts_comm(1.0) for _ in 1:11]
+    bp_order = _fts_order(bp_comms)
+    @test TPO._edge_incremental_cost(bp_arc, nothing, bp_comms, FillThenSpillMode()) ≈ 1.5
+    direct = TPO._direct_arc_order_lb_cost(bp_arc, bp_order, FillThenSpillMode())
+    @test direct ≈ 1.1
+    @test direct <= 1.5
+
+    # Infeasible gates.
+    small = MultiModalArc([
+        _fts_mode(LinearArcCost(1.0), 3), _fts_mode(LinearArcCost(2.0), 4)
+    ])
+    @test lb(small, _fts_order([_fts_comm(4.0), _fts_comm(4.0)])) == Inf
+    @test lb(small, _fts_order([_fts_comm(2.0), _fts_comm(2.0), _fts_comm(2.0)])) ≈ 6.0
+    @test lb(small, _fts_order([_fts_comm(5.0)])) == Inf
+
+    # Unbounded capacity disables the gates.
+    unbounded = MultiModalArc([
+        _fts_mode(LinearArcCost(1.0), typemax(Int)), _fts_mode(LinearArcCost(2.0), 1)
+    ])
+    @test lb(unbounded, _fts_order([_fts_comm(1000.0)])) ≈ 1000.0
+
+    # Heterogeneous modes (bin packing and linear).
+    het = MultiModalArc([
+        _fts_mode(BinPackingArcCost(4.0, 2), 6), _fts_mode(LinearArcCost(1.5), 6)
+    ])
+    het_comms = [_fts_comm(1.0), _fts_comm(2.0), _fts_comm(3.0)]
+    @test lb(het, _fts_order(het_comms)) ≈ 9.0
+
+    # A mode without commodity bound contributes 0 for the commodities it can carry.
+    non_additive = MultiModalArc([
+        _fts_mode(LinearArcCost(1.0), 10), _fts_mode(_NonAdditiveArcCost(), 10)
+    ])
+    @test lb(non_additive, _fts_order([_fts_comm(2.0)])) == 0.0
+    @test lb(non_additive, _fts_order([_fts_comm(20.0)])) == Inf
+
+    # A hookless term of a SumArcCost contributes 0, the other terms still count.
+    summed = TPO.SumArcCost((LinearArcCost(2.0), _NonAdditiveArcCost()))
+    hooked_comm = _fts_comm(3.0)
+    @test _fts_hook(summed, hooked_comm) == 6.0
+    @test (@allocated _fts_hook(summed, hooked_comm)) == 0
+
+    # c1 fits only the hooked mode A, c2 fits A and the hookless mode B: 5 + 0.
+    mixed = MultiModalArc([
+        _fts_mode(LinearArcCost(2.5), 10), _fts_mode(_NonAdditiveArcCost(), 1)
+    ])
+    @test lb(mixed, _fts_order([_fts_comm(2.0), _fts_comm(1.0)])) ≈ 5.0
+
+    # One EPS of slack per mode on the total capacity, as the partition allows.
+    tight = MultiModalArc([
+        _fts_mode(LinearArcCost(1.0), 1), _fts_mode(LinearArcCost(2.0), 1)
+    ])
+    tight_comms = [_fts_comm(1 + 0.9e-8), _fts_comm(1 + 0.9e-8)]
+    tight_lb = lb(tight, _fts_order(tight_comms))
+    @test isfinite(tight_lb)
+    @test tight_lb <=
+        TPO._edge_incremental_cost(tight, nothing, tight_comms, FillThenSpillMode())
+    @test TPO._edge_incremental_cost(tight, nothing, tight_comms, FillThenSpillMode()) ≈ 3.0
+end
+
+@testset "FillThenSpillMode lower bound never exceeds any split" begin
+    TPO = TransportationPlanningOptimization
+    rng = MersenneTwister(2024)
+    random_cost() =
+        rand(rng, 1:4) |>
+        k -> if k == 1
+            LinearArcCost(rand(rng) * 3)
+        elseif k == 2
+            BinPackingArcCost(1 + rand(rng) * 5, rand(rng, 4:8))
+        elseif k == 3
+            TPO.SumArcCost((LinearArcCost(rand(rng) * 2), StockArcCost(rand(rng) * 2)))
+        else
+            TPO.SumArcCost((
+                BinPackingArcCost(1 + rand(rng) * 5, rand(rng, 4:8)),
+                LinearArcCost(rand(rng) * 2),
+                StockArcCost(rand(rng) * 2),
+            ))
+        end
+    for _ in 1:300
+        n_modes = rand(rng, 2:3)
+        arc = MultiModalArc([_fts_mode(random_cost(), rand(rng, 2:10)) for _ in 1:n_modes])
+        comms = [
+            _fts_comm(rand(rng, 1:4), round(rand(rng) * 5; digits=1)) for
+            _ in 1:rand(rng, 1:5)
+        ]
+        order = _fts_order(comms)
+        bound = TPO._edge_lower_bound_cost(arc, nothing, order, FillThenSpillMode())
+
+        best = Inf
+        for assign in Iterators.product(ntuple(_ -> 1:n_modes, length(comms))...)
+            parts = [comms[findall(==(m), collect(assign))] for m in 1:n_modes]
+            all(
+                sum(c.size for c in parts[m]; init=0.0) <= arc.modes[m].capacity + 1e-8 for
+                m in 1:n_modes
+            ) || continue
+            best = min(
+                best,
+                sum(
+                    TPO.evaluate(arc.modes[m].cost, parts[m]) for
+                    m in 1:n_modes if !isempty(parts[m])
+                ),
+            )
+        end
+        @test bound <= best + 1e-9
+        isinf(bound) && @test isinf(best)
+        fts = TPO._edge_incremental_cost(arc, nothing, comms, FillThenSpillMode())
+        isfinite(fts) && @test bound <= fts + 1e-9
+    end
+end
+
+@testset "FillThenSpillMode lower bounds sum below the final arc cost" begin
+    TPO = TransportationPlanningOptimization
+    rng = MersenneTwister(7)
+    C = LightCommodity{InboundCommodityInfo}
+    for _ in 1:100
+        arc = MultiModalArc([
+            _fts_mode(BinPackingArcCost(3.0, 4), 20),
+            _fts_mode(TPO.SumArcCost((LinearArcCost(1.0), StockArcCost(0.5))), 20),
+        ])
+        assignments = Dict{Tuple{Int,Int},TPO.AbstractArcAssignment{C}}()
+        total = 0.0
+        for _ in 1:rand(rng, 1:4)
+            comms = [
+                _fts_comm(rand(rng, 1:3), round(rand(rng) * 4; digits=1)) for
+                _ in 1:rand(rng, 1:3)
+            ]
+            order = _fts_order(comms)
+            existing = get(assignments, (1, 2), nothing)
+            total += TPO._edge_lower_bound_cost(arc, existing, order, FillThenSpillMode())
+            TPO._add_order_to_assignment!(
+                assignments, (1, 2), arc, comms, FillThenSpillMode(), [NoNodeCost()], 1
+            )
+        end
+        final = sum(slot.arc_cost for slot in assignments[(1, 2)].per_mode)
+        @test total <= final + 1e-9
+    end
+end
+
+function _fts_lb_empty(a, o, s)
+    return TransportationPlanningOptimization._edge_lower_bound_cost(a, nothing, o, s)
+end
+function _fts_lb_loaded(a, e, o, s)
+    return TransportationPlanningOptimization._edge_lower_bound_cost(a, e, o, s)
+end
+function _fts_lb_direct(a, o, s)
+    return TransportationPlanningOptimization._direct_arc_order_lb_cost(a, o, s)
+end
+
+@testset "FillThenSpillMode lower bound is allocation-free" begin
+    TPO = TransportationPlanningOptimization
+    C = LightCommodity{InboundCommodityInfo}
+    arc = MultiModalArc([
+        _fts_mode(BinPackingArcCost(3.0, 4), 20),
+        _fts_mode(TPO.SumArcCost((LinearArcCost(1.0), StockArcCost(0.5))), 20),
+    ])
+    comms = [_fts_comm(2.0, 1.0), _fts_comm(3.0, 2.0)]
+    order = _fts_order(comms)
+    assignments = Dict{Tuple{Int,Int},TPO.AbstractArcAssignment{C}}()
+    TPO._add_order_to_assignment!(
+        assignments, (1, 2), arc, comms, FillThenSpillMode(), [NoNodeCost()], 1
+    )
+    loaded = assignments[(1, 2)]
+    sel = FillThenSpillMode()
+    _fts_lb_empty(arc, order, sel)
+    _fts_lb_loaded(arc, loaded, order, sel)
+    _fts_lb_direct(arc, order, sel)
+    @test (@allocated _fts_lb_empty(arc, order, sel)) == 0
+    @test (@allocated _fts_lb_loaded(arc, loaded, order, sel)) == 0
+    @test (@allocated _fts_lb_direct(arc, order, sel)) == 0
+end
+
+@testset "lower_bound with FillThenSpillMode on a multi-modal instance" begin
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="D")]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(1.0),
+            travel_time=Day(1),
+            capacity=2,
+        ),
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(20.0),
+            travel_time=Day(1),
+            capacity=100,
+        ),
+        Arc(;
+            origin_id="B", destination_id="D", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="A", destination_id="D", cost=LinearArcCost(10.0), travel_time=Day(1)
+        ),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="D",
+        quantity=4,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(3),
+        size=1.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1); allow_multimodal=true)
+    for f in (lower_bound, lower_bound_filtering)
+        sol = f(instance, FillThenSpillMode(); show_progress=false)
+        @test length(only(sol.bundle_paths)) == 3
+        direct = f(instance; show_progress=false)
+        @test length(only(direct.bundle_paths)) == 2
+    end
 end
 
 @testset "lower_bound error message format" begin

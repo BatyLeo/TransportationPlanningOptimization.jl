@@ -94,6 +94,9 @@ arc_loose = Arc(; origin_id="A", destination_id="B",
 
 If *no* mode on an edge has enough capacity for an order, `CheapestMode` cannot place that order at all and `greedy_heuristic` throws `ArgumentError`. Switch to `FillThenSpillMode` (which can distribute the order across multiple modes on the same edge) or relax the input capacities. If even the combined capacity of every mode on an edge is below the load, `FillThenSpillMode` also throws `ArgumentError`.
 
+The lower-bound and filtering passes bound `FillThenSpillMode` through `lower_bound_commodity_cost`, which the built-in arc costs implement.
+For a custom arc cost without it, that mode contributes `0` to the bound of each commodity it can carry.
+
 ## See Also
 
 - [Cost functions](@ref cost_functions_guide) for `LinearArcCost` and `BinPackingArcCost` details.

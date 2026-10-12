@@ -101,6 +101,7 @@ is read from `commodity.info.stock_cost`.
 Requires `Commodity.info` to be an `InboundCommodityInfo` (or any struct
 exposing `stock_cost`). Calling `evaluate` on commodities without that field
 errors at the property access.
+The commodity lower bound is defined for `InboundCommodityInfo` commodities.
 Lower bounds over an `Order` of `InboundCommodityInfo` use the order's aggregated stock cost in O(1).
 """
 struct StockArcCost <: AbstractArcCostFunction
@@ -144,6 +145,17 @@ function TPO.lower_bound_incremental_cost_with_order(
     c::StockArcCost, _, order::Order{IDA,InboundCommodityInfo}
 ) where {IDA}
     return c.distance * order.aggregate.stock_cost
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Exact stock cost of the single inbound commodity `x`, as `evaluate` is additive.
+"""
+function TPO.lower_bound_commodity_cost(
+    c::StockArcCost, x::LightCommodity{InboundCommodityInfo}
+)
+    return c.distance * x.info.stock_cost
 end
 
 include("parser.jl")

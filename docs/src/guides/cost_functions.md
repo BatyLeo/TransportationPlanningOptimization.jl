@@ -200,6 +200,9 @@ To implement custom arc cost logic, create a new type that subtypes [`AbstractAr
   It must return the same value as the commodity-vector method on `order.commodities`.
   It is only used by `lower_bound`, `lower_bound_filtering` and `mix_greedy_heuristic`.
   Defaults to the commodity-vector method, and `existing` may be `nothing`.
+- `lower_bound_commodity_cost(c::MyCost, x::LightCommodity)` (optional): relaxed cost of one commodity alone, additive and never above its share of the true cost.
+  `FillThenSpillMode` uses it to bound the splits of an order over the modes of a `MultiModalArc`.
+  Defaults to `nothing` (no such per-commodity bound exists), in which case that mode contributes `0` for the commodities it can carry.
 
 The typed `Vector{C}` signatures are needed to avoid method ambiguities with the generic fallbacks.
 

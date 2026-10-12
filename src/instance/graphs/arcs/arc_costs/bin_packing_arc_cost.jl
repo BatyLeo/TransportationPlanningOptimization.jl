@@ -246,3 +246,12 @@ O(1) fractional lower bound of adding a whole `order`, from its precomputed tota
 function lower_bound_incremental_cost_with_order(arc_f::BinPackingArcCost, _, order::Order)
     return arc_f.cost_per_bin * order.total_size / arc_f.bin_capacity
 end
+
+"""
+$TYPEDSIGNATURES
+
+Fractional bin share of the single commodity `c`, never above the integer bin cost.
+"""
+function lower_bound_commodity_cost(arc_f::BinPackingArcCost, c::LightCommodity)
+    return arc_f.cost_per_bin * c.size / arc_f.bin_capacity
+end

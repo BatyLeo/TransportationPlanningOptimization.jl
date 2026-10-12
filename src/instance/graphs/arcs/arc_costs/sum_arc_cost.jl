@@ -106,6 +106,22 @@ function lower_bound_incremental_cost_with_order(c::SumArcCost, existing, order:
     return _sum_lb_with_order(c.terms, existing, order)
 end
 
+@inline _sum_lb_commodity(::Tuple{}, ::LightCommodity) = 0.0
+@inline function _sum_lb_commodity(terms::Tuple, c::LightCommodity)
+    head = lower_bound_commodity_cost(first(terms), c)
+    rest = _sum_lb_commodity(Base.tail(terms), c)
+    return something(head, 0.0) + rest
+end
+
+"""
+$TYPEDSIGNATURES
+
+Sum of the commodity bounds of `c.terms`, a term without bound contributing `0.0` (valid as costs are nonnegative).
+"""
+function lower_bound_commodity_cost(c::SumArcCost, x::LightCommodity)
+    return _sum_lb_commodity(c.terms, x)
+end
+
 """
 $TYPEDSIGNATURES
 

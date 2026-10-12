@@ -247,4 +247,53 @@ end
     @test is_feasible(cheapest, instance; verbose=true)
     @test [f.volume for f in cheapest.arc_flows] == [3.0]
     @test cost(cheapest) ≈ 3 * 10
+
+    unfiltered = TPO.solve(
+        instance; mode_selector=FillThenSpillMode(), filtering=false, kwargs...
+    )
+    @test is_feasible(unfiltered, instance; verbose=true)
+    @test sort([f.volume for f in unfiltered.arc_flows]) == [1.0, 2.0]
+    @test cost(unfiltered) ≈ 1 * 5 + 2 * 10
+end
+
+@testset "solve with FillThenSpillMode splits a bundle over two same-transit modes" begin
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="D")]
+    arc(o, d, c, cap=typemax(Int)) = Arc(;
+        origin_id=o,
+        destination_id=d,
+        cost=LinearArcCost(c),
+        travel_time=Day(1),
+        capacity=cap,
+    )
+    arcs = [
+        arc("A", "B", 1.0, 2),
+        arc("A", "B", 3.0, 100),
+        arc("B", "D", 1.0),
+        arc("A", "D", 10.0),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="D",
+        quantity=4,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(3),
+        size=1.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1); allow_multimodal=true)
+    for filtering in (true, false)
+        sol = TPO.solve(
+            instance;
+            mode_selector=FillThenSpillMode(),
+            filtering,
+            LS...,
+            rng=MersenneTwister(0),
+            show_progress=false,
+        )
+        @test is_feasible(sol, instance; verbose=true)
+        @test cost(sol) ≈ 12.0
+        ab = filter(f -> f.arc in (1, 2), sol.arc_flows)
+        @test sort([f.arc for f in ab]) == [1, 2]
+        @test [f.volume for f in ab] == [2.0, 2.0]
+        @test only(filter(f -> f.arc == 3, sol.arc_flows)).volume == 4.0
+    end
 end

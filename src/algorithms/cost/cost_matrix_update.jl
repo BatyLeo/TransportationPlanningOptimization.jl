@@ -128,7 +128,8 @@ Same projection logic as `compute_ttg_edge_incremental_cost`, but with
 
 When the TTG edge is the bundle's direct arc (its spatial endpoints are the bundle's origin and
 destination, or the hubs of their endpoint copies), the per-order ceil rule is
-applied instead of the fractional formula. Virtual arcs of an endpoint split cost nothing.
+applied instead of the fractional formula. Under `FillThenSpillMode` the direct-arc
+bound of a multi-modal arc is the fractional per-commodity bound. Virtual arcs of an endpoint split cost nothing.
 """
 function compute_ttg_edge_lower_bound_cost(
     current_solution::SolutionState,
@@ -190,7 +191,8 @@ $TYPEDSIGNATURES
 Lower-bound cost for the bundle's direct arc, summed per order. Mirrors
 Renault's `get_lb_transport_units` for `:direct` arcs: each order contributes
 `ceil(order_size / bin_capacity) * cost_per_bin` on bin-packing arcs (or
-`cost_per_unit_size * order_size` on linear arcs). Used internally by
+`cost_per_unit_size * order_size` on linear arcs). Under `FillThenSpillMode` the
+direct-arc bound of a multi-modal arc is the fractional per-commodity bound. Used internally by
 `compute_ttg_edge_lower_bound_cost` when the TTG edge is identified as the
 bundle's direct arc.
 """
@@ -253,13 +255,18 @@ end
 
 function _direct_arc_order_lb_cost(arc::MultiModalArc, order::Order, ::CheapestMode)
     # Batch-only capacity gate: see the "Relaxed lower-bound cost" rationale in edge_cost.jl.
-    # Valid only when one mode carries the whole batch (CheapestMode), not when
-    # FillThenSpillMode may split it across modes.
+    # Valid only when one mode carries the whole batch (CheapestMode). FillThenSpillMode
+    # may split it across modes and has its own per-commodity bound below.
     return minimum(if _mode_has_capacity(mode, 0.0, order.total_size)
         _direct_arc_order_lb_cost(mode.cost, order)
     else
         Inf
     end for mode in arc.modes)
+end
+
+# No per-order ceil here: a split across modes can cost less than the ceil on one mode.
+function _direct_arc_order_lb_cost(arc::MultiModalArc, order::Order, sel::FillThenSpillMode)
+    return _edge_lower_bound_cost(arc, nothing, order, sel)
 end
 
 """

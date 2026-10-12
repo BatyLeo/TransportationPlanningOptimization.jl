@@ -47,6 +47,15 @@ end
 """
 $TYPEDSIGNATURES
 
+Exact cost of the single commodity `c`, as `evaluate` is additive.
+"""
+function lower_bound_commodity_cost(arc_f::LinearArcCost, c::LightCommodity)
+    return arc_f.cost_per_unit_size * c.size
+end
+
+"""
+$TYPEDSIGNATURES
+
 Linear cost is additive, so the marginal cost depends only on `new`.
 """
 function incremental_cost(

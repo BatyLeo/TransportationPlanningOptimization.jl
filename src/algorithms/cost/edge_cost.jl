@@ -229,7 +229,10 @@ end
 # (existing load on the mode is otherwise ignored, keeping the bound
 # order-independent and a valid relaxation). `NetworkArc` forwards to its
 # single mode, and `MultiModalArc` + `CheapestMode` takes the minimum over
-# modes. Used by the lower-bound and filtering strategies.
+# modes. `MultiModalArc` + `FillThenSpillMode` sums, over the commodities, the
+# cheapest relaxed per-commodity cost among the modes the commodity fits alone
+# (`lower_bound_commodity_cost`), since every split costs at least that.
+# Used by the lower-bound and filtering strategies.
 # ============================================================================
 
 """
@@ -294,6 +297,47 @@ function _edge_lower_bound_cost(
             Inf
         end for i in eachindex(arc.modes)
     )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Whether a load of `size` fits within the combined capacity of the modes of `arc`.
+"""
+function _fits_total_capacity(arc::MultiModalArc, size::Float64)
+    total = 0.0
+    for mode in arc.modes
+        mode.capacity == typemax(Int) && return true
+        total += mode.capacity
+    end
+    return size <= total + length(arc.modes) * EPS
+end
+
+"""
+$TYPEDSIGNATURES
+
+`MultiModalArc` lower bound under `FillThenSpillMode`, valid for any split of the order.
+It is the sum over the commodities of the cheapest `lower_bound_commodity_cost` among the
+modes the commodity fits alone, ignoring existing load.
+It is `Inf` if the order exceeds the combined capacity or a commodity fits no mode.
+A mode without a bound for a commodity contributes `0` to that commodity.
+"""
+function _edge_lower_bound_cost(
+    arc::MultiModalArc, ::Union{Nothing,MultiAssignment}, order::Order, ::FillThenSpillMode
+)
+    _fits_total_capacity(arc, order.total_size) || return Inf
+    total = 0.0
+    for c in order.commodities
+        best = Inf
+        for mode in arc.modes
+            _mode_has_capacity(mode, 0.0, c.size) || continue
+            lb = lower_bound_commodity_cost(mode.cost, c)
+            best = min(best, something(lb, 0.0))
+        end
+        best == Inf && return Inf
+        total += best
+    end
+    return total
 end
 
 # ============================================================================
