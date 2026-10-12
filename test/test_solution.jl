@@ -88,7 +88,7 @@ end
 end
 
 @testset "Sub-day time steps keep the time of day" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Hour(7)

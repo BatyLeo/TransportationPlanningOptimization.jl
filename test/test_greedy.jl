@@ -6,11 +6,7 @@ using Test
     # This test mirrors the Quick Start in docs/src/index.md and README.md.
     # If this breaks, update both.
 
-    nodes = [
-        Node(; id="Origin", node_type=:origin),
-        Node(; id="Hub", node_type=:other),
-        Node(; id="Destination", node_type=:destination),
-    ]
+    nodes = [Node(; id="Origin"), Node(; id="Hub"), Node(; id="Destination")]
 
     arcs = [
         Arc(;
@@ -53,12 +49,7 @@ path, so capacity is exercised across the two bundles that both need the
 `A->H` leg, not within a single bundle.
 """
 function hub_capacity_instance(hub_cost, direct_cost, leg_cost)
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="H", node_type=:other),
-        Node(; id="B", node_type=:destination),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="H"), Node(; id="B"), Node(; id="D")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="H", cost=hub_cost, travel_time=Day(1), capacity=1
@@ -122,7 +113,7 @@ end
     # A single commodity larger than the only capacitated arc's capacity
     # must not be routed onto it. No alternative route exists here, so
     # `greedy_heuristic` throws.
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",

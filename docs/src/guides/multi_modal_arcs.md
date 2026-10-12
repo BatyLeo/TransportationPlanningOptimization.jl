@@ -17,8 +17,8 @@ using TransportationPlanningOptimization
 using Dates
 
 nodes = [
-    Node(; id="A", node_type=:origin),
-    Node(; id="B", node_type=:destination),
+    Node(; id="A"),
+    Node(; id="B"),
 ]
 
 arcs = [

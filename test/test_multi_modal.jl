@@ -111,7 +111,7 @@ end
 @testset "Greedy heuristic selects cheapest mode across multi-modal scenarios" begin
     # Case 2 (same transit time -> single MultiModalArc edge): cheaper mode
     # (5.0/unit) wins over the more expensive one (10.0/unit).
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
@@ -147,7 +147,7 @@ end
     # MultiModalArc): the cheap-but-slow train (5.0/unit, 2 days) still wins
     # over the fast-but-expensive truck (10.0/unit, 1 day) when both fit the
     # delivery deadline.
-    nodes_c1 = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes_c1 = [Node(; id="A"), Node(; id="B")]
     arcs_c1 = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(10.0), travel_time=Day(1)
@@ -175,7 +175,7 @@ end
     # time, so the two modes collapse to one edge): Linear (5.0/unit, cap 10)
     # vs. BinPacking (100.0/bin of 10). Linear is cheaper for 2 units, so all
     # commodities route there: 2 × 5.0 = 10.0.
-    nodes_het = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes_het = [Node(; id="A"), Node(; id="B")]
     arcs_het = [
         Arc(;
             origin_id="A",
@@ -213,7 +213,7 @@ end
 # ── Per-mode capacity (case 2) ────────────────────────────────────────────────
 
 @testset ":cheapest skips modes lacking capacity in case 2" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     # Cheap mode capacity=1 (cannot fit 2 units); expensive mode capacity=10
     arcs = [
         Arc(;
@@ -259,7 +259,7 @@ end
     # Default (CheapestMode, no spill): neither mode alone has enough capacity
     # for 3 units (caps 1 and 2), even though the *combined* capacity would
     # suffice. CheapestMode never spills across modes, so this is infeasible.
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",
@@ -313,7 +313,7 @@ end
 # ── fill_then_spill mode selection (case 2) ──────────────────────────────────
 
 @testset "fill_then_spill assigns to cheapest then spills" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",
@@ -353,7 +353,7 @@ end
 end
 
 @testset "fill_then_spill matches cheapest when capacity is sufficient" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",
@@ -390,7 +390,7 @@ end
 end
 
 @testset "Symbol selector is rejected by the typed kwarg" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(5.0), travel_time=Day(1)
@@ -415,7 +415,7 @@ end
 # ── Order-bucketing under wrap_time (case 2 collision on a single TSG edge) ──
 
 @testset "wrap_time bucketing keeps placement consistent with Dijkstra estimate" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     # Two parallel modes with same transit time (case 2). Cheap mode is too
     # small for the combined wrap-collided load but big enough for either order
     # alone, which is exactly the case where per-order placement diverged from

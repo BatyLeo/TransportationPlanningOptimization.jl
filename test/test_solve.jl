@@ -10,11 +10,7 @@ using .TestFixtures
 # A->B has a truck and a slower cheaper train (multi-modal leg). F (A->B) is a
 # direct path and gets filtered out, K (A->D) is kept and routes through B.
 function multimodal_instance()
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="D")]
     truck = Arc(;
         origin_id="A", destination_id="B", cost=LinearArcCost(2.0), travel_time=Day(1)
     )
@@ -125,7 +121,7 @@ end
 end
 
 @testset "solve when every bundle is filtered out" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)

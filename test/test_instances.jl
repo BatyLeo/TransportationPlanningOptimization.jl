@@ -17,8 +17,8 @@ using .TestFixtures
 @testset "Instance creation" begin
     @test begin
         nodes = [
-            Node(; id="1", node_type=:origin, capacity=100, info=nothing),
-            Node(; id="2", node_type=:destination, capacity=200, info=nothing),
+            Node(; id="1", capacity=100, info=nothing),
+            Node(; id="2", capacity=200, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -73,9 +73,9 @@ end
 @testset "Instance bundle aggregation" begin
     @test begin
         nodes = [
-            Node(; id="A", node_type=:origin, capacity=50, info=nothing),
-            Node(; id="B", node_type=:other, capacity=100, info=nothing),
-            Node(; id="C", node_type=:destination, capacity=150, info=nothing),
+            Node(; id="A", capacity=50, info=nothing),
+            Node(; id="B", capacity=100, info=nothing),
+            Node(; id="C", capacity=150, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -135,8 +135,8 @@ end
 @testset "Instance with linear arc costs" begin
     @test begin
         nodes = [
-            Node(; id="1", node_type=:origin, capacity=1000, info=nothing),
-            Node(; id="2", node_type=:destination, capacity=1000, info=nothing),
+            Node(; id="1", capacity=1000, info=nothing),
+            Node(; id="2", capacity=1000, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -165,8 +165,8 @@ end
 @testset "Instance with bin packing arc costs" begin
     @test begin
         nodes = [
-            Node(; id="1", node_type=:origin, capacity=500, info=nothing),
-            Node(; id="2", node_type=:destination, capacity=500, info=nothing),
+            Node(; id="1", capacity=500, info=nothing),
+            Node(; id="2", capacity=500, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -195,9 +195,9 @@ end
 @testset "Instance with heterogeneous arc costs" begin
     @test begin
         nodes = [
-            Node(; id="1", node_type=:origin, capacity=1000, info=nothing),
-            Node(; id="2", node_type=:other, capacity=1000, info=nothing),
-            Node(; id="3", node_type=:destination, capacity=1000, info=nothing),
+            Node(; id="1", capacity=1000, info=nothing),
+            Node(; id="2", capacity=1000, info=nothing),
+            Node(; id="3", capacity=1000, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -246,8 +246,8 @@ end
 @testset "Instance time period handling" begin
     @test begin
         nodes = [
-            Node(; id="1", node_type=:origin, capacity=100, info=nothing),
-            Node(; id="2", node_type=:destination, capacity=100, info=nothing),
+            Node(; id="1", capacity=100, info=nothing),
+            Node(; id="2", capacity=100, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -281,8 +281,8 @@ end
             model::String
         end
         nodes = [
-            Node(; id="A", node_type=:origin, capacity=10, info=nothing),
-            Node(; id="B", node_type=:destination, capacity=10, info=nothing),
+            Node(; id="A", capacity=10, info=nothing),
+            Node(; id="B", capacity=10, info=nothing),
         ]
         arcs = [
             Arc(;
@@ -332,9 +332,9 @@ end
 
 @testset "Instance keeps input and commodity mapping" begin
     nodes = [
-        Node(; id="A", node_type=:origin, capacity=100, info=nothing),
-        Node(; id="C", node_type=:origin, capacity=100, info=nothing),
-        Node(; id="B", node_type=:destination, capacity=100, info=nothing),
+        Node(; id="A", capacity=100, info=nothing),
+        Node(; id="C", capacity=100, info=nothing),
+        Node(; id="B", capacity=100, info=nothing),
     ]
     mk_arc(o, d) = Arc(;
         origin_id=o,
@@ -449,8 +449,8 @@ end
 
 @testset "Node input is converted to NetworkNode" begin
     nodes = [
-        Node(; id="A", node_type=:origin, capacity=7, info=:a),
-        Node(; id="B", node_type=:destination, info=:b, node_cost=LinearNodeCost(2.0)),
+        Node(; id="A", capacity=7, info=:a),
+        Node(; id="B", info=:b, node_cost=LinearNodeCost(2.0)),
     ]
     arcs = [
         Arc(;
@@ -483,11 +483,7 @@ end
 @testset "Input links of nodes and arc modes" begin
     for arrival in (false, true)
         @testset "$(arrival ? "arrival" : "departure")_date commodities" begin
-            nodes = [
-                Node(; id="A", node_type=:origin),
-                Node(; id="C", node_type=:origin),
-                Node(; id="B", node_type=:destination),
-            ]
+            nodes = [Node(; id="A"), Node(; id="C"), Node(; id="B")]
             mk_arc(o, d, days) = Arc(;
                 origin_id=o,
                 destination_id=d,
@@ -551,11 +547,7 @@ end
         end
     end
 
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="C", node_type=:origin),
-        Node(; id="B", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="C"), Node(; id="B")]
     mk_cost_arc(o, d, cost) =
         Arc(; origin_id=o, destination_id=d, travel_time=Day(1), cost=cost)
     commodities = [
@@ -599,7 +591,15 @@ end
                 net_nodes, [("A", "B", arc), bad]
             )
         end
-        @test_throws ArgumentError NetworkGraph(
+    end
+
+    @testset "duplicate node id throws" begin
+        arc = NetworkArc(; travel_time_steps=1, cost=LinearArcCost(1.0))
+        net_nodes = [
+            NetworkNode(; id="A", node_type=:origin),
+            NetworkNode(; id="B", node_type=:destination),
+        ]
+        @test_throws "Duplicate node id" NetworkGraph(
             [net_nodes; NetworkNode(; id="A", node_type=:origin)], [("A", "B", arc)]
         )
     end
@@ -607,8 +607,8 @@ end
 
 @testset "Sub-day time steps" begin
     nodes = [
-        Node(; id="1", node_type=:origin, capacity=100, info=nothing),
-        Node(; id="2", node_type=:destination, capacity=200, info=nothing),
+        Node(; id="1", capacity=100, info=nothing),
+        Node(; id="2", capacity=200, info=nothing),
     ]
     arcs = [
         Arc(;
@@ -644,8 +644,8 @@ end
 
 @testset "Non-midnight dates keep Day, Week and 30-day order steps" begin
     nodes = [
-        Node(; id="1", node_type=:origin, capacity=100, info=nothing),
-        Node(; id="2", node_type=:destination, capacity=200, info=nothing),
+        Node(; id="1", capacity=100, info=nothing),
+        Node(; id="2", capacity=200, info=nothing),
     ]
     arcs = [
         Arc(;
@@ -715,8 +715,7 @@ end
 
 @testset "Commodity endpoint validation" begin
     nodes = [
-        Node(; id="A", node_type=:origin, capacity=10, info=nothing),
-        Node(; id="B", node_type=:destination, capacity=10, info=nothing),
+        Node(; id="A", capacity=10, info=nothing), Node(; id="B", capacity=10, info=nothing)
     ]
     arcs = [
         Arc(;

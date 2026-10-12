@@ -60,12 +60,11 @@ function _arcs(instance)
     return indexed, virtual
 end
 
-@testset "Node input: transit and deprecated node_type" begin
+@testset "Node input: transit and removed node_type" begin
     @test Node(; id="A").transit
     @test !Node(; id="A", transit=false).transit
-    @test_deprecated r"node_type" Node(; id="A", node_type=:origin)
-    # Any value is accepted and ignored
-    @test (@test_deprecated r"node_type" Node(; id="A", node_type=:whatever)) isa Node
+    # The user keyword was removed, roles are derived
+    @test_throws MethodError Node(; id="A", node_type=:origin)
     @test !hasfield(Node, :node_type)
 end
 

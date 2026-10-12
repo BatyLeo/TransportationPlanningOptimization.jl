@@ -47,7 +47,7 @@ end
 # Two same-OD commodities of size 3, split into two bundles by a custom `group_by`,
 # on an A->B arc of capacity `cap`, optionally with an A->H->B detour via a hub.
 function two_bundle_direct_instance(cap; with_hub::Bool)
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",
@@ -58,7 +58,7 @@ function two_bundle_direct_instance(cap; with_hub::Bool)
         ),
     ]
     if with_hub
-        push!(nodes, Node(; id="H", node_type=:other))
+        push!(nodes, Node(; id="H"))
         for (o, d) in (("A", "H"), ("H", "B"))
             push!(
                 arcs,
@@ -128,7 +128,7 @@ end
 @testset "lower_bound_filtering fixes one bundle per mode of parallel legs" begin
     # Two A->B legs of capacity 5 with the same transit time form a MultiModalArc:
     # each size-3 bundle fits one leg only, so both are fixed, one per mode.
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",
@@ -162,11 +162,7 @@ end
 @testset "lower_bound_filtering fixes the direct-only bundle first and routes the other" begin
     # Y (size 3, direct only) is processed before X (size 2.5, hub possible):
     # Y takes the direct arc, so X no longer fits it and is kept, routed via the hub.
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:destination),
-        Node(; id="H", node_type=:other),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="H")]
     arcs = [
         Arc(;
             origin_id=o,
@@ -209,12 +205,7 @@ end
     # overflowing batch instead of letting Dijkstra route the bundle onto it:
     # FFD bin packing would otherwise throw `DomainError` when the cheaper
     # path is committed.
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="C", node_type=:other),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C"), Node(; id="D")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)
@@ -273,11 +264,7 @@ end
     # `compute_ttg_edge_incremental_cost`, so its assertions here are a
     # regression guard rather than a reproduction of the bug. A->C->B is
     # pricier but has enough capacity, so it is the only feasible route.
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:destination),
-        Node(; id="C", node_type=:other),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
     arcs = [
         Arc(;
             origin_id="A",

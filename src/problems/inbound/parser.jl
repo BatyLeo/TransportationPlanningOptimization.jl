@@ -32,17 +32,8 @@ function parse_inbound_instance(
     df_commodities = DataFrame(CSV.File(commodity_file; stringtype=String))
 
     nodes = map(eachrow(df_nodes)) do row
-        node_type_symbol = if row[NODE_TYPE] == "supplier"
-            :origin
-        elseif row[NODE_TYPE] == "plant"
-            :destination
-        else
-            :other
-        end
-
         return Node(;
             id=string(row[NODE_ID]),
-            node_type=node_type_symbol,
             capacity=Int(row[NODE_CAPACITY]),
             node_cost=LinearNodeCost(Float64(row[NODE_COST]) / VOLUME_FACTOR),
         )

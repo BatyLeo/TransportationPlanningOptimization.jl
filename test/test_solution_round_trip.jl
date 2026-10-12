@@ -124,12 +124,7 @@ end
 function diamond_instance(;
     days=(10,), copies=1, forbidden::Bool=false, max_days=map(_ -> 4, days)
 )
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="C", node_type=:other),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C"), Node(; id="D")]
     arc(o, d, days) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(days))
     arcs = [
@@ -316,7 +311,7 @@ end
 
     # Departure dates 1 and 4 with 4 and 1 days of transit give the horizon 1 to 5,
     # the 2-day leg of the second order ends on step 6.
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(2)
@@ -373,11 +368,7 @@ end
 end
 
 @testset "Rejected plans, delivery budget of the bundle" begin
-    nodes = [
-        Node(; id="O", node_type=:origin),
-        Node(; id="D1", node_type=:destination),
-        Node(; id="D2", node_type=:destination),
-    ]
+    nodes = [Node(; id="O"), Node(; id="D1"), Node(; id="D2")]
     arc(d, days) = Arc(;
         origin_id="O", destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(days)
     )
@@ -417,7 +408,7 @@ end
 end
 
 @testset "Rejected plans, sub-instance" begin
-    instance = @test_logs (:warn, r"1 input arc\(s\) skipped") match_mode = :any TestFixtures.shared_arc_instance(;
+    instance = @test_logs (:warn, r"1 input arc\(s\) skipped") TestFixtures.shared_arc_instance(;
         transit=false
     )
     (; solution_state, sub_instance) = solve_filtered(instance; show_progress=false)

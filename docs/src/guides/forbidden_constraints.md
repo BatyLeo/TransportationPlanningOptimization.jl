@@ -69,10 +69,10 @@ using Dates
 #    └→ C →┘
 
 nodes = [
-    Node(; id="A", node_type=:origin),
-    Node(; id="B", node_type=:other),
-    Node(; id="C", node_type=:other),
-    Node(; id="D", node_type=:destination),
+    Node(; id="A"),
+    Node(; id="B"),
+    Node(; id="C"),
+    Node(; id="D"),
 ]
 
 arcs = [

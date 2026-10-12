@@ -70,12 +70,7 @@ hub or its own direct fallback. Used to reproduce the ruin-and-recreate
 deadlock in `large_local_search!` when both bundles become "forbidden".
 """
 function hub_deadlock_instance()
-    nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="H", node_type=:other),
-        Node(; id="B", node_type=:destination),
-        Node(; id="D", node_type=:destination),
-    ]
+    nodes = [Node(; id="A"), Node(; id="H"), Node(; id="B"), Node(; id="D")]
     arcs = [
         Arc(;
             origin_id="A",

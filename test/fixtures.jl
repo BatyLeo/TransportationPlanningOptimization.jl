@@ -132,10 +132,7 @@ small_greedy(; wrap_time::Bool=true) = _greedy("small", wrap_time)
 # drops it with its arcs.
 function shared_arc_instance(; transit::Bool=true)
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other, transit=transit),
-        Node(; id="C", node_type=:other),
-        Node(; id="D2", node_type=:destination),
+        Node(; id="A"), Node(; id="B", transit=transit), Node(; id="C"), Node(; id="D2")
     ]
     arcs = [
         Arc(;
@@ -258,9 +255,7 @@ function _leg_instance(
     arrival::Bool=false,
     size=1.0,
 )
-    nodes = [
-        Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination, node_cost)
-    ]
+    nodes = [Node(; id="A"), Node(; id="B", node_cost)]
     arcs = [
         Arc(;
             origin_id="A",
@@ -471,9 +466,9 @@ function trivial_instance(
     trivial_extra=(;),
 )
     nodes = [
-        Node(; id="A", node_type=:origin, capacity=10, info=nothing),
-        Node(; id="B", node_type=:other, capacity=10, info=nothing),
-        Node(; id="C", node_type=:destination, capacity=10, info=nothing),
+        Node(; id="A", capacity=10, info=nothing),
+        Node(; id="B", capacity=10, info=nothing),
+        Node(; id="C", capacity=10, info=nothing),
     ]
     arcs = [
         Arc(;

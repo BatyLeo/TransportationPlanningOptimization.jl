@@ -32,7 +32,6 @@ There is no node type to choose: the role of a node is derived when the instance
 - `transit=false` forbids crossing the node, so it can only be the start or the end of a route.
   Its arcs that could only be used to cross it (an incoming arc when no commodity ends there, an outgoing arc when no commodity starts there) are ignored with a warning.
 - Arcs from a node to itself are ignored with a warning.
-- The `node_type` keyword is deprecated and ignored.
 
 ```julia
 Node(;

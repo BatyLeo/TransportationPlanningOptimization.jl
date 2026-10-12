@@ -43,7 +43,6 @@ public dataset_dir, datasets
 const NODE_ID = :point_account
 const NODE_COST = :point_m3_cost
 const NODE_CAPACITY = :point_m3_capacity
-const NODE_TYPE = :point_type
 
 # Arc CSV column mappings
 const ALLOWED_ARC_TYPES = [:direct, :outsource, :cross_plat, :delivery, :oversea, :shortcut]
