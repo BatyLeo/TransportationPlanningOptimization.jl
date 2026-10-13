@@ -97,12 +97,17 @@ Snapshot the edges of `path` into `snapshots`, then add it to `sol` as the path 
 which must not carry shortcut edges at its ends (see `_remove_shortcuts_from_path!`).
 """
 function _add_fixed_path!(
-    sol::SolutionState, instance::Instance, bundle_idx::Int, path::Vector{Int}, snapshots
+    sol::SolutionState,
+    instance::Instance,
+    bundle_idx::Int,
+    path::Vector{Int},
+    snapshots;
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     _snapshot_path_assignments(
         sol, instance, bundle_idx, path; cache=snapshots, clear=false
     )
-    add_bundle_path!(sol, instance, bundle_idx, path)
+    add_bundle_path!(sol, instance, bundle_idx, path; mode_selector)
     return nothing
 end
 

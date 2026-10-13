@@ -20,6 +20,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     # No-op: doesn't change anything, so ILS will count it as no change
     return (0.0, 0)
@@ -133,6 +134,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     p.calls[] += 1
     return (Inf, 1)
@@ -186,6 +188,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     p.calls[] += 1
     return (p.fraction * cost(sol), 0)
@@ -245,6 +248,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     isnan(p.lowered_cost[]) || return (0.0, 0)
     before = cost(sol)
@@ -295,6 +299,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     push!(p.calls, (time(), time_limit))
     sleep(0.01)
@@ -343,6 +348,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     push!(p.budgets, time_limit)
     time_limit >= 1.0 && sleep(0.2)
@@ -477,4 +483,45 @@ end
     end
     @test err isa ArgumentError
     @test occursin("ArcFlowMILPPerturbation", err.msg)
+end
+
+# Records the mode selector it receives and changes nothing. The infinite cost increase ends
+# each round after one call, and `max_no_change` (3 by default) ends the loop.
+struct SelectorRecordingPerturbation <: AbstractPerturbation
+    received::Vector{Any}
+end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::SelectorRecordingPerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+    time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
+)
+    push!(p.received, mode_selector)
+    return (Inf, 0)
+end
+
+@testset "The ILS passes its mode selector to the perturbations" begin
+    instance = TestFixtures.small_instance()
+    config = ILSConfig(;
+        time_limit=3, final_ls_time_limit=0.5, perturbation_time_limit=1, ls_time_limit=1
+    )
+    for selector in (FillThenSpillMode(), CheapestMode())
+        sol = TestFixtures.small_greedy()
+        p = SelectorRecordingPerturbation(Any[])
+        iterated_local_search!(
+            sol,
+            instance,
+            [p];
+            config,
+            mode_selector=selector,
+            rng=Random.MersenneTwister(1),
+            verbose=false,
+        )
+        @test length(p.received) == 3
+        @test all(==(selector), p.received)
+    end
 end

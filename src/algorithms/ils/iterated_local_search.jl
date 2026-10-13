@@ -37,6 +37,9 @@ At the end the best solution is restored and polished by a final local search of
 `config.final_ls_time_limit`, and of at most the time left in `config.time_limit`.
 It does not run when no time is left.
 
+`mode_selector` is used by every local search and passed to every `perturbate!` call, so it
+must be the one the solution was built with.
+
 The optional `cost_update!` callback is called once before the loop, then after every
 local search phase. It receives `(instance, sol)` and may mutate
 `instance.travel_time_graph.cost_scaling` or other mutable state.
@@ -138,7 +141,13 @@ function iterated_local_search!(
                 )
                 call_time >= min_call || break
                 cost_increase, n = perturbate!(
-                    sol, instance, perturbation; rng, verbose, time_limit=call_time
+                    sol,
+                    instance,
+                    perturbation;
+                    rng,
+                    verbose,
+                    time_limit=call_time,
+                    mode_selector,
                 )
                 changed += n
                 accumulated_increase += cost_increase

@@ -118,9 +118,9 @@ function _attract_reduce_paths(
     to_beat::Int=0,
     deadline::Float64=Inf,
     remove_bundle::Bool=_has_finite_capacity(instance),
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     ttg = instance.travel_time_graph
-    mode_selector = CheapestMode()
     buffer = BinPackingBuffer()
     workspace = DijkstraWorkspace(Graphs.nv(ttg.graph))
     paths = Dict{Int,Vector{Int}}()
@@ -175,6 +175,7 @@ function _select_attract_reduce_arc(
     rng::Random.AbstractRNG;
     time_limit::Real=p.time_limit,
     start::Real=time(),
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     n_routed = count(!isempty, sol.bundle_paths)
     threshold = p.min_candidate_ratio * n_routed
@@ -200,6 +201,7 @@ function _select_attract_reduce_arc(
             to_beat=length(best),
             deadline,
             remove_bundle,
+            mode_selector,
         )
         length(paths) > threshold && return paths
         length(paths) > length(best) && (best = paths)
@@ -291,6 +293,7 @@ function perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     supports_instance(p, instance) || throw(
         ArgumentError("AttractReduceMILPPerturbation does not support multimodal arcs")
@@ -299,7 +302,13 @@ function perturbate!(
     reject(outcome; fields...) = _log_perturbation(verbose, p, outcome, (0.0, 0); fields...)
     time_limit >= MIN_MILP_TIME || return reject("rejected: not enough time"; time_limit)
     new_paths = _select_attract_reduce_arc(
-        sol, instance, p, rng; time_limit=min(p.time_limit, time_limit), start
+        sol,
+        instance,
+        p,
+        rng;
+        time_limit=min(p.time_limit, time_limit),
+        start,
+        mode_selector,
     )
     isnothing(new_paths) && return reject("rejected: no candidate arc")
     modeled = sort!(collect(keys(new_paths)))
@@ -327,7 +336,7 @@ function perturbate!(
         sol, instance, changed; tolerance=p.tolerance, outcome, failure="capacity"
     ) do s, inst, snapshots
         for b in changed
-            _add_fixed_path!(s, inst, b, new_paths[b], snapshots)
+            _add_fixed_path!(s, inst, b, new_paths[b], snapshots; mode_selector)
         end
         return _fits_capacities(s, inst, snapshots)
     end

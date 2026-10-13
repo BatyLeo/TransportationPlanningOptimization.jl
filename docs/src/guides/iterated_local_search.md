@@ -101,6 +101,7 @@ function TransportationPlanningOptimization.perturbate!(
     rng=Random.default_rng(),
     verbose=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     # modify `sol`, then return (cost_increase, n_changed)
 end
@@ -110,6 +111,9 @@ Overload [`supports_instance`](@ref)`(p, instance)` to return `false` when the p
 
 `time_limit` is the number of seconds the call may use.
 Return `(0.0, 0)` without changing the solution when the time is too short to be useful.
+
+`mode_selector` is the one given to [`iterated_local_search!`](@ref), the same as for the rest of the pipeline.
+Use it for every path insertion, for instance `TransportationPlanningOptimization.add_bundle_path!(sol, instance, b, path; mode_selector)`.
 
 The method returns `(cost_increase, n_changed)`: the cost after minus the cost before, and the number of bundles whose path changed.
 When it rejects its own move, it must restore `sol` exactly and return `(0.0, 0)`.

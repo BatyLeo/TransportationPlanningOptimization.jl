@@ -97,3 +97,20 @@ end
     @test cost(sol) <= start_cost + 1e-6
     @test is_feasible(sol, instance)
 end
+
+@testset "GroupReinsertPerturbation with FillThenSpillMode on a multimodal instance" begin
+    # FillThenSpill packs 3 + 2 (cost 24), CheapestMode would put 5 on the 10.0 mode (cost 30).
+    modes = [(BinPackingArcCost(10.0, 2), 1, 10), (BinPackingArcCost(7.0, 2), 1, 3)]
+    instance = TestFixtures._leg_instance(modes, 1; quantity=5)
+    selector = FillThenSpillMode()
+    sol = greedy_heuristic(instance; mode_selector=selector, show_progress=false)
+    @test any(a -> a isa TPO.MultiAssignment, values(sol.assignments))
+    p = GroupReinsertPerturbation(; tolerance=Inf)
+    rng = Random.MersenneTwister(1)
+    for _ in 1:5
+        (inc, _) = perturbate!(sol, instance, p; rng, mode_selector=selector)
+        @test inc ≈ 0 atol = 1e-9
+        @test any(a -> a isa TPO.MultiAssignment, values(sol.assignments))
+        @test is_feasible(Solution(sol, instance), instance)
+    end
+end

@@ -10,17 +10,16 @@ The new routing is kept if the cost increase is at most `tolerance * cost(sol)`,
 otherwise the solution is left unchanged and the perturbation reports no change.
 The reinsertion of a group cannot be interrupted, so the `time_limit` keyword of
 [`perturbate!`](@ref) is accepted but ignored.
+The bundles are inserted with the `mode_selector` keyword of [`perturbate!`](@ref).
 The group is rerouted many times per phase, so with `verbose=true` accepted calls are logged
 at info level and rejected calls at debug level.
 
 # Fields
 $TYPEDFIELDS
 """
-@kwdef struct GroupReinsertPerturbation{F,M<:AbstractModeSelector} <: AbstractPerturbation
+@kwdef struct GroupReinsertPerturbation{F} <: AbstractPerturbation
     "function mapping a [`Bundle`](@ref) to its group key"
     group_by::F = b -> b.destination_id
-    "how commodities are spread across the modes of multimodal arcs"
-    mode_selector::M = CheapestMode()
     "maximum accepted cost increase, as a fraction of the current cost"
     tolerance::Float64 = 0.015
 end
@@ -38,6 +37,7 @@ function perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     groups = _routed_groups(sol, instance, p.group_by)
     isempty(groups) && return _log_perturbation(
@@ -60,7 +60,7 @@ function perturbate!(
     ) do s, inst, snapshots
         return all(
             _insert_bundle_snapshotted!(
-                s, inst, b, p.mode_selector, snapshots, routing; buffer, workspace
+                s, inst, b, mode_selector, snapshots, routing; buffer, workspace
             ) for b in bundle_idxs
         )
     end

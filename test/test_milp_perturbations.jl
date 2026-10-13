@@ -123,21 +123,62 @@ end
     @test cost(sol) >= 20.0 - 1e-9
 end
 
+# A seed for which only the group of bundle `b` is selected under the given cap.
+function seed_selecting(sol, instance, p, b)
+    return findfirst(1:50) do seed
+        return TPO._select_milp_bundles(sol, instance, p, Random.MersenneTwister(seed))[1] ==
+               [b]
+    end
+end
+
+# Number of model variables of a bundle alone: its arcs and its bin edges.
+function milp_size(instance, b)
+    arcs = TPO._milp_bundle_arcs(instance, b)
+    bins = Set(e for (i, edges) in enumerate(arcs.edges) if arcs.binned[i] for e in edges)
+    return length(arcs.u) + length(bins)
+end
+
+# `sol` with bundle `b` moved to the cheapest path that avoids every non-waiting edge of
+# its current path.
+function detour_solution(sol, instance, b)
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    old = copy(sol.bundle_paths[b])
+    TPO.remove_bundle_path!(sol, instance, b)
+    TPO.update_bundle_cost_matrix!(sol, instance, b)
+    for (u, v) in zip(old[1:(end - 1)], old[2:end])
+        spatial[u] != spatial[v] && (ttg.cost_matrix[u, v] = Inf)
+    end
+    path = TPO.bundle_shortest_path(instance, ttg.origin_codes[b], ttg.destination_codes[b])
+    TPO.add_bundle_path!(sol, instance, b, path)
+    return sol
+end
+
 @testset "MILP perturbation on a benchmark instance" begin
     TestFixtures.reset!()
     instance = TestFixtures.small_instance()
     sol = TestFixtures.small_greedy()
-    # The cap selects 5 bundles (about 10_000 variables) and HiGHS proves optimality in a
-    # few seconds, far below the generous time limit, so the outcome does not depend on the
-    # load.
-    # Seed 9 accepts a cheaper routing of one bundle.
-    p = ArcFlowMILPPerturbation(; max_variables=10_000, time_limit=60.0)
+    greedy_cost = cost(sol)
+    b = 1
+    detour_solution(sol, instance, b)
     before = cost(sol)
-    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(9))
-    @test n > 0
+    # The greedy path of the bundle really costs less than its detour, and the model can
+    # route it there.
+    @test before > greedy_cost
+    # The cap fits the bundle alone, the seed makes it the only one selected, so the
+    # outcome does not depend on which bundles a lucky seed draws.
+    p = ArcFlowMILPPerturbation(;
+        group_by=x -> x === instance.bundles[b],
+        max_variables=milp_size(instance, b) + 1,
+        time_limit=60.0,
+        mip_gap=0.0,
+    )
+    seed = seed_selecting(sol, instance, p, b)
+    @test !isnothing(seed)
+    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(seed))
+    @test n == 1
     @test inc < 0
     @test cost(sol) - before ≈ inc atol = 1e-6
-    @test inc <= p.tolerance * before + 1e-9
     @test is_feasible(sol, instance)
     @test elementary_paths(sol, instance)
 end
@@ -159,14 +200,6 @@ function hub_solution(instance)
         TPO.add_bundle_path!(sol, instance, b, path)
     end
     return sol
-end
-
-# A seed for which only the group of bundle `b` is selected under the given cap.
-function seed_selecting(sol, instance, p, b)
-    return findfirst(1:50) do seed
-        return TPO._select_milp_bundles(sol, instance, p, Random.MersenneTwister(seed))[1] ==
-               [b]
-    end
 end
 
 @testset "MILP keeps the background load of the other bundles" begin

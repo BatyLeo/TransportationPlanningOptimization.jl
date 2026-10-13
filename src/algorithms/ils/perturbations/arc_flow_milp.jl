@@ -308,6 +308,7 @@ function perturbate!(
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
     time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     supports_instance(p, instance) ||
         throw(ArgumentError("ArcFlowMILPPerturbation does not support multimodal arcs"))
@@ -345,7 +346,7 @@ function perturbate!(
         sol, instance, changed; tolerance=p.tolerance, outcome, failure="capacity"
     ) do s, inst, snapshots
         for b in changed
-            _add_fixed_path!(s, inst, b, paths[b], snapshots)
+            _add_fixed_path!(s, inst, b, paths[b], snapshots; mode_selector)
         end
         return _fits_capacities(s, inst, snapshots)
     end
