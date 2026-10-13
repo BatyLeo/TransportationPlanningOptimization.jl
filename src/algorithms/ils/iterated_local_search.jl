@@ -11,8 +11,10 @@ $TYPEDSIGNATURES
 
 Run Iterated Local Search on `sol`.
 
-Cycles through `perturbations` round-robin, after dropping the ones that do not
-[`supports_instance`](@ref) (logged once, an `ArgumentError` is thrown when none is left). Each round repeats the perturbation until the accumulated
+Cycles through `perturbations` round-robin, after dropping the ones for which
+[`supports_instance`](@ref) returns `false` (logged once when `verbose`, an `ArgumentError`
+is thrown when none is left).
+Each round repeats the perturbation until the accumulated
 number of changed bundles reaches the change threshold, or the accumulated cost
 increase reaches the cost threshold, or the perturbation time limit is hit.
 Each perturbation call receives the time it may use, the smaller of the time left in the
@@ -58,14 +60,18 @@ function iterated_local_search!(
 )
     try
         isempty(perturbations) && throw(ArgumentError("perturbations must be non-empty"))
-        supported = filter(p -> supports_instance(p, instance), perturbations)
-        if length(supported) < length(perturbations)
-            skipped = [typeof(p) for p in perturbations if !supports_instance(p, instance)]
-            verbose && @info "Skipping perturbations that do not support the instance" skipped
+        supported = eltype(perturbations)[]
+        skipped = Symbol[]
+        for p in perturbations
+            supports_instance(p, instance) ? push!(supported, p) :
+            push!(skipped, nameof(typeof(p)))
         end
+        verbose &&
+            !isempty(skipped) &&
+            @info "Skipping perturbations that do not support the instance" skipped
         isempty(supported) && throw(
             ArgumentError(
-                "no perturbation supports this instance, the MILP perturbations do not support multimodal arcs",
+                "no perturbation supports this instance (skipped: $(join(skipped, ", "))), see supports_instance",
             ),
         )
         start_time = time()

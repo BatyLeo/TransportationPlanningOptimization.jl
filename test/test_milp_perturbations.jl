@@ -16,12 +16,7 @@ using .TestFixtures
 function hub_instance(;
     hub_capacity::Int=typemax(Int), forbidden_node_ids=String[], arrival::Bool=false
 )
-    nodes = [
-        Node(; id="O1"),
-        Node(; id="O2"),
-        Node(; id="H"),
-        Node(; id="D"),
-    ]
+    nodes = [Node(; id="O1"), Node(; id="O2"), Node(; id="H"), Node(; id="D")]
     bin = BinPackingArcCost(10.0, 10)
     arcs = [
         Arc(; origin_id="O1", destination_id="D", cost=bin, travel_time=Day(1)),
@@ -92,11 +87,7 @@ end
 end
 
 @testset "MILP respects forbidden arcs" begin
-    nodes = [
-        Node(; id="A"),
-        Node(; id="B"),
-        Node(; id="C"),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)
@@ -222,12 +213,7 @@ end
 end
 
 @testset "The model forbids a path that revisits a node" begin
-    nodes = [
-        Node(; id="A"),
-        Node(; id="B"),
-        Node(; id="C"),
-        Node(; id="D"),
-    ]
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C"), Node(; id="D")]
     arc(o, d) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
     arcs = [arc("A", "B"), arc("B", "C"), arc("C", "B"), arc("B", "D")]
@@ -578,12 +564,7 @@ end
     @test TPO._has_finite_capacity(hub_instance(; hub_capacity=7))
     # A -> M -> D carries the bundle, M -> D holds exactly its load. The path through N
     # shares M -> D, so it only fits once the bundle itself is out of the way.
-    nodes = [
-        Node(; id="A"),
-        Node(; id="N"),
-        Node(; id="M"),
-        Node(; id="D"),
-    ]
+    nodes = [Node(; id="A"), Node(; id="N"), Node(; id="M"), Node(; id="D")]
     arcs = [
         Arc(;
             origin_id="A", destination_id="M", cost=LinearArcCost(0.1), travel_time=Day(2)

@@ -457,20 +457,24 @@ end
     config = ILSConfig(;
         time_limit=3, final_ls_time_limit=0.5, perturbation_time_limit=1, ls_time_limit=1
     )
-    result = iterated_local_search!(
+    result = @test_logs (:info, r"^Skipping perturbations") match_mode = :any iterated_local_search!(
         sol,
         multimodal,
         [GroupReinsertPerturbation(), milp...];
         config,
         mode_selector=FillThenSpillMode(),
         rng=Random.MersenneTwister(1),
-        verbose=false,
+        verbose=true,
     )
     @test result.best_cost <= start_cost + 1e-9
     @test cost(sol) ≈ result.best_cost
     @test is_feasible(Solution(sol, multimodal), multimodal)
 
-    @test_throws ArgumentError iterated_local_search!(
-        sol, multimodal, milp; config, verbose=false
-    )
+    err = try
+        iterated_local_search!(sol, multimodal, milp; config, verbose=false)
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("ArcFlowMILPPerturbation", err.msg)
 end

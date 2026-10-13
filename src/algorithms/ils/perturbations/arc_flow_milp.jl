@@ -291,8 +291,9 @@ $TYPEDSIGNATURES
 
 `false` when `instance` has multimodal arcs, which the model does not support.
 """
-supports_instance(::ArcFlowMILPPerturbation, instance::Instance) =
-    !_has_multimodal_arc(instance)
+function supports_instance(::ArcFlowMILPPerturbation, instance::Instance)
+    return !_has_multimodal_arc(instance)
+end
 
 """
 $TYPEDSIGNATURES

@@ -274,8 +274,9 @@ $TYPEDSIGNATURES
 
 `false` when `instance` has multimodal arcs, which the model does not support.
 """
-supports_instance(::AttractReduceMILPPerturbation, instance::Instance) =
-    !_has_multimodal_arc(instance)
+function supports_instance(::AttractReduceMILPPerturbation, instance::Instance)
+    return !_has_multimodal_arc(instance)
+end
 
 """
 $TYPEDSIGNATURES

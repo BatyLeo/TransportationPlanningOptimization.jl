@@ -497,11 +497,7 @@ end
 
 @testset "lazy forced path respects forbidden arcs and nodes" begin
     for kwargs in ((; forbidden_arcs=[("B", "C")]), (; forbidden_node_ids=["B"]))
-        nodes = [
-            Node(; id="A"),
-            Node(; id="B"),
-            Node(; id="C"),
-        ]
+        nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
         arcs = [
             Arc(;
                 origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1)

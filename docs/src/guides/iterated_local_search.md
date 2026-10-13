@@ -68,7 +68,7 @@ It stops pricing at half of the call budget, also inside an arc.
 
 All of them keep the new routing only if the real cost increase is at most `tolerance` times the current cost, and otherwise restore the solution exactly.
 Both MILP perturbations raise an `ArgumentError` on instances with multimodal arcs.
-[`iterated_local_search!`](@ref) therefore skips the perturbations that do not [`supports_instance`](@ref) (logged once) and throws an `ArgumentError` when none is left.
+[`iterated_local_search!`](@ref) therefore skips the perturbations for which [`supports_instance`](@ref) returns `false` (logged once when `verbose`) and throws an `ArgumentError` when none is left.
 
 ## Solver choice
 
