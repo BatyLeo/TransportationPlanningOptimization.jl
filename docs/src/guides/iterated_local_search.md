@@ -68,6 +68,7 @@ It stops pricing at half of the call budget, also inside an arc.
 
 All of them keep the new routing only if the real cost increase is at most `tolerance` times the current cost, and otherwise restore the solution exactly.
 Both MILP perturbations raise an `ArgumentError` on instances with multimodal arcs.
+[`iterated_local_search!`](@ref) therefore skips the perturbations that do not [`supports_instance`](@ref) (logged once) and throws an `ArgumentError` when none is left.
 
 ## Solver choice
 
@@ -104,6 +105,8 @@ function TransportationPlanningOptimization.perturbate!(
     # modify `sol`, then return (cost_increase, n_changed)
 end
 ```
+
+Overload [`supports_instance`](@ref)`(p, instance)` to return `false` when the perturbation cannot run on an instance, the default is `true`.
 
 `time_limit` is the number of seconds the call may use.
 Return `(0.0, 0)` without changing the solution when the time is too short to be useful.

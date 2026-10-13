@@ -113,7 +113,7 @@ export mix_greedy_heuristic,
 export LocalSearchResult
 
 # ILS framework
-export AbstractPerturbation, perturbate!
+export AbstractPerturbation, perturbate!, supports_instance
 export ILSConfig, ILSResult
 export snapshot_solution, restore_solution!
 export large_local_search!

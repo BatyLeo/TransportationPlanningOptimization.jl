@@ -272,6 +272,14 @@ end
 """
 $TYPEDSIGNATURES
 
+`false` when `instance` has multimodal arcs, which the model does not support.
+"""
+supports_instance(::AttractReduceMILPPerturbation, instance::Instance) =
+    !_has_multimodal_arc(instance)
+
+"""
+$TYPEDSIGNATURES
+
 Pull bundles onto a shared arc or push them off it, see
 [`AttractReduceMILPPerturbation`](@ref).
 """
@@ -283,7 +291,7 @@ function perturbate!(
     verbose::Bool=false,
     time_limit::Real=Inf,
 )
-    any(a -> a isa MultiModalArc, values(instance.index_cache.edge_group_to_arc)) && throw(
+    supports_instance(p, instance) || throw(
         ArgumentError("AttractReduceMILPPerturbation does not support multimodal arcs")
     )
     start = time()

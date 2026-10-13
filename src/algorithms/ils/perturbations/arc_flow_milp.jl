@@ -289,6 +289,14 @@ end
 """
 $TYPEDSIGNATURES
 
+`false` when `instance` has multimodal arcs, which the model does not support.
+"""
+supports_instance(::ArcFlowMILPPerturbation, instance::Instance) =
+    !_has_multimodal_arc(instance)
+
+"""
+$TYPEDSIGNATURES
+
 Reroute the routed bundles of random groups with an arc-flow MILP, see
 [`ArcFlowMILPPerturbation`](@ref).
 """
@@ -300,7 +308,7 @@ function perturbate!(
     verbose::Bool=false,
     time_limit::Real=Inf,
 )
-    any(a -> a isa MultiModalArc, values(instance.index_cache.edge_group_to_arc)) &&
+    supports_instance(p, instance) ||
         throw(ArgumentError("ArcFlowMILPPerturbation does not support multimodal arcs"))
     start = time()
     reject(outcome; fields...) = _log_perturbation(verbose, p, outcome, (0.0, 0); fields...)

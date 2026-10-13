@@ -498,9 +498,9 @@ end
 @testset "lazy forced path respects forbidden arcs and nodes" begin
     for kwargs in ((; forbidden_arcs=[("B", "C")]), (; forbidden_node_ids=["B"]))
         nodes = [
-            Node(; id="A", node_type=:origin),
-            Node(; id="B", node_type=:other),
-            Node(; id="C", node_type=:destination),
+            Node(; id="A"),
+            Node(; id="B"),
+            Node(; id="C"),
         ]
         arcs = [
             Arc(;

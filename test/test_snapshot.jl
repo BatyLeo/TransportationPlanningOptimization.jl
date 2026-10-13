@@ -224,7 +224,7 @@ mutable struct MutableInfo
 end
 
 @testset "snapshot and restore keep commodity equality with a mutable info" begin
-    nodes = [Node(; id="A", node_type=:origin), Node(; id="B", node_type=:destination)]
+    nodes = [Node(; id="A"), Node(; id="B")]
     arcs = [
         Arc(;
             origin_id="A",

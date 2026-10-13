@@ -17,10 +17,10 @@ function hub_instance(;
     hub_capacity::Int=typemax(Int), forbidden_node_ids=String[], arrival::Bool=false
 )
     nodes = [
-        Node(; id="O1", node_type=:origin),
-        Node(; id="O2", node_type=:origin),
-        Node(; id="H", node_type=:other),
-        Node(; id="D", node_type=:destination),
+        Node(; id="O1"),
+        Node(; id="O2"),
+        Node(; id="H"),
+        Node(; id="D"),
     ]
     bin = BinPackingArcCost(10.0, 10)
     arcs = [
@@ -93,9 +93,9 @@ end
 
 @testset "MILP respects forbidden arcs" begin
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="C", node_type=:destination),
+        Node(; id="A"),
+        Node(; id="B"),
+        Node(; id="C"),
     ]
     arcs = [
         Arc(;
@@ -223,10 +223,10 @@ end
 
 @testset "The model forbids a path that revisits a node" begin
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="B", node_type=:other),
-        Node(; id="C", node_type=:other),
-        Node(; id="D", node_type=:destination),
+        Node(; id="A"),
+        Node(; id="B"),
+        Node(; id="C"),
+        Node(; id="D"),
     ]
     arc(o, d) =
         Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
@@ -579,10 +579,10 @@ end
     # A -> M -> D carries the bundle, M -> D holds exactly its load. The path through N
     # shares M -> D, so it only fits once the bundle itself is out of the way.
     nodes = [
-        Node(; id="A", node_type=:origin),
-        Node(; id="N", node_type=:other),
-        Node(; id="M", node_type=:other),
-        Node(; id="D", node_type=:destination),
+        Node(; id="A"),
+        Node(; id="N"),
+        Node(; id="M"),
+        Node(; id="D"),
     ]
     arcs = [
         Arc(;

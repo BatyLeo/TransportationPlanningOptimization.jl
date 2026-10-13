@@ -163,3 +163,13 @@ _finite_capacity(arc::MultiModalArc) = any(_finite_capacity, arc.modes)
 function _has_finite_capacity(instance::Instance)
     return any(_finite_capacity, values(instance.index_cache.edge_group_to_arc))
 end
+
+"""
+$TYPEDSIGNATURES
+
+Whether `instance` has an arc with several transport modes, which the MILP perturbations
+do not model.
+"""
+function _has_multimodal_arc(instance::Instance)
+    return any(a -> a isa MultiModalArc, values(instance.index_cache.edge_group_to_arc))
+end

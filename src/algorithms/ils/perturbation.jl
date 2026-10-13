@@ -37,3 +37,14 @@ function perturbate!(
 )
     return error("perturbate! not implemented for $(typeof(p))")
 end
+
+"""
+$TYPEDSIGNATURES
+
+Whether perturbation `p` can run on `instance`, `true` by default.
+
+[`iterated_local_search!`](@ref) keeps only the perturbations that support the instance and
+skips the others. A custom perturbation may overload it, for instance to opt out of
+instances with multimodal arcs.
+"""
+supports_instance(::AbstractPerturbation, ::Instance) = true
