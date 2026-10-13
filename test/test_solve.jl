@@ -297,3 +297,31 @@ end
         @test only(filter(f -> f.arc == 3, sol.arc_flows)).volume == 4.0
     end
 end
+
+@testset "solve_state is feasible on tight multi-modal capacities" begin
+    arm2 = TestFixtures.lb_arm2_instance()
+    fragmented = TestFixtures.fragmented_modes_instance()
+    for selector in (CheapestMode(), FillThenSpillMode()), filtering in (true, false)
+        for instance in (arm2, fragmented)
+            kwargs = (; mode_selector=selector, filtering, show_progress=false)
+            construction = TPO.solve_state(instance; kwargs..., local_search=false)
+            @test TPO.is_feasible(construction, instance)
+            sol = TPO.solve_state(instance; kwargs..., time_limit=2.0, max_iter=100)
+            @test TPO.is_feasible(sol, instance)
+            @test TPO.cost(sol) <= TPO.cost(construction)
+        end
+    end
+end
+
+@testset "solve with filtering=false and FillThenSpillMode stays feasible on a jointly priced batch" begin
+    instance = TestFixtures.joint_batch_instance()
+    solution = TPO.solve(
+        instance;
+        filtering=false,
+        mode_selector=FillThenSpillMode(),
+        time_limit=2.0,
+        max_iter=200,
+        show_progress=false,
+    )
+    @test TPO.is_feasible(TPO.SolutionState(solution, instance), instance; verbose=true)
+end

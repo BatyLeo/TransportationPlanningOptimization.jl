@@ -96,6 +96,7 @@ If *no* mode on an edge has enough capacity for an order, `CheapestMode` cannot 
 
 The lower-bound and filtering passes bound `FillThenSpillMode` through `lower_bound_commodity_cost`, which the built-in arc costs implement.
 For a custom arc cost without it, that mode contributes `0` to the bound of each commodity it can carry.
+`lower_bound` may return an infeasible state, and `mix_greedy_heuristic` keeps only feasible candidates.
 
 ## See Also
 

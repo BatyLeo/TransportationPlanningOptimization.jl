@@ -339,12 +339,16 @@ each mode up to its remaining capacity before moving to the next.
 Returns `(partition, overflow)` where `partition[i]` is the subset of
 `new_comms` assigned to `arc.modes[i]`, and `overflow` is `true` if the combined
 remaining capacity across all modes is insufficient to absorb `new_comms`.
+With `spill_leftover=true`, the commodities that fit nowhere are merged (in descending
+size order) into the cheapest mode and `overflow` is always `false`, so the partition
+overloads that mode.
 """
 function _fill_then_spill_partition(
     arc::MultiModalArc,
     existing_per_mode::Vector{Vector{C}},
     new_comms::Vector{C};
     existing_total_sizes::Vector{Float64}=Float64[],
+    spill_leftover::Bool=false,
 ) where {C<:LightCommodity}
     mode_costs = [
         incremental_cost(arc.modes[i].cost, existing_per_mode[i], new_comms) for
@@ -383,6 +387,13 @@ function _fill_then_spill_partition(
         remaining = still_remaining
     end
 
+    if spill_leftover && !isempty(remaining)
+        first_mode = sorted_indices[1]
+        per_mode_new[first_mode] = sort!(
+            vcat(per_mode_new[first_mode], remaining); by=c -> c.size, rev=true
+        )
+        remaining = C[]
+    end
     overflow = !isempty(remaining)
     return per_mode_new, overflow
 end
@@ -391,6 +402,12 @@ end
 $TYPEDSIGNATURES
 
 Add `new_commodities` to the edge assignment for `edge` following the `FillThenSpillMode` logic.
+The batch is partitioned against the existing load. If it does not fit, it is partitioned
+as if the modes were empty and the commodities that still fit nowhere go to the cheapest
+mode. The commit never throws on capacity, so the modes may end up overloaded (as on a
+single-mode arc).
+Capacity is only enforced by the pricing and by `is_feasible`, and the moves that commit a
+jointly priced batch piece by piece check it again, see `_fits_capacities`.
 """
 function _fill_then_spill_assign!(
     edge::Tuple{Int,Int},
@@ -404,10 +421,9 @@ function _fill_then_spill_assign!(
         arc, existing_per_mode, new_commodities; existing_total_sizes=cached_sizes
     )
     if overflow
-        throw(
-            ArgumentError(
-                "No combination of modes on edge $(edge) has enough capacity for the new commodities under FillThenSpillMode",
-            ),
+        empty_modes = [C[] for _ in eachindex(arc.modes)]
+        partition, _ = _fill_then_spill_partition(
+            arc, empty_modes, new_commodities; spill_leftover=true
         )
     end
     cost_delta = 0.0
@@ -466,6 +482,15 @@ function _add_order_to_assignment!(
     return arc_delta + node_delta
 end
 
+"""
+$TYPEDSIGNATURES
+
+Add `new_commodities` to the multi-modal edge assignment for `edge` under `CheapestMode`.
+The mode comes from [`_cheapest_commit_mode`](@ref). The commit never throws on capacity, so
+a mode may end up overloaded (as on a single-mode arc) and capacity is only enforced by
+the pricing and by `is_feasible`. The head-node cost is charged once on the whole `MultiAssignment`
+and does not depend on the chosen mode.
+"""
 function _add_order_to_assignment!(
     assignments::Dict{Tuple{Int,Int},<:AbstractArcAssignment{C}},
     edge::Tuple{Int,Int},
@@ -478,31 +503,45 @@ function _add_order_to_assignment!(
     assignment = get!(assignments, edge) do
         return MultiAssignment{C}(length(arc.modes))
     end::MultiAssignment{C}
-    # Mode choice is arc-only: the head-node cost is charged once on the whole
-    # `MultiAssignment` load and does not depend on which mode absorbs the batch.
-    mode_costs = [
-        if _mode_has_capacity(
-            arc.modes[i], assignment.per_mode[i].total_size, new_commodities
-        )
-            _commit_mode_incremental(
-                arc.modes[i].cost, assignment.per_mode[i], new_commodities
-            )
-        else
-            Inf
-        end for i in eachindex(arc.modes)
-    ]
-    best_mode_idx = argmin(mode_costs)
-    if isinf(mode_costs[best_mode_idx])
-        throw(
-            ArgumentError(
-                "No mode on edge $(edge) has enough capacity for the new commodities under CheapestMode",
-            ),
-        )
-    end
+    best_mode_idx = _cheapest_commit_mode(arc, assignment, new_commodities)
     slot = assignment.per_mode[best_mode_idx]
     arc_delta = _commit_new_to_slot!(slot, arc.modes[best_mode_idx].cost, new_commodities)
     node_delta = _refresh_node_cost!(assignment, node_costs[sv])
     return arc_delta + node_delta
+end
+
+"""
+$TYPEDSIGNATURES
+
+Index of the mode that absorbs `new_commodities` in the `CheapestMode` commit, in tiers:
+the cheapest mode with room on top of its existing load, else the cheapest mode that holds
+the batch alone (as the relaxed lower-bound pricing assumes, ranked by the incremental cost
+on the current load), else the cheapest mode overall.
+Ties go to the first mode.
+"""
+function _cheapest_commit_mode(
+    arc::MultiModalArc, assignment::MultiAssignment{C}, new_commodities::Vector{C}
+) where {C<:LightCommodity}
+    new_size = sum(c.size for c in new_commodities; init=0.0)
+    best_idx = 0
+    best_tier = 4
+    best_cost = Inf
+    for i in eachindex(arc.modes)
+        mode, slot = arc.modes[i], assignment.per_mode[i]
+        tier = if _mode_has_capacity(mode, slot.total_size, new_size)
+            1
+        elseif _mode_has_capacity(mode, 0.0, new_size)
+            2
+        else
+            3
+        end
+        tier > best_tier && continue
+        mode_cost = _commit_mode_incremental(mode.cost, slot, new_commodities)
+        if tier < best_tier || mode_cost < best_cost
+            best_idx, best_tier, best_cost = i, tier, mode_cost
+        end
+    end
+    return best_idx
 end
 
 """

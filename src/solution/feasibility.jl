@@ -244,6 +244,34 @@ function _bins_feasible(slot::SingleAssignment, arc_cost, arc_labels; tol, verbo
     return true
 end
 
+"""
+$TYPEDSIGNATURES
+
+Whether every multi-modal edge in `snapshots` (the edges touched by a move) keeps each
+finite-capacity mode within its capacity, with the same tolerance as [`is_feasible`](@ref).
+Single-mode arcs and bins are not checked. The [`CheapestMode`](@ref) commit keeps a batch
+priced as a whole within the capacities, so it skips the check. The other selectors may
+overload a mode when a jointly priced batch is committed piece by piece.
+"""
+function _fits_capacities(
+    sol::SolutionState, instance::Instance, snapshots, ::AbstractModeSelector
+)
+    cache = instance.index_cache
+    for e in keys(snapshots)
+        a = get(sol.assignments, e, nothing)
+        isnothing(a) && continue
+        a isa MultiAssignment || continue
+        arc = tsg_edge_arc(cache, e[1], e[2])
+        for (mode, slot) in zip(arc.modes, a.per_mode)
+            mode.capacity == typemax(Int) && continue
+            slot.total_size <= mode.capacity + EPS || return false
+        end
+    end
+    return true
+end
+
+_fits_capacities(::SolutionState, ::Instance, snapshots, ::CheapestMode) = true
+
 function _capacity_feasible(
     arc::NetworkArc, assignment::SingleAssignment, arc_labels; tol, verbose::Bool
 )

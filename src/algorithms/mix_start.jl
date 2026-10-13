@@ -42,7 +42,6 @@ function mix_greedy_and_lower_bound(
         bundle_arcs = ttg.bundle_arcs[bundle_idx]
         origin = ttg.origin_codes[bundle_idx]
         destination = ttg.destination_codes[bundle_idx]
-        bundle = instance.bundles[bundle_idx]
 
         # Greedy strategy: incremental costs against greedy_sol.
         update_bundle_cost_matrix!(
@@ -59,17 +58,12 @@ function mix_greedy_and_lower_bound(
         end
         greedy_path = bundle_shortest_path(instance, origin, destination)
         if isempty(greedy_path)
-            throw(
-                ArgumentError(
-                    "No feasible greedy path for bundle $bundle_idx: " *
-                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
-                    "no elementary path from origin to destination",
-                ),
-            )
+            throw(_no_path_error(instance, bundle_idx, "greedy"))
         end
         add_bundle_path!(greedy_sol, instance, bundle_idx, greedy_path; mode_selector)
 
-        # Lower-bound strategy: relaxed costs against empty lb_sol path state.
+        # Lower-bound strategy: relaxed costs against lb_sol, whose capacity gate ignores the
+        # load of earlier bundles.
         # This overwrites ttg.cost_matrix in place.
         update_bundle_cost_matrix!(
             lb_sol,
@@ -81,13 +75,7 @@ function mix_greedy_and_lower_bound(
         )
         lb_path = bundle_shortest_path(instance, origin, destination)
         if isempty(lb_path)
-            throw(
-                ArgumentError(
-                    "No feasible lower-bound path for bundle $bundle_idx: " *
-                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
-                    "no elementary path from origin to destination",
-                ),
-            )
+            throw(_no_path_error(instance, bundle_idx, "lower-bound"))
         end
         add_bundle_path!(lb_sol, instance, bundle_idx, lb_path; mode_selector)
 
@@ -105,13 +93,7 @@ function mix_greedy_and_lower_bound(
         end
         mix_path = bundle_shortest_path(instance, origin, destination)
         if isempty(mix_path)
-            throw(
-                ArgumentError(
-                    "No feasible mixed path for bundle $bundle_idx: " *
-                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
-                    "no elementary path from origin to destination",
-                ),
-            )
+            throw(_no_path_error(instance, bundle_idx, "mixed"))
         end
         add_bundle_path!(mixed_sol, instance, bundle_idx, mix_path; mode_selector)
     end

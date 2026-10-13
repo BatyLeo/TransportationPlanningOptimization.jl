@@ -25,7 +25,10 @@ $TYPEDEF
 Mode-selection strategy that places the insertion entirely on the cheapest mode
 whose remaining capacity can absorb the load. Modes that would overflow are
 skipped. An edge whose every mode would overflow is treated as infeasible (Inf
-cost) during Dijkstra, and the placement path throws `ArgumentError` if reached.
+cost) during Dijkstra. The placement itself never throws on capacity: when a committed
+batch is not absorbed by any mode on top of its load (for example in the lower-bound
+passes), it goes to the cheapest mode that holds it alone (else the cheapest mode), which
+may overload that mode.
 """
 struct CheapestMode <: AbstractModeSelector end
 
@@ -36,7 +39,9 @@ Mode-selection strategy that fills the cheapest mode up to its capacity, then
 spills overflow to the next-cheapest mode on the same edge, and so on. Spilling only
 happens among the modes sharing the edge's transit time, since modes with distinct transit
 times live on separate edges. If the combined capacity across all modes on an edge is
-below the load, the edge is treated as infeasible (Inf cost) during Dijkstra, and the
-placement path throws `ArgumentError` if reached.
+below the load, the edge is treated as infeasible (Inf cost) during Dijkstra. The
+placement itself never throws on capacity: when a committed batch does not fit on top of
+the load (for example in the lower-bound passes), it is re-split as if the modes were
+empty, with the remainder on the cheapest mode, which may overload the modes.
 """
 struct FillThenSpillMode <: AbstractModeSelector end

@@ -621,3 +621,36 @@ end
         @test cost(batched) ≈ cost(sol) + delta atol = 1e-9
     end
 end
+
+@testset "two-node consolidation rejects a FillThenSpillMode move that overloads a mode" begin
+    instance = TestFixtures.joint_batch_instance()
+    selector = FillThenSpillMode()
+    ttg = instance.travel_time_graph
+    cache = instance.index_cache
+    sol = TPO.greedy_heuristic(instance; mode_selector=selector, show_progress=false)
+    # Route both bundles through the hub, away from the multi-modal arc.
+    for b in 1:2
+        TPO.remove_bundle_path!(sol, instance, b)
+        TPO.update_bundle_cost_matrix!(sol, instance, b, selector)
+        for (u, v) in ttg.bundle_arcs[b]
+            TPO.ttg_edge_arc(cache, u, v) isa TPO.MultiModalArc &&
+                (ttg.cost_matrix[u, v] = Inf)
+        end
+        path = TPO.bundle_shortest_path(
+            instance, ttg.origin_codes[b], ttg.destination_codes[b]
+        )
+        TPO.add_bundle_path!(sol, instance, b, path; mode_selector=selector)
+    end
+    @test TPO.is_feasible(sol, instance)
+    start_cost = TPO.cost(sol)
+
+    src, dst = first(sol.bundle_paths[1]), last(sol.bundle_paths[1])
+    old_paths = deepcopy(sol.bundle_paths)
+    gain = TPO.two_node_common_incremental!(
+        sol, instance, src, dst; mode_selector=selector, refine=false
+    )
+    @test gain == 0.0
+    @test TPO.is_feasible(sol, instance)
+    @test sol.bundle_paths == old_paths
+    @test TPO.cost(sol) == start_cost
+end

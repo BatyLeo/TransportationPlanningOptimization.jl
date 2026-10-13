@@ -65,7 +65,7 @@ Local search also stops after 15000 consecutive non-improving iterations (the [`
 `mode_selector` (default [`CheapestMode`](@ref)) is the [`AbstractModeSelector`](@ref) used by every step.
 Set `show_progress=false` to hide the progress bars.
 
-Throws `ArgumentError` if no feasible construction is found, if the merged solution is infeasible, if `start` cannot be represented on `instance` (see `SolutionState(solution, instance)`) or if `start` is infeasible.
+Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, if `start` cannot be represented on `instance` (see `SolutionState(solution, instance)`) or if `start` is infeasible.
 """
 function solve_state(
     instance::Instance;
@@ -97,6 +97,7 @@ function solve_state(
                 refine_two_node,
             )
         end
+        _check_feasible(solution_state, instance)
         return solution_state
     end
 
@@ -113,6 +114,7 @@ function solve_state(
                 refine_two_node,
             )
         end
+        _check_feasible(solution_state, instance)
         return solution_state
     end
 
@@ -135,6 +137,17 @@ function solve_state(
     )
 end
 
+# Safety net after local search: the moves are meant to keep the state feasible.
+function _check_feasible(solution_state::SolutionState, instance::Instance)
+    is_feasible(solution_state, instance; verbose=true) || throw(
+        ArgumentError(
+            "solve_state: the solution is infeasible on instance (see the feasibility report above). " *
+            "This indicates a bug in a local search move, please report it with the instance.",
+        ),
+    )
+    return nothing
+end
+
 """
 $TYPEDSIGNATURES
 
@@ -146,7 +159,7 @@ Pass `start` (a [`Solution`](@ref) or a [`SolutionState`](@ref)) to continue fro
 Filtering and construction are skipped and `filtering` is ignored.
 The cost of the result is at most the cost of the start converted by `SolutionState(start, instance)`.
 
-Throws `ArgumentError` if no feasible construction is found, if the merged solution is infeasible, or if `start` is unrepresentable or infeasible on `instance`.
+Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, or if `start` is unrepresentable or infeasible on `instance`.
 """
 function solve(
     instance::Instance;

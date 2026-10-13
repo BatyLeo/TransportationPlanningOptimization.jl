@@ -125,6 +125,18 @@ end
     @test_throws "No feasible filtering path" lower_bound_filtering(
         instance; show_progress=false
     )
+    @test_throws "previously fixed" lower_bound_filtering(instance; show_progress=false)
+    # Nothing is fixed when even the first bundle does not fit: no hint.
+    too_small = two_bundle_direct_instance(2; with_hub=false)
+    err = try
+        lower_bound_filtering(too_small; show_progress=false)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("No feasible filtering path", err.msg)
+    @test !occursin("previously fixed", err.msg)
 end
 
 @testset "lower_bound_filtering fixes one bundle per mode of parallel legs" begin
@@ -592,28 +604,54 @@ end
     end
 end
 
-@testset "lower_bound error message format" begin
-    # The empty-path branch in `lower_bound` / `lower_bound_filtering` is hard
-    # to provoke in practice: `Instance` construction already runs a BFS-based
-    # feasibility check, and even with `check_bundle_feasibility=false` the
-    # cost matrix only sets Inf on arcs in `bundle_arcs`, so Dijkstra can still
-    # follow zero-weight edges outside that subgraph and return a non-empty
-    # path. We therefore verify by synthesis that the error message includes
-    # the new diagnostic fields.
-    bundle_origin = "A"
-    bundle_dest = "B"
-    max_steps = 5
-    forbidden_nodes = Set(["X"])
-    forbidden_arcs = Set([("A", "C")])
-    msg =
-        "No feasible lower-bound path for bundle 1: " *
-        "$(bundle_origin) -> $(bundle_dest), " *
-        "max_transit_steps=$(max_steps), " *
-        "forbidden_nodes=$(forbidden_nodes), " *
-        "forbidden_arcs=$(forbidden_arcs)"
+@testset "_no_path_error reports the bundle, its constraints and the causes" begin
+    nodes = [Node(; id=id) for id in ("A", "B", "X", "C")]
+    arcs = [
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
+        for (o, d) in (("A", "B"), ("A", "X"), ("X", "B"), ("A", "C"), ("C", "B"))
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="B",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(2),
+        size=1.0,
+        forbidden_node_ids=["X"],
+        forbidden_arcs=[("A", "C")],
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1))
+
+    err = TPO._no_path_error(instance, 1, "lower-bound")
+    @test err isa ArgumentError
+    msg = err.msg
     @test occursin("No feasible lower-bound path for bundle 1", msg)
     @test occursin("A -> B", msg)
-    @test occursin("max_transit_steps=5", msg)
-    @test occursin("\"X\"", msg)
-    @test occursin("(\"A\", \"C\")", msg)
+    @test occursin("max_transit_steps=2", msg)
+    @test occursin("forbidden_nodes=Set([\"X\"])", msg)
+    @test occursin("forbidden_arcs=Set([(\"A\", \"C\")])", msg)
+    @test occursin("time budget", msg)
+    @test occursin("capacities", msg)
+    @test !occursin("previously fixed", msg)
+    hinted = TPO._no_path_error(instance, 1, "filtering"; fixed_hint=true)
+    @test occursin("previously fixed", hinted.msg)
+end
+
+@testset "lower bounds on tight multi-modal capacities do not throw" begin
+    # The relaxed pricing ignores the load, so the lower bound may overload the modes.
+    arm2 = TestFixtures.lb_arm2_instance()
+    for (selector, expected) in ((CheapestMode(), 32.0), (FillThenSpillMode(), 24.0))
+        lb_sol = lower_bound(arm2, selector; show_progress=false)
+        @test TPO.cost(lb_sol) == expected
+        @test !TPO.is_feasible(lb_sol, arm2)
+        @test TPO.lower_bound_filtering(arm2, selector; show_progress=false) isa
+            TPO.SolutionState
+    end
+
+    fragmented = TestFixtures.fragmented_modes_instance()
+    for selector in (CheapestMode(), FillThenSpillMode())
+        @test lower_bound(fragmented, selector; show_progress=false) isa TPO.SolutionState
+        @test TPO.lower_bound_filtering(fragmented, selector; show_progress=false) isa
+            TPO.SolutionState
+    end
 end

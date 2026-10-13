@@ -499,6 +499,109 @@ function trivial_instance(
     return Instance(nodes, arcs, commodities, Day(1); wrap_time)
 end
 
+# Two parallel A -> B modes (capacities 2 and 5) feeding two destinations. The relaxed
+# lower-bound pricing ignores the load, so the lower-bound arms overload the modes.
+function lb_arm2_instance()
+    nodes = [Node(; id=id) for id in ("A", "B", "D", "E")]
+    arc(o, d, cost; extra...) = Arc(;
+        origin_id=o,
+        destination_id=d,
+        cost=LinearArcCost(cost),
+        travel_time=Day(1),
+        extra...,
+    )
+    arcs = [
+        arc("A", "B", 1.0; capacity=2),
+        arc("A", "B", 3.0; capacity=5),
+        arc("B", "D", 1.0),
+        arc("B", "E", 1.0),
+        arc("A", "D", 10.0),
+        arc("A", "E", 10.0),
+    ]
+    commodity(d) = Commodity(;
+        origin_id="A",
+        destination_id=d,
+        quantity=4,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(2),
+        size=1.0,
+    )
+    return Instance(
+        nodes, arcs, [commodity("D"), commodity("E")], Day(1); allow_multimodal=true
+    )
+end
+
+# One order of three 0.6 units over two unit-capacity modes: the total fits the combined
+# capacity but no split does, so the fill-then-spill partition leaves a remainder.
+function fragmented_modes_instance()
+    nodes = [Node(; id=id) for id in ("A", "B", "C")]
+    arc(o, d, cost; extra...) = Arc(;
+        origin_id=o,
+        destination_id=d,
+        cost=LinearArcCost(cost),
+        travel_time=Day(1),
+        extra...,
+    )
+    arcs = [
+        arc("A", "B", 1.0; capacity=1),
+        arc("A", "B", 2.0; capacity=1),
+        arc("A", "C", 5.0),
+        arc("C", "B", 5.0),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="B",
+        quantity=3,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(2),
+        size=0.6,
+    )
+    return Instance(nodes, arcs, [commodity], Day(1); allow_multimodal=true)
+end
+
+# Two bundles whose orders (6 + 3 and 7 + 4) fit the two parallel A -> B modes (capacity 10)
+# as one batch but not when committed one bundle after the other under FillThenSpillMode.
+# The only other route goes through the expensive hub H.
+function joint_batch_instance()
+    nodes = [Node(; id=id) for id in ("A", "B", "H")]
+    modes = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(c),
+            travel_time=Day(1),
+            capacity=10,
+        ) for c in (1.0, 2.0)
+    ]
+    hub = [
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(10.0), travel_time=Day(1))
+        for (o, d) in (("A", "H"), ("H", "B"))
+    ]
+    commodity(size, bundle) = Commodity(;
+        origin_id="A",
+        destination_id="B",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(2),
+        size,
+        info=bundle,
+    )
+    commodities = [
+        commodity(6.0, "b1"),
+        commodity(3.0, "b1"),
+        commodity(7.0, "b2"),
+        commodity(4.0, "b2"),
+    ]
+    return Instance(
+        nodes,
+        [modes; hub],
+        commodities,
+        Day(1);
+        group_by=c -> c.info,
+        allow_multimodal=true,
+    )
+end
+
 # Clear any cost_scaling mutations left on the shared instances.
 function reset!()
     for inst in values(_INSTANCE)
