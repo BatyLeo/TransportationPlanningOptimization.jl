@@ -129,9 +129,14 @@ of via `deepcopy`.
 
 A dropped bundle whose direct arc is not in `sub_instance` is skipped
 entirely, since it cannot contend with kept bundles for capacity there.
+
+`mode_selector` is the [`AbstractModeSelector`](@ref) used to commit the reserved load.
 """
 function preload_filtered_bundles(
-    filtering_sol::SolutionState, full_instance::Instance, sub_instance::Instance
+    filtering_sol::SolutionState,
+    full_instance::Instance,
+    sub_instance::Instance;
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     sol = SolutionState(sub_instance)
     full_tsg = full_instance.time_space_graph.graph
@@ -161,7 +166,7 @@ function preload_filtered_bundles(
                 (u_sub, v_sub),
                 sub_arc,
                 order.commodities,
-                CheapestMode(),
+                mode_selector,
                 sub_cache.spatial_code_to_node_cost,
                 sv_sub,
             )

@@ -85,3 +85,19 @@ end
     empty_sol = TPO.SolutionState(instance)  # all empty paths, infeasible
     @test_throws ArgumentError TPO.choose_best_feasible([empty_sol], instance)
 end
+
+@testset "mix_greedy_heuristic is feasible on tight multi-modal capacities" begin
+    arm2 = TestFixtures.lb_arm2_instance()
+    for (selector, expected) in ((CheapestMode(), 56.0), (FillThenSpillMode(), 52.0))
+        sol = TPO.mix_greedy_heuristic(arm2; mode_selector=selector, show_progress=false)
+        @test TPO.is_feasible(sol, arm2)
+        @test TPO.cost(sol) == expected
+    end
+
+    fragmented = TestFixtures.fragmented_modes_instance()
+    sol = TPO.mix_greedy_heuristic(
+        fragmented; mode_selector=FillThenSpillMode(), show_progress=false
+    )
+    @test TPO.is_feasible(sol, fragmented)
+    @test TPO.cost(sol) == 18.0
+end

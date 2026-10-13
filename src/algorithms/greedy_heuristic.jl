@@ -1,6 +1,35 @@
 """
 $TYPEDSIGNATURES
 
+Build the `ArgumentError` thrown when bundle `bundle_idx` has no path left. `label` names
+the step that failed. The message gives the bundle endpoints, its maximum number of
+transit steps and its forbidden sets. The path may be blocked by the time budget, the
+forbidden constraints or the arc and mode capacities. With `fixed_hint=true`, it also
+mentions that capacity may have been taken by previously fixed direct bundles.
+"""
+function _no_path_error(
+    instance::Instance, bundle_idx::Int, label::AbstractString; fixed_hint::Bool=false
+)::ArgumentError
+    bundle = instance.bundles[bundle_idx]
+    max_steps = maximum(o.max_transit_steps for o in bundle.orders)
+    forbidden_nodes = Set(_user_id(instance, id) for id in bundle.forbidden_nodes)
+    forbidden_arcs = Set(
+        (_user_id(instance, u), _user_id(instance, v)) for (u, v) in bundle.forbidden_arcs
+    )
+    return ArgumentError(
+        "No feasible $label path for bundle $bundle_idx: " *
+        "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
+        "max_transit_steps=$(max_steps), forbidden_nodes=$(forbidden_nodes), " *
+        "forbidden_arcs=$(forbidden_arcs). " *
+        "No elementary path from origin to destination: it may be blocked by the time budget, " *
+        "the forbidden constraints or the arc and mode capacities" *
+        (fixed_hint ? " (capacity may be taken by previously fixed direct bundles)" : ""),
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
 Find the cheapest path for a bundle in the TravelTimeGraph and add it to the current
 solution. Returns `false` without modifying `current_solution` if Dijkstra finds no
 feasible path, `true` otherwise. When `snapshots` is given, the edges of the new path are
@@ -52,11 +81,7 @@ function insert_bundle!(
     buffer::BinPackingBuffer=BinPackingBuffer(),
 )
     _try_insert_bundle!(current_solution, instance, bundle_idx, mode_selector; buffer) ||
-        throw(
-            ArgumentError(
-                "No feasible path found for bundle $bundle_idx, no elementary path from origin to destination",
-            ),
-        )
+        throw(_no_path_error(instance, bundle_idx, "insertion"))
     return nothing
 end
 

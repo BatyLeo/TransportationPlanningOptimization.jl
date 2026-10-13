@@ -132,6 +132,7 @@ public order_aggregate,
     incremental_cost,
     incremental_cost_with_size,
     lower_bound_incremental_cost,
-    lower_bound_incremental_cost_with_order
+    lower_bound_incremental_cost_with_order,
+    lower_bound_commodity_cost
 
 end

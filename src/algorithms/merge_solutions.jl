@@ -27,6 +27,9 @@ long as no two bundles in the same instance collide on that full triple.
 Throws `ArgumentError` if either instance has two bundles with identical
 `(origin_id, destination_id, group)`.
 
+`mode_selector` is the [`AbstractModeSelector`](@ref) used to rebuild the merged state.
+Pass the one that built `full_solution` and `sub_solution`.
+
 Always checks `is_feasible(merged, full_instance)` before returning and
 throws `ArgumentError` if it fails (the verbose feasibility report is logged
 automatically).
@@ -35,7 +38,8 @@ function merge_solutions(
     full_solution::SolutionState,
     sub_solution::SolutionState,
     full_instance::Instance,
-    sub_instance::Instance,
+    sub_instance::Instance;
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     full_ttg = full_instance.travel_time_graph
     sub_ttg = sub_instance.travel_time_graph
@@ -86,7 +90,7 @@ function merge_solutions(
         end
     end
 
-    merged = SolutionState(fused_paths, full_instance)
+    merged = SolutionState(fused_paths, full_instance; mode_selector)
     is_feasible(merged, full_instance; verbose=true) || throw(
         ArgumentError(
             "merge_solutions: merged solution is infeasible on full_instance " *

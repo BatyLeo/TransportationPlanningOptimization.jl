@@ -230,3 +230,98 @@ end
     @test !is_feasible(SolutionState(overloaded, instance), instance)
     @test_throws ArgumentError TPO.solve(instance; start=overloaded, show_progress=false)
 end
+
+@testset "solve rebuilds the merged state with mode_selector" begin
+    # Two modes with the same travel time: a cheap one of capacity 1 and an expensive one.
+    # The direct bundle is fixed by filtering, then rebuilt by the merge.
+    modes = [(5.0, 1, 1), (10.0, 1, 100)]
+    instance = TestFixtures._leg_instance(modes, 3; quantity=3)
+    kwargs = (; LS..., rng=MersenneTwister(0), show_progress=false)
+
+    spill = TPO.solve(instance; mode_selector=FillThenSpillMode(), kwargs...)
+    @test is_feasible(spill, instance; verbose=true)
+    @test sort([f.volume for f in spill.arc_flows]) == [1.0, 2.0]
+    @test cost(spill) ≈ 1 * 5 + 2 * 10
+
+    cheapest = TPO.solve(instance; kwargs...)
+    @test is_feasible(cheapest, instance; verbose=true)
+    @test [f.volume for f in cheapest.arc_flows] == [3.0]
+    @test cost(cheapest) ≈ 3 * 10
+
+    unfiltered = TPO.solve(
+        instance; mode_selector=FillThenSpillMode(), filtering=false, kwargs...
+    )
+    @test is_feasible(unfiltered, instance; verbose=true)
+    @test sort([f.volume for f in unfiltered.arc_flows]) == [1.0, 2.0]
+    @test cost(unfiltered) ≈ 1 * 5 + 2 * 10
+end
+
+@testset "solve with FillThenSpillMode splits a bundle over two same-transit modes" begin
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="D")]
+    arc(o, d, c, cap=typemax(Int)) = Arc(;
+        origin_id=o,
+        destination_id=d,
+        cost=LinearArcCost(c),
+        travel_time=Day(1),
+        capacity=cap,
+    )
+    arcs = [
+        arc("A", "B", 1.0, 2),
+        arc("A", "B", 3.0, 100),
+        arc("B", "D", 1.0),
+        arc("A", "D", 10.0),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="D",
+        quantity=4,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(3),
+        size=1.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1); allow_multimodal=true)
+    for filtering in (true, false)
+        sol = TPO.solve(
+            instance;
+            mode_selector=FillThenSpillMode(),
+            filtering,
+            LS...,
+            rng=MersenneTwister(0),
+            show_progress=false,
+        )
+        @test is_feasible(sol, instance; verbose=true)
+        @test cost(sol) ≈ 12.0
+        ab = filter(f -> f.arc in (1, 2), sol.arc_flows)
+        @test sort([f.arc for f in ab]) == [1, 2]
+        @test [f.volume for f in ab] == [2.0, 2.0]
+        @test only(filter(f -> f.arc == 3, sol.arc_flows)).volume == 4.0
+    end
+end
+
+@testset "solve_state is feasible on tight multi-modal capacities" begin
+    arm2 = TestFixtures.lb_arm2_instance()
+    fragmented = TestFixtures.fragmented_modes_instance()
+    for selector in (CheapestMode(), FillThenSpillMode()), filtering in (true, false)
+        for instance in (arm2, fragmented)
+            kwargs = (; mode_selector=selector, filtering, show_progress=false)
+            construction = TPO.solve_state(instance; kwargs..., local_search=false)
+            @test TPO.is_feasible(construction, instance)
+            sol = TPO.solve_state(instance; kwargs..., time_limit=2.0, max_iter=100)
+            @test TPO.is_feasible(sol, instance)
+            @test TPO.cost(sol) <= TPO.cost(construction)
+        end
+    end
+end
+
+@testset "solve with filtering=false and FillThenSpillMode stays feasible on a jointly priced batch" begin
+    instance = TestFixtures.joint_batch_instance()
+    solution = TPO.solve(
+        instance;
+        filtering=false,
+        mode_selector=FillThenSpillMode(),
+        time_limit=2.0,
+        max_iter=200,
+        show_progress=false,
+    )
+    @test TPO.is_feasible(TPO.SolutionState(solution, instance), instance; verbose=true)
+end

@@ -339,6 +339,12 @@ function two_node_common_incremental!(
         cost_delta += add_bundle_subpath!(sol, instance, i, np, lo, nhi; mode_selector)
     end
 
+    # The bundles were priced as one batch but committed one by one, which can overload a mode.
+    if !_fits_capacities(sol, instance, snapshots, mode_selector)
+        _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
+        return 0.0
+    end
+
     if refine
         for i in Random.shuffle(rng, lifted_idxs)
             time() > deadline && break

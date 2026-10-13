@@ -14,13 +14,20 @@ Improve `solution_state` on `sub_instance` with [`local_search!`](@ref) or [`ite
 Because `solution_state` is pre-loaded with the reserved load of every filtered bundle whose direct arc is still in `sub_instance`, `cost(result.solution_state)` is neither the sub-instance cost nor the full-instance cost.
 Only the merged state has the full-instance cost.
 
+With a non-default `mode_selector`, pass the same one to `local_search!` (positional) and `merge_solutions` (keyword).
+
 Set `show_progress=false` to hide the progress bars.
+`mode_selector` is the [`AbstractModeSelector`](@ref) used by all steps.
 """
-function solve_filtered(instance::Instance; show_progress::Bool=true)
-    filtering_state = lower_bound_filtering(instance; show_progress)
+function solve_filtered(
+    instance::Instance;
+    mode_selector::AbstractModeSelector=CheapestMode(),
+    show_progress::Bool=true,
+)
+    filtering_state = lower_bound_filtering(instance, mode_selector; show_progress)
     sub_instance = extract_filtered_instance(instance, filtering_state)
-    start = preload_filtered_bundles(filtering_state, instance, sub_instance)
-    solution_state = mix_greedy_heuristic(sub_instance; start, show_progress)
+    start = preload_filtered_bundles(filtering_state, instance, sub_instance; mode_selector)
+    solution_state = mix_greedy_heuristic(sub_instance; mode_selector, start, show_progress)
     return (; solution_state, sub_instance, filtering_state)
 end
 
@@ -55,10 +62,10 @@ The cost of the result is at most the cost of the converted start, which can dif
 `time_limit` (seconds), `max_iter`, `rng` and `refine_two_node` only apply to local search, so `time_limit` does not cover construction.
 `refine_two_node=true` re-inserts each lifted bundle on its whole path after a two-node consolidation move (see [`local_search!`](@ref)), which makes moves slower but slightly improves world-scale instances.
 Local search also stops after 15000 consecutive non-improving iterations (the [`local_search!`](@ref) default), so it can return well before `time_limit`.
-All steps use [`CheapestMode`](@ref).
+`mode_selector` (default [`CheapestMode`](@ref)) is the [`AbstractModeSelector`](@ref) used by every step.
 Set `show_progress=false` to hide the progress bars.
 
-Throws `ArgumentError` if no feasible construction is found, if the merged solution is infeasible, if `start` cannot be represented on `instance` (see `SolutionState(solution, instance)`) or if `start` is infeasible.
+Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, if `start` cannot be represented on `instance` (see `SolutionState(solution, instance)`) or if `start` is infeasible.
 """
 function solve_state(
     instance::Instance;
@@ -69,6 +76,7 @@ function solve_state(
     max_iter::Int=500_000,
     rng::Random.AbstractRNG=Random.default_rng(),
     refine_two_node::Bool=false,
+    mode_selector::AbstractModeSelector=CheapestMode(),
     show_progress::Bool=true,
 )
     if !isnothing(start)
@@ -80,31 +88,64 @@ function solve_state(
         )
         if local_search && bundle_count(instance) > 0
             local_search!(
-                solution_state, instance; time_limit, max_iter, rng, refine_two_node
+                solution_state,
+                instance,
+                mode_selector;
+                time_limit,
+                max_iter,
+                rng,
+                refine_two_node,
             )
         end
+        _check_feasible(solution_state, instance)
         return solution_state
     end
 
     if !filtering
-        solution_state = mix_greedy_heuristic(instance; show_progress)
+        solution_state = mix_greedy_heuristic(instance; mode_selector, show_progress)
         if local_search
             local_search!(
-                solution_state, instance; time_limit, max_iter, rng, refine_two_node
+                solution_state,
+                instance,
+                mode_selector;
+                time_limit,
+                max_iter,
+                rng,
+                refine_two_node,
             )
         end
+        _check_feasible(solution_state, instance)
         return solution_state
     end
 
     (; solution_state, sub_instance, filtering_state) = solve_filtered(
-        instance; show_progress
+        instance; mode_selector, show_progress
     )
     if local_search && bundle_count(sub_instance) > 0
         local_search!(
-            solution_state, sub_instance; time_limit, max_iter, rng, refine_two_node
+            solution_state,
+            sub_instance,
+            mode_selector;
+            time_limit,
+            max_iter,
+            rng,
+            refine_two_node,
         )
     end
-    return merge_solutions(filtering_state, solution_state, instance, sub_instance)
+    return merge_solutions(
+        filtering_state, solution_state, instance, sub_instance; mode_selector
+    )
+end
+
+# Safety net after local search: the moves are meant to keep the state feasible.
+function _check_feasible(solution_state::SolutionState, instance::Instance)
+    is_feasible(solution_state, instance; verbose=true) || throw(
+        ArgumentError(
+            "solve_state: the solution is infeasible on instance (see the feasibility report above). " *
+            "This indicates a bug in a local search move, please report it with the instance.",
+        ),
+    )
+    return nothing
 end
 
 """
@@ -118,7 +159,7 @@ Pass `start` (a [`Solution`](@ref) or a [`SolutionState`](@ref)) to continue fro
 Filtering and construction are skipped and `filtering` is ignored.
 The cost of the result is at most the cost of the start converted by `SolutionState(start, instance)`.
 
-Throws `ArgumentError` if no feasible construction is found, if the merged solution is infeasible, or if `start` is unrepresentable or infeasible on `instance`.
+Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, or if `start` is unrepresentable or infeasible on `instance`.
 """
 function solve(
     instance::Instance;
@@ -129,6 +170,7 @@ function solve(
     max_iter::Int=500_000,
     rng::Random.AbstractRNG=Random.default_rng(),
     refine_two_node::Bool=false,
+    mode_selector::AbstractModeSelector=CheapestMode(),
     show_progress::Bool=true,
 )
     solution_state = solve_state(
@@ -140,6 +182,7 @@ function solve(
         max_iter,
         rng,
         refine_two_node,
+        mode_selector,
         show_progress,
     )
     return Solution(solution_state, instance)

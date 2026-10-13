@@ -23,6 +23,9 @@ see `incremental_cost` / `lower_bound_incremental_cost`):
   [`order_aggregate`](@ref)). Must return the same value as the commodity-vector method on
   `order.commodities`. Only the lower-bound passes call it. Defaults to the commodity-vector
   method, and `existing` may be `nothing` (empty arc).
+- `lower_bound_commodity_cost(arc_f::T, c::LightCommodity) -> Union{Float64,Nothing}`: optional relaxed
+  cost of the single commodity `c`, used to bound a [`FillThenSpillMode`](@ref) split of an order across
+  the modes of a [`MultiModalArc`](@ref). Defaults to `nothing` (no bound), see its docstring for the contract.
 """
 abstract type AbstractArcCostFunction end
 
@@ -97,6 +100,18 @@ function lower_bound_incremental_cost(
 ) where {C<:LightCommodity}
     return incremental_cost(arc_f, existing_commodities, new_commodities)
 end
+
+"""
+$TYPEDSIGNATURES
+
+Optional hook: relaxed cost of the commodity `c` alone on `arc_f`.
+It must be additive over commodities and never above the share of `c` in the true cost,
+so that `evaluate(arc_f, S) >= sum(lower_bound_commodity_cost(arc_f, c) for c in S)` for every set `S`.
+Return `nothing` (the default) when no such per-commodity bound exists.
+The lower bound of [`FillThenSpillMode`](@ref) on [`MultiModalArc`](@ref) edges then counts `0` for
+a commodity that can use that mode.
+"""
+lower_bound_commodity_cost(::AbstractArcCostFunction, ::LightCommodity) = nothing
 
 """
 $TYPEDSIGNATURES

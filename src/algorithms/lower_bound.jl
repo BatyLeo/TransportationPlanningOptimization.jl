@@ -12,6 +12,7 @@ function _shortest_path_assign!(
     label::AbstractString;
     show_progress::Bool=true,
     on_fixed::Function=(i, path, k) -> nothing,
+    fixed_hint::Function=Returns(false),
 )
     ttg = instance.travel_time_graph
     # Initialize an empty solution and a reusable buffer
@@ -30,22 +31,7 @@ function _shortest_path_assign!(
         path = bundle_shortest_path(instance, origin, dest)
         # Throw an error if no path was found (i.e. there is no feasible path)
         if isempty(path)
-            bundle = instance.bundles[i]
-            max_steps = maximum(o.max_transit_steps for o in bundle.orders)
-            throw(
-                ArgumentError(
-                    "No feasible $label path for bundle $i: " *
-                    "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
-                    "max_transit_steps=$(max_steps), " *
-                    "forbidden_nodes=$(Set(_user_id(instance, id) for id in bundle.forbidden_nodes)), " *
-                    "forbidden_arcs=$(Set((_user_id(instance, u), _user_id(instance, v)) for (u, v) in bundle.forbidden_arcs)), " *
-                    "no elementary path from origin to destination" *
-                    (
-                        label == "filtering" ?
-                        ", capacity may be taken by previously fixed direct bundles" : ""
-                    ),
-                ),
-            )
+            throw(_no_path_error(instance, i, label; fixed_hint=fixed_hint()))
         end
         # Insert bundle i using computed path above
         add_bundle_path!(current_solution, instance, i, path; mode_selector)
@@ -64,7 +50,8 @@ For each bundle, find the cheapest path under the relaxed lower-bound cost
 every bundle's cost matrix is computed against the *empty* solution, so paths
 are independent of one another. Each order is still gated against every arc's
 hard capacity on its own (see `_edge_lower_bound_cost`), but orders from
-different bundles are priced independently and may jointly overload an arc.
+different bundles are priced independently and may jointly overload an arc (or the
+modes of a multi-modal arc, since their commit never enforces combined capacity).
 The result is a valid lower bound when costs are linear in total volume per bundle,
 and a near-tight bound otherwise.
 Set `show_progress=false` to hide the progress bar.
@@ -136,5 +123,6 @@ function lower_bound_filtering(
         "filtering";
         show_progress,
         on_fixed=fix!,
+        fixed_hint=() -> !isempty(fixed_pairs),
     )
 end

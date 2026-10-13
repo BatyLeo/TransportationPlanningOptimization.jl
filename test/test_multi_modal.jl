@@ -845,3 +845,63 @@ end
         @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
     end
 end
+
+# ── commits never enforce the combined capacity ──────────────────────────────
+
+@testset "multi-modal commits place an order that does not fit on top of the load" begin
+    modes = [(1.0, 1, 2), (3.0, 1, 5)]
+    instance = TestFixtures._leg_instance(modes, 1; quantity=4)
+    cache = instance.index_cache
+    for selector in (CheapestMode(), FillThenSpillMode())
+        sol = greedy_heuristic(instance; mode_selector=selector, show_progress=false)
+        edge, loaded = only(sol.assignments)
+        batch = collect(commodities_of(loaded))
+        @test length(batch) == 4
+        @test is_feasible(sol, instance)
+
+        # The same 4 units again: neither mode has room left on top of the load.
+        sv = cache.tsg_code_to_spatial_code[edge[2]]
+        arc = cache.edge_group_to_arc[(cache.tsg_code_to_spatial_code[edge[1]], sv, 1)]
+        TPO._add_order_to_assignment!(
+            sol.assignments, edge, arc, batch, selector, cache.spatial_code_to_node_cost, sv
+        )
+        @test length(collect(commodities_of(sol.assignments[edge]))) == 8
+        @test !is_feasible(sol, instance)
+    end
+end
+
+@testset "multi-modal pipelines keep throwing when no mode can carry the order" begin
+    nodes = [Node(; id="A"), Node(; id="B")]
+    arcs = [
+        Arc(;
+            origin_id="A",
+            destination_id="B",
+            cost=LinearArcCost(c),
+            travel_time=Day(1),
+            capacity=cap,
+        ) for (c, cap) in ((5.0, 1), (10.0, 2))
+    ]
+    commodity(quantity) = Commodity(;
+        origin_id="A",
+        destination_id="B",
+        quantity,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(1),
+        size=1.0,
+    )
+    # 3 units under CheapestMode (no mode holds them), 5 under FillThenSpillMode
+    # (the combined capacity is 3).
+    for (selector, quantity) in ((CheapestMode(), 3), (FillThenSpillMode(), 5))
+        instance = Instance(
+            nodes, arcs, [commodity(quantity)], Day(1); allow_multimodal=true
+        )
+        @test_throws ArgumentError mix_greedy_heuristic(
+            instance; mode_selector=selector, show_progress=false
+        )
+        for filtering in (true, false)
+            @test_throws ArgumentError solve(
+                instance; mode_selector=selector, filtering, show_progress=false
+            )
+        end
+    end
+end

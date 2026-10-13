@@ -43,12 +43,15 @@ For case 1, use different `travel_time` values (e.g. `Day(1)` for truck and `Day
 
 ## Cost Evaluation and Mode Selection
 
-The `greedy_heuristic` accepts a `mode_selector` keyword that controls how commodities are distributed across modes on a multi-modal edge. Two strategies are available, both subtypes of [`AbstractModeSelector`](@ref):
+The `solve` function and the `greedy_heuristic` accept a `mode_selector` keyword.
+It controls how commodities are distributed across modes on a multi-modal edge.
+Two strategies are available, both subtypes of [`AbstractModeSelector`](@ref):
 
 - [`CheapestMode`](@ref) (default): each bundle's order is placed entirely on the cheapest mode whose remaining capacity can absorb it. Modes that would overflow are skipped. If no mode on an edge has enough capacity, the edge is treated as infeasible (Inf cost) and Dijkstra routes around it. If no feasible path exists, `greedy_heuristic` throws `ArgumentError`.
 - [`FillThenSpillMode`](@ref): fill the cheapest mode up to its capacity, then spill overflow to the next-cheapest mode on the same edge, and so on. Unlike `CheapestMode`, this can split a single order's commodities across modes that share the same transit time. If the combined capacity across all modes on an edge is below the load, the edge is also treated as infeasible.
 
 ```julia
+solution = solve(instance; mode_selector=FillThenSpillMode())                        # full pipeline
 solution_state = greedy_heuristic(instance)                                          # CheapestMode (default)
 solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())       # capacity-aware
 cost(solution_state)
@@ -90,6 +93,10 @@ arc_loose = Arc(; origin_id="A", destination_id="B",
 `FillThenSpillMode` can therefore produce strictly cheaper solutions whenever an order is larger than the cheapest mode but smaller than the combined capacity on a single edge. `CheapestMode` is preferable when you want to keep each order intact on a single mode (e.g. for traceability or to avoid mid-leg transfers).
 
 If *no* mode on an edge has enough capacity for an order, `CheapestMode` cannot place that order at all and `greedy_heuristic` throws `ArgumentError`. Switch to `FillThenSpillMode` (which can distribute the order across multiple modes on the same edge) or relax the input capacities. If even the combined capacity of every mode on an edge is below the load, `FillThenSpillMode` also throws `ArgumentError`.
+
+The lower-bound and filtering passes bound `FillThenSpillMode` through `lower_bound_commodity_cost`, which the built-in arc costs implement.
+For a custom arc cost without it, that mode contributes `0` to the bound of each commodity it can carry.
+`lower_bound` may return an infeasible state, and `mix_greedy_heuristic` keeps only feasible candidates.
 
 ## See Also
 
