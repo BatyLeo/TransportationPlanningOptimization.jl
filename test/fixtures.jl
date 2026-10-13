@@ -95,6 +95,8 @@ function TransportationPlanningOptimization.perturbate!(
     ::ReinsertPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     isempty(instance.bundles) && return (0.0, 0)
     idx = rand(rng, 1:length(instance.bundles))
@@ -111,9 +113,11 @@ function TransportationPlanningOptimization.perturbate!(
         instance, origin, destination
     )
     if !isempty(path)
-        TransportationPlanningOptimization.add_bundle_path!(sol, instance, idx, path)
+        TransportationPlanningOptimization.add_bundle_path!(
+            sol, instance, idx, path; mode_selector
+        )
     end
-    return (before - cost(sol), 1)
+    return (cost(sol) - before, 1)
 end
 
 tiny_parsed() = _parsed("tiny")

@@ -131,6 +131,8 @@ visited, so a physical node is never entered twice (staying on the current one i
 waiting and is allowed). `visited` lists physical nodes that the path must also
 avoid. The node of `src` is always allowed, and if the node of `dst` is in `visited`
 then no path is returned. Arcs with `Inf` cost are skipped, and costs must be nonnegative.
+No path is returned either if the absolute time `deadline` passes (checked every
+`DEADLINE_CHECK_EVERY` labels).
 """
 function elementary_shortest_path(
     graph::Graphs.AbstractGraph,
@@ -139,6 +141,7 @@ function elementary_shortest_path(
     src::Int,
     dst::Int;
     visited::BitSet=BitSet(),
+    deadline::Float64=Inf,
 )
     # Label k: vertex[k], parent[k] (label index) and seen[k] (physical nodes).
     vertex = [src]
@@ -148,6 +151,7 @@ function elementary_shortest_path(
     heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
     push!(heap, (0.0, 1))
 
+    n_pops = 0
     while !isempty(heap)
         d, k = pop!(heap)
         u = vertex[k]
@@ -164,6 +168,8 @@ function elementary_shortest_path(
             end
             return reverse!(path)
         end
+        n_pops += 1
+        n_pops % DEADLINE_CHECK_EVERY == 0 && time() > deadline && return Int[]
 
         for v in Graphs.outneighbors(graph, u)
             w = cost_matrix[u, v]

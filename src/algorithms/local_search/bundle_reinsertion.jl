@@ -33,19 +33,24 @@ end
 """
 $TYPEDSIGNATURES
 
-Convert each bundle's `bundle_arcs` edge list into an adjacency-list Dict
-(node -> outgoing neighbors), for use with `_lazy_bundle_dijkstra!`.
+Adjacency list (node -> outgoing neighbors) of the `bundle_arcs` edges of bundle
+`bundle_idx`, for use with `_lazy_bundle_dijkstra!`.
+"""
+function _bundle_adjacency(ttg::TravelTimeGraph, bundle_idx::Int)
+    adj = Dict{Int,Vector{Int}}()
+    for (u, v) in ttg.bundle_arcs[bundle_idx]
+        push!(get!(adj, u, Int[]), v)
+    end
+    return adj
+end
+
+"""
+$TYPEDSIGNATURES
+
+[`_bundle_adjacency`](@ref) of each of the `n_bundles` bundles.
 """
 function _compute_bundle_adjacencies(ttg::TravelTimeGraph, n_bundles::Int)
-    bundle_adjs = Vector{Dict{Int,Vector{Int}}}(undef, n_bundles)
-    for i in 1:n_bundles
-        adj = Dict{Int,Vector{Int}}()
-        for (u, v) in ttg.bundle_arcs[i]
-            push!(get!(adj, u, Int[]), v)
-        end
-        bundle_adjs[i] = adj
-    end
-    return bundle_adjs
+    return [_bundle_adjacency(ttg, i) for i in 1:n_bundles]
 end
 
 """
@@ -55,6 +60,10 @@ Lazy Dijkstra for a single bundle reinsertion: evaluates edge costs on-demand
 as nodes are settled and stops at the destination. Returns the `parents`
 vector (for use with `trace_path`).
 Its path may loop on a physical node, see [`bundle_shortest_path`](@ref).
+The TTG edge `exclude` (no edge by default) is never used.
+If the absolute time `deadline` passes (checked every `DEADLINE_CHECK_EVERY` settled
+nodes), the search stops and the destination is left unreached, so `trace_path` gives no
+path.
 """
 function _lazy_bundle_dijkstra!(
     sol::SolutionState{C},
@@ -66,19 +75,19 @@ function _lazy_bundle_dijkstra!(
     buffer::BinPackingBuffer,
     bundle_adj::Dict{Int,Vector{Int}};
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    exclude::Tuple{Int,Int}=(0, 0),
+    deadline::Float64=Inf,
 ) where {C}
     ttg = instance.travel_time_graph
     cache = instance.index_cache
     bundle = instance.bundles[bundle_idx]
 
-    # Convert forbidden sets to integer codes once (skip when empty,
-    # which is the common case for inbound instances).
-    ng = instance.network_graph.graph
+    # The forbidden sets are usually empty (e.g. inbound instances), then skip the checks.
     has_forbidden = !isempty(bundle.forbidden_nodes) || !isempty(bundle.forbidden_arcs)
     fn_codes, fa_codes = if has_forbidden
-        _forbidden_codes(ng, bundle)
+        _forbidden_codes(instance.network_graph.graph, bundle)
     else
-        Set{Int}(), Set{Tuple{Int,Int}}()
+        (Set{Int}(), Set{Tuple{Int,Int}}())
     end
 
     if !isnothing(workspace)
@@ -95,13 +104,20 @@ function _lazy_bundle_dijkstra!(
     heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
     push!(heap, (0.0, origin))
 
+    n_pops = 0
     while !isempty(heap)
         d_u, u = pop!(heap)
         d_u > dists[u] && continue
         u == dest && break
+        n_pops += 1
+        if n_pops % DEADLINE_CHECK_EVERY == 0 && time() > deadline
+            parents[dest] = 0
+            break
+        end
 
         su = cache.ttg_code_to_spatial_code[u]
         for v in get(bundle_adj, u, Int[])
+            (u, v) == exclude && continue
             sv = cache.ttg_code_to_spatial_code[v]
 
             if su == sv
@@ -125,6 +141,134 @@ function _lazy_bundle_dijkstra!(
     end
 
     return parents
+end
+
+"""
+$TYPEDSIGNATURES
+
+Cheapest elementary path from `origin` to `dest` over the arcs of bundle `bundle_idx`,
+priced against the current `sol` as it is (a bundle still in it has its own load counted),
+or `Int[]` if there is none. It is the lazy Dijkstra of [`_lazy_bundle_dijkstra!`](@ref),
+and only when its path loops on a physical node (or enters one of the physical nodes
+`visited`) is the cost matrix filled for [`elementary_shortest_path`](@ref). The TTG edge
+`exclude` is never used. The result may still carry shortcut edges at its ends. `Int[]` is
+also returned when the absolute time `deadline` passes, in the search or in the cost
+matrix fill.
+"""
+function _lazy_bundle_path!(
+    sol::SolutionState,
+    instance::Instance,
+    bundle_idx::Int,
+    origin::Int,
+    dest::Int,
+    mode_selector::AbstractModeSelector,
+    buffer::BinPackingBuffer,
+    bundle_adj::Dict{Int,Vector{Int}};
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    exclude::Tuple{Int,Int}=(0, 0),
+    visited::Union{BitSet,Nothing}=nothing,
+    deadline::Float64=Inf,
+)
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    parents = _lazy_bundle_dijkstra!(
+        sol,
+        instance,
+        bundle_idx,
+        origin,
+        dest,
+        mode_selector,
+        buffer,
+        bundle_adj;
+        workspace,
+        exclude,
+        deadline,
+    )
+    path = trace_path(parents, origin, dest)
+    if is_elementary_path(path, spatial) &&
+        (isnothing(visited) || !any(c -> spatial[c] in visited, path))
+        return path
+    end
+    # The lazy search leaves the cost matrix unfilled, so fill it first.
+    update_bundle_cost_matrix!(
+        sol, instance, bundle_idx, mode_selector; buffer, deadline
+    ) || return Int[]
+    exclude == (0, 0) || (ttg.cost_matrix[exclude...] = Inf)
+    return elementary_shortest_path(
+        ttg.graph,
+        ttg.cost_matrix,
+        spatial,
+        origin,
+        dest;
+        visited=isnothing(visited) ? BitSet() : visited,
+        deadline,
+    )
+end
+
+"""
+$TYPEDSIGNATURES
+
+Cheapest elementary path of bundle `bundle_idx` that goes through the TTG edge `arc`, or
+`Int[]` if there is none (the edge is forbidden, not an edge of the bundle, or no
+elementary path goes through it). It joins the cheapest paths from the
+origin to the start of `arc` and from its end to the destination, see
+[`_lazy_bundle_path!`](@ref). The cost of the edge is not checked, a full capacity
+is left to the caller. Shortcut edges at the ends are removed. `Int[]` is also returned
+when `deadline` passes, see [`_lazy_bundle_path!`](@ref).
+"""
+function _lazy_forced_path!(
+    sol::SolutionState,
+    instance::Instance,
+    bundle_idx::Int,
+    arc::Tuple{Int,Int},
+    mode_selector::AbstractModeSelector,
+    buffer::BinPackingBuffer,
+    bundle_adj::Dict{Int,Vector{Int}};
+    workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    deadline::Float64=Inf,
+)
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    bundle = instance.bundles[bundle_idx]
+    u, v = arc
+    su, sv = spatial[u], spatial[v]
+    fn, fa = _forbidden_codes(instance.network_graph.graph, bundle)
+    ((su, sv) in fa || su in fn || sv in fn) && return Int[]
+    v in get(bundle_adj, u, Int[]) || return Int[]
+
+    origin, dest = ttg.origin_codes[bundle_idx], ttg.destination_codes[bundle_idx]
+    first_leg = _lazy_bundle_path!(
+        sol,
+        instance,
+        bundle_idx,
+        origin,
+        u,
+        mode_selector,
+        buffer,
+        bundle_adj;
+        workspace,
+        visited=BitSet([sv]),
+        deadline,
+    )
+    isempty(first_leg) && return Int[]
+    second_leg = _lazy_bundle_path!(
+        sol,
+        instance,
+        bundle_idx,
+        v,
+        dest,
+        mode_selector,
+        buffer,
+        bundle_adj;
+        workspace,
+        visited=BitSet(spatial[c] for c in first_leg),
+        deadline,
+    )
+    isempty(second_leg) && return Int[]
+    path = vcat(first_leg, second_leg)
+    is_elementary_path(path, spatial) || return Int[]
+    _remove_shortcuts_from_path!(path, ttg)
+    return path
 end
 
 """
@@ -183,7 +327,7 @@ function _try_reinsert_bundle!(
         )
         bundle_shortest_path(instance, origin, dest; workspace)
     elseif !isnothing(bundle_adj)
-        parents = _lazy_bundle_dijkstra!(
+        _lazy_bundle_path!(
             sol,
             instance,
             bundle_idx,
@@ -194,20 +338,6 @@ function _try_reinsert_bundle!(
             bundle_adj;
             workspace,
         )
-        lazy_path = trace_path(parents, origin, dest)
-        if is_elementary_path(lazy_path, instance.index_cache.ttg_code_to_spatial_code)
-            lazy_path
-        else
-            # The lazy search leaves the cost matrix unfilled, so fill it first.
-            update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector; buffer)
-            elementary_shortest_path(
-                ttg.graph,
-                ttg.cost_matrix,
-                instance.index_cache.ttg_code_to_spatial_code,
-                origin,
-                dest,
-            )
-        end
     else
         update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector)
         bundle_shortest_path(instance, origin, dest)

@@ -28,6 +28,7 @@ mix_greedy_and_lower_bound   (on the sub-instance, seeded with the pre-load)
 The function [`solve`](@ref) runs this whole pipeline and is the recommended entry point.
 It returns a [`Solution`](@ref), and [`solve_state`](@ref) returns the internal [`SolutionState`](@ref) instead.
 The function [`solve_filtered`](@ref) wraps everything up to (but not including) local search, for workflows that need control over the local search step.
+[`iterated_local_search!`](@ref) is not part of [`solve`](@ref), it is a separate call on the sub-instance state, see [Iterated Local Search](@ref ils_guide).
 
 ## Construction Heuristics
 
@@ -137,7 +138,7 @@ solution = solve(instance; filtering=false)
 
 ### Manual pipeline with filtering
 
-Use the building blocks when you need another local search, such as [`iterated_local_search!`](@ref), on the sub-instance.
+Use the building blocks when you need another local search, such as [`iterated_local_search!`](@ref) (see [Iterated Local Search](@ref ils_guide)), on the sub-instance.
 With a non-default `mode_selector`, pass the same one to `solve_filtered`, to `local_search!` (positional) and to `merge_solutions` (keyword):
 
 ```julia

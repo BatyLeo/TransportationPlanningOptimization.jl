@@ -326,10 +326,8 @@ end
             MetaGraphsNext.label_for(ttg.graph, v)[1] == "H"
     )
     ttg.cost_scaling[TPO.ttg_edge_key(instance.index_cache, ah_edge...)] = 2.0
-    inc = TPO.compute_ttg_edge_incremental_cost(
-        sol, instance, instance.bundles[1], ah_edge...
-    )
-    @test isapprox(inc, 2 * 1 + 100; atol=1e-9)
+    coefficient = TPO._milp_arc_coefficient(instance, instance.bundles[1], ah_edge...)
+    @test isapprox(coefficient, 2 * 1 + 100; atol=1e-9)
 
     empty!(ttg.cost_scaling)
 end

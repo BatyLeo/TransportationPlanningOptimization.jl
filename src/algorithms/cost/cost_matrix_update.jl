@@ -86,12 +86,6 @@ function compute_ttg_edge_incremental_cost(
         )
     end
 
-    # Slope scaling is an arc-only relaxation heuristic, node costs are never scaled.
-    if !isempty(instance.travel_time_graph.cost_scaling)
-        factor = get(instance.travel_time_graph.cost_scaling, edge_key, 1.0)
-        arc_part *= factor
-    end
-
     return arc_part + node_part
 end
 
@@ -453,7 +447,8 @@ $TYPEDSIGNATURES
 
 Compute and overwrite the `TravelTimeGraph` cost matrix entries for every arc
 of bundle `bundle_idx`. Forwards to the lower-level overload with the bundle
-and its precomputed `bundle_arcs[bundle_idx]`.
+and its precomputed `bundle_arcs[bundle_idx]`. Returns `false` if the absolute time
+`deadline` passed during the fill, see the lower-level overload.
 """
 function update_bundle_cost_matrix!(
     current_solution::SolutionState,
@@ -462,6 +457,7 @@ function update_bundle_cost_matrix!(
     mode_selector::AbstractModeSelector=CheapestMode();
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     buffer::BinPackingBuffer=BinPackingBuffer(),
+    deadline::Float64=Inf,
 )
     return update_bundle_cost_matrix!(
         current_solution,
@@ -471,6 +467,7 @@ function update_bundle_cost_matrix!(
         mode_selector;
         cost_fn=cost_fn,
         buffer=buffer,
+        deadline=deadline,
     )
 end
 

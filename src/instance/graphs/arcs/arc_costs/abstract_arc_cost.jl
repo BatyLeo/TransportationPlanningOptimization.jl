@@ -23,6 +23,8 @@ see `incremental_cost` / `lower_bound_incremental_cost`):
   [`order_aggregate`](@ref)). Must return the same value as the commodity-vector method on
   `order.commodities`. Only the lower-bound passes call it. Defaults to the commodity-vector
   method, and `existing` may be `nothing` (empty arc).
+  The MILP perturbations also use it as the linear relaxation of a custom cost, so keep it
+  consistent with the true cost.
 - `lower_bound_commodity_cost(arc_f::T, c::LightCommodity) -> Union{Float64,Nothing}`: optional relaxed
   cost of the single commodity `c`, used to bound a [`FillThenSpillMode`](@ref) split of an order across
   the modes of a [`MultiModalArc`](@ref). Defaults to `nothing` (no bound), see its docstring for the contract.

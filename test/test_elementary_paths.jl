@@ -362,3 +362,224 @@ end
         end
     end
 end
+
+# Cost of `path` under the cost matrix filled by `update_bundle_cost_matrix!`.
+function matrix_path_cost(ttg, path)
+    return sum(
+        ttg.cost_matrix[path[k], path[k + 1]] for k in 1:(length(path) - 1); init=0.0
+    )
+end
+
+# Lazy helpers priced with bundle `b` removed from a copy of `sol`.
+function lazy_setup(instance, sol, b)
+    state = copy(sol)
+    TPO.remove_bundle_path!(state, instance, b)
+    ttg = instance.travel_time_graph
+    return state,
+    ttg.origin_codes[b], ttg.destination_codes[b],
+    TPO._bundle_adjacency(ttg, b)
+end
+
+@testset "lazy bundle path equals the cost matrix shortest path" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    ttg = instance.travel_time_graph
+    buffer = TPO.BinPackingBuffer()
+    workspace = TPO.DijkstraWorkspace(Graphs.nv(ttg.graph))
+    for b in 1:6
+        state, origin, dest, adj = lazy_setup(instance, sol, b)
+        path = TPO._lazy_bundle_path!(
+            state, instance, b, origin, dest, CheapestMode(), buffer, adj; workspace
+        )
+        TPO.update_bundle_cost_matrix!(state, instance, b, CheapestMode())
+        expected = TPO.bundle_shortest_path(instance, origin, dest)
+        @test matrix_path_cost(ttg, path) ≈ matrix_path_cost(ttg, expected)
+    end
+end
+
+@testset "lazy bundle path excludes an arc" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    buffer = TPO.BinPackingBuffer()
+    for b in 1:6
+        state, origin, dest, adj = lazy_setup(instance, sol, b)
+        path = sol.bundle_paths[b]
+        k = findfirst(k -> spatial[path[k]] != spatial[path[k + 1]], 1:(length(path) - 1))
+        arc = (path[k], path[k + 1])
+        new = TPO._lazy_bundle_path!(
+            state, instance, b, origin, dest, CheapestMode(), buffer, adj; exclude=arc
+        )
+        TPO.update_bundle_cost_matrix!(state, instance, b, CheapestMode())
+        ttg.cost_matrix[arc...] = Inf
+        expected = TPO.bundle_shortest_path(instance, origin, dest)
+        @test arc ∉ zip(new[1:(end - 1)], new[2:end])
+        @test matrix_path_cost(ttg, new) ≈ matrix_path_cost(ttg, expected)
+    end
+end
+
+@testset "lazy forced path goes through the arc at the cheapest cost" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    buffer = TPO.BinPackingBuffer()
+    found = 0
+    for b in 1:3
+        state, origin, dest, adj = lazy_setup(instance, sol, b)
+        TPO.update_bundle_cost_matrix!(state, instance, b, CheapestMode())
+        parents_origin, dist_origin = TPO.bundle_dijkstra(
+            ttg.graph, origin, ttg.cost_matrix
+        )
+        for arc in ttg.bundle_arcs[b][1:min(end, 15)]
+            spatial[arc[1]] == spatial[arc[2]] && continue
+            path = TPO._lazy_forced_path!(
+                state, instance, b, arc, CheapestMode(), buffer, adj
+            )
+            isempty(path) && continue
+            found += 1
+            k = findfirst(==(arc[1]), path)
+            @test !isnothing(k) && path[k + 1] == arc[2]
+            @test TPO.is_elementary_path(path, spatial)
+            parents_arc, dist_arc = TPO.bundle_dijkstra(ttg.graph, arc[2], ttg.cost_matrix)
+            expected = dist_origin[arc[1]] + ttg.cost_matrix[arc...] + dist_arc[dest]
+            @test matrix_path_cost(ttg, path) >= expected - 1e-9
+            # Equal unless the two cheapest legs together revisit a physical node.
+            joined = vcat(
+                TPO.trace_path(parents_origin, origin, arc[1]),
+                TPO.trace_path(parents_arc, arc[2], dest),
+            )
+            if TPO.is_elementary_path(joined, spatial)
+                @test matrix_path_cost(ttg, path) ≈ expected
+            end
+        end
+    end
+    @test found >= 3
+end
+
+@testset "lazy helpers keep the path elementary" begin
+    instance = looping_instance()
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    g = ttg.graph
+    sol = greedy_heuristic(instance; show_progress=false)
+    small = findfirst(b -> b.origin_id == "O2", instance.bundles)
+    state, origin, dest, adj = lazy_setup(instance, sol, small)
+    buffer = TPO.BinPackingBuffer()
+    # The cheapest lazy path loops X -> Y -> X to share the big bin, the helper must not.
+    path = TPO._lazy_bundle_path!(
+        state, instance, small, origin, dest, CheapestMode(), buffer, adj
+    )
+    @test !isempty(path)
+    @test TPO.is_elementary_path(path, spatial)
+    # Forcing Y -> X would revisit X: no elementary path goes through it.
+    arcs_to(from, to) = [
+        a for a in ttg.bundle_arcs[small] if
+        label_for(g, a[1])[1] == from && label_for(g, a[2])[1] == to
+    ]
+    forced = [
+        TPO._lazy_forced_path!(state, instance, small, a, CheapestMode(), buffer, adj) for
+        a in arcs_to("Y", "X")
+    ]
+    @test !isempty(forced) && all(isempty, forced)
+    # Forcing X -> Y is fine.
+    forced = filter(
+        !isempty,
+        [
+            TPO._lazy_forced_path!(state, instance, small, a, CheapestMode(), buffer, adj)
+            for a in arcs_to("X", "Y")
+        ],
+    )
+    @test !isempty(forced)
+    @test all(p -> TPO.is_elementary_path(p, spatial), forced)
+end
+
+@testset "lazy forced path respects forbidden arcs and nodes" begin
+    for kwargs in ((; forbidden_arcs=[("B", "C")]), (; forbidden_node_ids=["B"]))
+        nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C")]
+        arcs = [
+            Arc(;
+                origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1)
+            ) for (o, d) in (("A", "B"), ("B", "C"), ("A", "C"))
+        ]
+        commodity = Commodity(;
+            origin_id="A",
+            destination_id="C",
+            quantity=1,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(2),
+            size=1.0,
+            kwargs...,
+        )
+        instance = Instance(nodes, arcs, [commodity], Day(1))
+        sol = SolutionState(instance)
+        ttg = instance.travel_time_graph
+        g = ttg.graph
+        adj = TPO._bundle_adjacency(ttg, 1)
+        buffer = TPO.BinPackingBuffer()
+        via_b = [
+            a for a in ttg.bundle_arcs[1] if
+            label_for(g, a[1])[1] == "B" || label_for(g, a[2])[1] == "B"
+        ]
+        @test !isempty(via_b)
+        for a in via_b
+            @test isempty(
+                TPO._lazy_forced_path!(sol, instance, 1, a, CheapestMode(), buffer, adj)
+            )
+        end
+    end
+end
+
+@testset "lazy bundle path avoids an excluded arc when it falls back" begin
+    instance = looping_instance()
+    ttg = instance.travel_time_graph
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    sol = greedy_heuristic(instance; show_progress=false)
+    small = findfirst(b -> b.origin_id == "O2", instance.bundles)
+    state, origin, dest, adj = lazy_setup(instance, sol, small)
+    buffer = TPO.BinPackingBuffer()
+    args = (state, instance, small, origin, dest, CheapestMode(), buffer, adj)
+    path = TPO._lazy_bundle_path!(args...)
+    parents = TPO._lazy_bundle_dijkstra!(args...)
+    looping = TPO.trace_path(parents, origin, dest)
+    # An arc of the elementary path that the looping lazy path does not use.
+    arc = only(
+        (path[k], path[k + 1]) for
+        k in 1:(length(path) - 1) if spatial[path[k]] != spatial[path[k + 1]] &&
+            (path[k], path[k + 1]) ∉ zip(looping[1:(end - 1)], looping[2:end])
+    )
+    new = TPO._lazy_bundle_path!(args...; exclude=arc)
+    @test !isempty(new)
+    @test arc ∉ zip(new[1:(end - 1)], new[2:end])
+    @test TPO.is_elementary_path(new, spatial)
+end
+
+@testset "path searches stop at the deadline" begin
+    n = 300
+    g = Graphs.SimpleDiGraph(n)
+    for v in 1:(n - 1)
+        Graphs.add_edge!(g, v, v + 1)
+    end
+    costs = SparseArrays.sparse(1:(n - 1), 2:n, ones(n - 1), n, n)
+    spatial = collect(1:n)
+    @test length(TPO.elementary_shortest_path(g, costs, spatial, 1, n)) == n
+    late = time() - 1.0
+    @test isempty(TPO.elementary_shortest_path(g, costs, spatial, 1, n; deadline=late))
+
+    instance = TestFixtures.small_instance()
+    ttg = instance.travel_time_graph
+    sol = SolutionState(instance)
+    b = 1
+    origin, dest = ttg.origin_codes[b], ttg.destination_codes[b]
+    adj = TPO._bundle_adjacency(ttg, b)
+    args = (sol, instance, b, origin, dest, CheapestMode(), TPO.BinPackingBuffer(), adj)
+    @test !isempty(TPO._lazy_bundle_path!(args...))
+    # The search settles enough nodes for a deadline check to be possible.
+    ws = TPO.DijkstraWorkspace(Graphs.nv(ttg.graph))
+    TPO._lazy_bundle_dijkstra!(args...; workspace=ws)
+    @test count(ws.dists .< ws.dists[dest]) >= TPO.DEADLINE_CHECK_EVERY
+    @test isempty(TPO._lazy_bundle_path!(args...; deadline=late))
+    parents = TPO._lazy_bundle_dijkstra!(args...; deadline=late)
+    @test isempty(TPO.trace_path(parents, origin, dest))
+end

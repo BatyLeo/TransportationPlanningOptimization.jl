@@ -552,7 +552,7 @@ end
     _test_matches_rebuild(sol, instance)
 end
 
-@testset "cost_scaling is keyed per transit group" begin
+@testset "cost_scaling does not change the incremental cost" begin
     instance = TestFixtures._leg_instance(TestFixtures._TRUCK_TRAIN_MODES, 3)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
@@ -567,7 +567,7 @@ end
     inc(d) = TPO.compute_ttg_edge_incremental_cost(sol, instance, bundle, edges[d]...)
     base_1, base_2 = inc(1), inc(2)
     ttg.cost_scaling[TPO.ttg_edge_key(cache, edges[1]...)] = 2.0
-    @test inc(1) ≈ 2 * base_1
+    @test inc(1) == base_1
     @test inc(2) == base_2
     empty!(ttg.cost_scaling)
 end

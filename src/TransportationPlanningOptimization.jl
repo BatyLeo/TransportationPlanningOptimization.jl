@@ -5,6 +5,8 @@ using DataStructures: DataStructures
 using Dates: Dates, DateTime, Period
 using DocStringExtensions: TYPEDEF, TYPEDFIELDS, TYPEDSIGNATURES
 using Graphs: Graphs
+using HiGHS: HiGHS
+using JuMP: JuMP, @variable, @constraint, @objective
 using MetaGraphsNext: MetaGraphsNext, MetaGraph, haskey, code_for, label_for
 using OhMyThreads: OhMyThreads, @tasks, @set, index_chunks
 using ProgressMeter: @showprogress
@@ -75,6 +77,11 @@ include("algorithms/ils/perturbation.jl")
 include("algorithms/ils/config.jl")
 include("algorithms/ils/snapshot.jl")
 include("algorithms/ils/large_local_search.jl")
+include("algorithms/ils/perturbations/common.jl")
+include("algorithms/ils/perturbations/group_reinsertion.jl")
+include("algorithms/ils/perturbations/milp_costs.jl")
+include("algorithms/ils/perturbations/arc_flow_milp.jl")
+include("algorithms/ils/perturbations/attract_reduce_milp.jl")
 include("algorithms/ils/slope_scaling.jl")
 include("algorithms/ils/iterated_local_search.jl")
 
@@ -106,10 +113,11 @@ export mix_greedy_heuristic,
 export LocalSearchResult
 
 # ILS framework
-export AbstractPerturbation, perturbate!
+export AbstractPerturbation, perturbate!, supports_instance
 export ILSConfig, ILSResult
 export snapshot_solution, restore_solution!
 export large_local_search!
+export GroupReinsertPerturbation, ArcFlowMILPPerturbation, AttractReduceMILPPerturbation
 export slope_scaling_update!
 export iterated_local_search!
 

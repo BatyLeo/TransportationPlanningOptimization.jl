@@ -16,6 +16,8 @@ function TransportationPlanningOptimization.perturbate!(
     p::IntegrationReinsertPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
 )
     isempty(instance.bundles) && return (0.0, 0)
     idx = rand(rng, 1:length(instance.bundles))
@@ -40,7 +42,7 @@ function TransportationPlanningOptimization.perturbate!(
         restore_solution!(sol, snap, instance)
         return (0.0, 0)
     end
-    return (before - after, 1)
+    return (after - before, 1)
 end
 
 function build_small_instance()
@@ -83,9 +85,6 @@ end
     @test result.best_cost <= post_ls_cost + 1e-6
     @test is_feasible(sol_data.solution_state, sol_data.sub_instance)
 
-    # Verify cost_scaling was populated by slope scaling on the sub-instance
-    # that ILS actually ran on (solve_filtered builds a fresh sub-instance
-    # with its own TravelTimeGraph, distinct from `instance`'s).
-    # It may be empty if ILS didn't iterate, but should at least not error.
-    @test sol_data.sub_instance.travel_time_graph.cost_scaling isa Dict
+    # ILS resets the slope scaling when it returns.
+    @test isempty(sol_data.sub_instance.travel_time_graph.cost_scaling)
 end
