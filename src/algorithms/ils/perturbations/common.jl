@@ -33,10 +33,10 @@ Reroute `bundle_idxs` atomically and accept the result only if it is cheap enoug
 
 The bundles are removed from `sol`, then `reinsert!(sol, instance, snapshots)` must put
 them back. Its contract: snapshot the edges of every new path into `snapshots` before
-adding the path (for instance through `_try_insert_bundle!(...; snapshots)`) and return
+adding the path (through `_add_fixed_path!` or `_insert_bundle_snapshotted!`) and return
 `false` when some bundle cannot be routed. The cost change is computed over the snapshotted
 edges only (every edge touched by the old or the new paths), so it does not scan the
-whole solution.
+whole solution, unless `cost_before` is left to its default `cost(sol)`.
 
 The result is kept when `cost_increase <= tolerance * cost_before` and returns
 `(cost_increase, n_changed)`, where `n_changed` counts the bundles whose path changed.
@@ -115,9 +115,10 @@ end
 $TYPEDSIGNATURES
 
 Whether every edge in `snapshots` (the edges touched by a reroute) respects the capacity of
-its arc, with the same tolerance as [`is_feasible`](@ref).
+its arc, with the same tolerance as [`is_feasible`](@ref). Unlike `_fits_capacities`,
+which only checks the modes of multi-modal arcs, it checks every arc capacity and bin.
 """
-function _fits_capacities(sol::SolutionState, instance::Instance, snapshots)
+function _edges_within_capacity(sol::SolutionState, instance::Instance, snapshots)
     cache = instance.index_cache
     for e in keys(snapshots)
         a = get(sol.assignments, e, nothing)

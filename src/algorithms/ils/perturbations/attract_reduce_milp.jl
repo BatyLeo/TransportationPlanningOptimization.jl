@@ -9,9 +9,9 @@ random. An arc that leaves more than `min_candidate_ratio` of the routed bundles
 path is used at once, otherwise the priced arc with the most new paths is used. At most
 `MAX_PRICED_ARCS` (20) arcs are priced per call and the pricing stops at half of the
 effective time limit, including inside an arc. The effective time limit is the smaller of
-the `time_limit` field and the call budget, which is the `time_limit` keyword of
+the `solver_time_limit` field and the call budget, which is the `time_limit` keyword of
 [`perturbate!`](@ref). The solver gets what is left of the call budget after the pricing
-and the model build, at most the `time_limit` field.
+and the model build, at most the `solver_time_limit` field.
 A call with less than `MIN_MILP_TIME` (1 second) left, before the build or after it,
 changes nothing.
 Every bundle on the arc gets a "reduce" path, its cheapest elementary path that avoids the
@@ -44,7 +44,7 @@ $TYPEDFIELDS
     "JuMP optimizer (or optimizer factory) used to solve the MILP"
     optimizer::O = HiGHS.Optimizer
     "time limit of the MILP solve in seconds, it also bounds the arc pricing"
-    time_limit::Float64 = 180.0
+    solver_time_limit::Float64 = 180.0
     "relative MIP gap at which the solve stops"
     mip_gap::Float64 = 1e-3
     "maximum accepted cost increase, as a fraction of the current cost"
@@ -55,21 +55,26 @@ $TYPEDFIELDS
     warm_start::Bool = false
 
     function AttractReduceMILPPerturbation{O}(
-        optimizer, time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
+        optimizer, solver_time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
     ) where {O}
         0 <= min_candidate_ratio < 1 ||
             throw(ArgumentError("min_candidate_ratio must be in [0, 1)"))
         return new{O}(
-            optimizer, time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
+            optimizer,
+            solver_time_limit,
+            mip_gap,
+            tolerance,
+            min_candidate_ratio,
+            warm_start,
         )
     end
 end
 
 function AttractReduceMILPPerturbation(
-    optimizer::O, time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
+    optimizer::O, solver_time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
 ) where {O}
     return AttractReduceMILPPerturbation{O}(
-        optimizer, time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
+        optimizer, solver_time_limit, mip_gap, tolerance, min_candidate_ratio, warm_start
     )
 end
 
@@ -166,14 +171,14 @@ const MAX_PRICED_ARCS = 20
 # bundles with a new path, with these paths. When no priced arc reaches that count, the arc
 # with the most new paths is used. `nothing` if no priced arc has any path. At most
 # `MAX_PRICED_ARCS` arcs are priced, and the pricing stops once half of `time_limit` is
-# spent (the effective limit of the call, the field `p.time_limit` by default), inside an
-# arc too. The first arc is priced, but only up to that time.
+# spent (the effective limit of the call, the field `p.solver_time_limit` by default),
+# inside an arc too. The first arc is priced, but only up to that time.
 function _select_attract_reduce_arc(
     sol::SolutionState,
     instance::Instance,
     p::AttractReduceMILPPerturbation,
     rng::Random.AbstractRNG;
-    time_limit::Real=p.time_limit,
+    time_limit::Real=p.solver_time_limit,
     start::Real=time(),
     mode_selector::AbstractModeSelector=CheapestMode(),
 )
@@ -300,28 +305,34 @@ function perturbate!(
     )
     start = time()
     reject(outcome; fields...) = _log_perturbation(verbose, p, outcome, (0.0, 0); fields...)
-    time_limit >= MIN_MILP_TIME || return reject("rejected: not enough time"; time_limit)
+    time_limit >= MIN_MILP_TIME ||
+        return reject("rejected: not enough time"; debug_rejections=true, time_limit)
     new_paths = _select_attract_reduce_arc(
         sol,
         instance,
         p,
         rng;
-        time_limit=min(p.time_limit, time_limit),
+        time_limit=min(p.solver_time_limit, time_limit),
         start,
         mode_selector,
     )
     isnothing(new_paths) && return reject("rejected: no candidate arc")
     modeled = sort!(collect(keys(new_paths)))
-    time_limit - (time() - start) >= MIN_MILP_TIME ||
-        return reject("rejected: not enough time"; n_modeled=length(modeled))
+    time_limit - (time() - start) >= MIN_MILP_TIME || return reject(
+        "rejected: not enough time"; debug_rejections=true, n_modeled=length(modeled)
+    )
     build_start = time()
     model, z = _attract_reduce_model(p, sol, instance, modeled, new_paths)
     _milp_attach!(model)
     build_time = time() - build_start
     left = time_limit - (time() - start)
-    left >= MIN_MILP_TIME ||
-        return reject("rejected: not enough time"; n_modeled=length(modeled), build_time)
-    JuMP.set_time_limit_sec(model, min(p.time_limit, left))
+    left >= MIN_MILP_TIME || return reject(
+        "rejected: not enough time";
+        debug_rejections=true,
+        n_modeled=length(modeled),
+        build_time,
+    )
+    JuMP.set_time_limit_sec(model, min(p.solver_time_limit, left))
     solve_start = time()
     JuMP.optimize!(model)
     fields = (;
@@ -338,7 +349,7 @@ function perturbate!(
         for b in changed
             _add_fixed_path!(s, inst, b, new_paths[b], snapshots; mode_selector)
         end
-        return _fits_capacities(s, inst, snapshots)
+        return _edges_within_capacity(s, inst, snapshots)
     end
     return _log_perturbation(verbose, p, outcome[], result; fields...)
 end

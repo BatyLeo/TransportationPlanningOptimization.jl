@@ -54,6 +54,8 @@ the slope-scaled linear arc cost plus the head node cost, summed over the orders
 function _milp_arc_coefficient(instance::Instance, bundle::Bundle, u::Int, v::Int)
     cache = instance.index_cache
     arc = ttg_edge_arc(cache, u, v)
+    # A virtual arc carries no cost and its head is a hub, which must not be charged.
+    _is_virtual(arc) && return 0.0
     scaling = get(instance.travel_time_graph.cost_scaling, ttg_edge_key(cache, u, v), 1.0)
     node_cost = cache.spatial_code_to_node_cost[cache.ttg_code_to_spatial_code[v]]
     coefficient = 0.0

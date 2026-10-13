@@ -80,7 +80,7 @@ using Gurobi
 p = ArcFlowMILPPerturbation(; optimizer=gurobi_optimizer)
 ```
 
-The MILP perturbations use the smaller of their own `time_limit` field and the call budget, and the copy of the model to the solver counts in that budget.
+The MILP perturbations use the smaller of their own `solver_time_limit` field and the call budget, and the copy of the model to the solver counts in that budget.
 HiGHS presolve can exceed the time limit on large models, so for [`ArcFlowMILPPerturbation`](@ref) the variable cap `max_variables` is what bounds the runtime.
 
 Both MILP perturbations have a `warm_start` keyword, off by default, because starting from the current routing makes time-limited solves return it again instead of diversifying.

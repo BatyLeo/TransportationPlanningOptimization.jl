@@ -56,16 +56,6 @@ end
 """
 $TYPEDSIGNATURES
 
-Forbidden nodes and arcs of `bundle` as spatial codes `(nodes, arcs)`, the form used by
-every arc filter on the `TravelTimeGraph`.
-"""
-function _forbidden_codes(instance::Instance, bundle::Bundle)
-    return _forbidden_codes(instance.network_graph.graph, bundle)
-end
-
-"""
-$TYPEDSIGNATURES
-
 Lazy Dijkstra for a single bundle reinsertion: evaluates edge costs on-demand
 as nodes are settled and stops at the destination. Returns the `parents`
 vector (for use with `trace_path`).
@@ -93,8 +83,12 @@ function _lazy_bundle_dijkstra!(
     bundle = instance.bundles[bundle_idx]
 
     # The forbidden sets are usually empty (e.g. inbound instances), then skip the checks.
-    fn_codes, fa_codes = _forbidden_codes(instance, bundle)
-    has_forbidden = !isempty(fn_codes) || !isempty(fa_codes)
+    has_forbidden = !isempty(bundle.forbidden_nodes) || !isempty(bundle.forbidden_arcs)
+    fn_codes, fa_codes = if has_forbidden
+        _forbidden_codes(instance.network_graph.graph, bundle)
+    else
+        (Set{Int}(), Set{Tuple{Int,Int}}())
+    end
 
     if !isnothing(workspace)
         _reset_workspace!(workspace, origin)
@@ -238,7 +232,7 @@ function _lazy_forced_path!(
     bundle = instance.bundles[bundle_idx]
     u, v = arc
     su, sv = spatial[u], spatial[v]
-    fn, fa = _forbidden_codes(instance, bundle)
+    fn, fa = _forbidden_codes(instance.network_graph.graph, bundle)
     ((su, sv) in fa || su in fn || sv in fn) && return Int[]
     v in get(bundle_adj, u, Int[]) || return Int[]
 

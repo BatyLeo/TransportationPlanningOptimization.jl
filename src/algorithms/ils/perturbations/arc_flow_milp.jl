@@ -15,12 +15,13 @@ The new paths are kept if the real cost increase is at most
 `tolerance * cost(sol)`, otherwise the solution is left unchanged.
 
 Multimodal arcs are not supported and raise an `ArgumentError`.
-The solver time limit is the smaller of the `time_limit` field and the call budget left.
+The solver time limit is the smaller of the `solver_time_limit` field and the call budget
+left.
 The call budget is the `time_limit` keyword of [`perturbate!`](@ref), minus the time
 already spent on the selection and the model build (the copy to the solver included).
 A call with less than `MIN_MILP_TIME` (1 second) left, before or after the build, changes
 nothing.
-HiGHS presolve can exceed the `time_limit` field on large models, so with HiGHS the
+HiGHS presolve can exceed the `solver_time_limit` field on large models, so with HiGHS the
 variable cap is what bounds the runtime.
 
 # Fields
@@ -34,7 +35,7 @@ $TYPEDFIELDS
     "maximum number of variables of the model (arc and bin variables)"
     max_variables::Int = 150_000
     "time limit of the MILP solve in seconds"
-    time_limit::Float64 = 180.0
+    solver_time_limit::Float64 = 180.0
     "relative MIP gap at which the solve stops"
     mip_gap::Float64 = 1e-3
     "maximum accepted cost increase, as a fraction of the current cost"
@@ -57,7 +58,7 @@ function _milp_bundle_arcs(instance::Instance, bundle_idx::Int)
     cache = instance.index_cache
     bundle = instance.bundles[bundle_idx]
     # Same filter as the cost matrix update: forbidden arcs and nodes are not allowed.
-    fn, fa = _forbidden_codes(instance, bundle)
+    fn, fa = _forbidden_codes(instance.network_graph.graph, bundle)
     arcs = _MilpArcs(Int[], Int[], Vector{Tuple{Int,Int}}[], Bool[])
     for (u, v) in instance.travel_time_graph.bundle_arcs[bundle_idx]
         su = cache.ttg_code_to_spatial_code[u]
@@ -314,19 +315,25 @@ function perturbate!(
         throw(ArgumentError("ArcFlowMILPPerturbation does not support multimodal arcs"))
     start = time()
     reject(outcome; fields...) = _log_perturbation(verbose, p, outcome, (0.0, 0); fields...)
-    time_limit >= MIN_MILP_TIME || return reject("rejected: not enough time"; time_limit)
+    time_limit >= MIN_MILP_TIME ||
+        return reject("rejected: not enough time"; debug_rejections=true, time_limit)
     selected, arcs_of = _select_milp_bundles(sol, instance, p, rng)
     isempty(selected) && return reject("rejected: no bundle selected")
-    time_limit - (time() - start) >= MIN_MILP_TIME ||
-        return reject("rejected: not enough time"; n_bundles=length(selected))
+    time_limit - (time() - start) >= MIN_MILP_TIME || return reject(
+        "rejected: not enough time"; debug_rejections=true, n_bundles=length(selected)
+    )
     build_start = time()
     model, x = _arc_flow_model(p, sol, instance, selected, arcs_of)
     _milp_attach!(model)
     build_time = time() - build_start
     left = time_limit - (time() - start)
-    left >= MIN_MILP_TIME ||
-        return reject("rejected: not enough time"; n_bundles=length(selected), build_time)
-    JuMP.set_time_limit_sec(model, min(p.time_limit, left))
+    left >= MIN_MILP_TIME || return reject(
+        "rejected: not enough time";
+        debug_rejections=true,
+        n_bundles=length(selected),
+        build_time,
+    )
+    JuMP.set_time_limit_sec(model, min(p.solver_time_limit, left))
     solve_start = time()
     JuMP.optimize!(model)
     fields = (;
@@ -348,7 +355,7 @@ function perturbate!(
         for b in changed
             _add_fixed_path!(s, inst, b, paths[b], snapshots; mode_selector)
         end
-        return _fits_capacities(s, inst, snapshots)
+        return _edges_within_capacity(s, inst, snapshots)
     end
     return _log_perturbation(verbose, p, outcome[], result; fields...)
 end

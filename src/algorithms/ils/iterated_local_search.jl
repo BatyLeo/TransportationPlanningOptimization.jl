@@ -1,7 +1,8 @@
 """
 Shortest time in seconds left in a perturbation phase or in the loop for a call to start.
-It must be at least `MIN_MILP_TIME`, so that the MILP perturbations never receive a budget
-they reject at once. With a perturbation or loop limit under 2 seconds, the loop uses half
+It is at least `MIN_MILP_TIME`, so that a call starts with a budget the MILP perturbations
+accept, but a call that spends part of it can still be rejected for lack of time (logged at
+debug level). With a perturbation or loop limit under 2 seconds, the loop uses half
 of the shorter limit instead.
 """
 const MIN_CALL_TIME = 1.0

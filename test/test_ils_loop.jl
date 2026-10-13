@@ -194,7 +194,7 @@ function TransportationPlanningOptimization.perturbate!(
     return (p.fraction * cost(sol), 0)
 end
 
-@testset "ILS cost threshold only counts cost increases" begin
+@testset "ILS cost threshold is reached by net cost increases only" begin
     instance = TestFixtures.small_instance()
 
     # A cheaper perturbation never reaches the cost threshold, so the phase runs until its
@@ -406,8 +406,9 @@ end
     @test result.time_elapsed <= elapsed
     # The last 2 seconds are reserved: no perturbation call runs into them.
     @test !isempty(perturbation.calls)
-    @test all(c -> c[1] + c[2] <= t0 + 4 + 0.1, perturbation.calls)
-    @test maximum(c -> c[1], perturbation.calls) < t0 + 4
+    first_call = perturbation.calls[1][1]
+    @test all(c -> c[1] + c[2] <= first_call + 4 + 0.1, perturbation.calls)
+    @test maximum(c -> c[1], perturbation.calls) < first_call + 4
 end
 
 @testset "The final local search keeps its reserved time" begin

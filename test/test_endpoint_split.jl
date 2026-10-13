@@ -1094,3 +1094,44 @@ end
         @test !occursin(r"_[od]\b", message)
     end
 end
+
+@testset "ILS perturbations on a split endpoint with a node cost" begin
+    hub_cost = SplitFixedNodeCost(100.0, 10.0)
+    nodes = [Node(; id="A"), Node(; id="H", node_cost=hub_cost), Node(; id="B")]
+    arcs = [_arc("A", "H"), _arc("H", "B"), _arc("A", "B"; cost=LinearArcCost(50.0))]
+    # One bundle starts at the hub, one ends there and one crosses it or takes the direct
+    # arc
+    commodities = [
+        _com("H", "B"; size=2.0, days=1),
+        _com("A", "H"; size=1.0, days=1),
+        _com("A", "B"; size=3.0, days=2),
+    ]
+    instance = _instance(nodes, arcs, commodities)
+    for p in (
+        GroupReinsertPerturbation(; group_by=b -> 1, tolerance=Inf),
+        ArcFlowMILPPerturbation(; group_by=b -> 1, tolerance=Inf, solver_time_limit=10.0),
+    )
+        @testset "$(nameof(typeof(p)))" begin
+            sol = greedy_heuristic(instance; show_progress=false)
+            before = cost(sol)
+            inc, _ = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
+            @test is_feasible(sol, instance)
+            @test cost(sol) - before ≈ inc
+        end
+    end
+end
+
+@testset "MILP arc coefficient is zero on a virtual arc" begin
+    hub_cost = SplitFixedNodeCost(100.0, 10.0)
+    nodes = [Node(; id="A"), Node(; id="H", node_cost=hub_cost), Node(; id="B")]
+    arcs = [_arc("A", "H"), _arc("H", "B")]
+    instance = _instance(nodes, arcs, [_com("H", "B"; size=2.0, days=1)])
+    cache = instance.index_cache
+    virtual = [
+        (u, v) for (u, v) in instance.travel_time_graph.bundle_arcs[1] if
+        TPO._is_virtual_ttg_edge(cache, u, v)
+    ]
+    @test length(virtual) == 1
+    u, v = only(virtual)
+    @test TPO._milp_arc_coefficient(instance, instance.bundles[1], u, v) == 0.0
+end

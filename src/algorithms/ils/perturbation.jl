@@ -3,7 +3,7 @@ $TYPEDEF
 
 Abstract type for ILS perturbations.
 
-Concrete subtypes must implement [`perturbate!`](@ref), including its `rng`, `verbose` and
+Concrete subtypes must implement [`perturbate!`](@ref), including its `rng`, `verbose`,
 `time_limit` and `mode_selector` keyword arguments.
 """
 abstract type AbstractPerturbation end

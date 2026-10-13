@@ -143,7 +143,7 @@ They are charged per incoming time-space arc, at that arc's head node, on the fu
 The origin of a bundle's path is never charged, and a node reached through several incoming arcs is charged once per arc.
 [`cost`](@ref) includes both arc and node costs.
 Use [`total_arc_cost`](@ref) and [`total_node_cost`](@ref) to read the two components separately.
-Slope scaling (the optional `slope_scaling_update!` callback passed as `cost_update!` to [`iterated_local_search!`](@ref)) only scales arc costs, never node costs.
+Slope scaling (the optional `slope_scaling_update!` callback passed as `cost_update!` to [`iterated_local_search!`](@ref)) only scales the arc costs in the objectives of the MILP perturbations, never node costs, and the true costs are used everywhere else.
 
 By default, nodes use [`NoNodeCost`](@ref) (zero cost).
 To add a node cost, pass a `node_cost` keyword to [`Node`](@ref):

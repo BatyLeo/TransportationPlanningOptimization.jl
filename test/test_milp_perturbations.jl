@@ -67,7 +67,7 @@ end
     sol = greedy_heuristic(instance; show_progress=false)
     @test cost(sol) ≈ 20.0
     before = cost(sol)
-    (inc, n) = perturbate!(sol, instance, ArcFlowMILPPerturbation(; time_limit=10.0))
+    (inc, n) = perturbate!(sol, instance, ArcFlowMILPPerturbation(; solver_time_limit=10.0))
     @test n == 2
     @test inc ≈ -8.0
     @test cost(sol) - before ≈ inc
@@ -80,7 +80,7 @@ end
 @testset "MILP respects forbidden nodes" begin
     instance = hub_instance(; forbidden_node_ids=["H"])
     sol = greedy_heuristic(instance; show_progress=false)
-    (inc, n) = perturbate!(sol, instance, ArcFlowMILPPerturbation(; time_limit=10.0))
+    (inc, n) = perturbate!(sol, instance, ArcFlowMILPPerturbation(; solver_time_limit=10.0))
     @test (inc, n) == (0.0, 0)
     @test !("H" in spatial_ids(instance, sol.bundle_paths[1]))
     @test is_feasible(sol, instance)
@@ -110,7 +110,7 @@ end
     )
     instance = Instance(nodes, arcs, [commodity], Day(1))
     sol = greedy_heuristic(instance; show_progress=false)
-    perturbate!(sol, instance, ArcFlowMILPPerturbation(; time_limit=10.0))
+    perturbate!(sol, instance, ArcFlowMILPPerturbation(; solver_time_limit=10.0))
     @test spatial_ids(instance, sol.bundle_paths[1]) == ["A", "C"]
     @test is_feasible(sol, instance)
 end
@@ -118,7 +118,7 @@ end
 @testset "MILP respects finite arc capacities" begin
     instance = hub_instance(; hub_capacity=7)
     sol = greedy_heuristic(instance; show_progress=false)
-    perturbate!(sol, instance, ArcFlowMILPPerturbation(; time_limit=10.0))
+    perturbate!(sol, instance, ArcFlowMILPPerturbation(; solver_time_limit=10.0))
     @test is_feasible(sol, instance)
     @test cost(sol) >= 20.0 - 1e-9
 end
@@ -170,7 +170,7 @@ end
     p = ArcFlowMILPPerturbation(;
         group_by=x -> x === instance.bundles[b],
         max_variables=milp_size(instance, b) + 1,
-        time_limit=60.0,
+        solver_time_limit=60.0,
         mip_gap=0.0,
     )
     seed = seed_selecting(sol, instance, p, b)
@@ -211,7 +211,7 @@ end
     # is too small for the group of O2.
     n_vars = length(TPO._milp_bundle_arcs(instance, o1).u) + 3
     p = ArcFlowMILPPerturbation(;
-        group_by=b -> b.origin_id, time_limit=10.0, max_variables=n_vars
+        group_by=b -> b.origin_id, solver_time_limit=10.0, max_variables=n_vars
     )
     seed = seed_selecting(sol, instance, p, o1)
     @test !isnothing(seed)
@@ -230,7 +230,7 @@ end
     # Same cap as in the previous test.
     n_vars = length(TPO._milp_bundle_arcs(instance, o1).u) + 3
     p = ArcFlowMILPPerturbation(;
-        group_by=b -> b.origin_id, time_limit=10.0, max_variables=n_vars
+        group_by=b -> b.origin_id, solver_time_limit=10.0, max_variables=n_vars
     )
     seed = seed_selecting(sol, instance, p, o1)
     @test !isnothing(seed)
@@ -266,7 +266,7 @@ end
         codes = [code(l) for l in labels]
         arcs_of = TPO._milp_bundle_arcs(instance, 1)
         model, x = TPO._arc_flow_model(
-            ArcFlowMILPPerturbation(; time_limit=10.0),
+            ArcFlowMILPPerturbation(; solver_time_limit=10.0),
             sol,
             instance,
             [1],
@@ -344,7 +344,7 @@ end
 @testset "A warm started solve never worsens the cost" begin
     instance = hub_instance()
     sol = hub_solution(instance)
-    p = ArcFlowMILPPerturbation(; time_limit=1e-3, warm_start=true)
+    p = ArcFlowMILPPerturbation(; solver_time_limit=1e-3, warm_start=true)
     (inc, _) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
     @test inc <= 1e-9
     @test is_feasible(sol, instance)
@@ -363,7 +363,7 @@ end
                     s, inst, b, hub_path(inst, bundle.origin_id, true), snapshots
                 )
             end
-            return TPO._fits_capacities(s, inst, snapshots)
+            return TPO._edges_within_capacity(s, inst, snapshots)
         end
         if accepted
             @test result == (-8.0, 2)
@@ -378,7 +378,7 @@ end
     instance = TestFixtures.tiny_instance()
     sol = TestFixtures.tiny_greedy()
     sol0 = copy(sol)
-    p = ArcFlowMILPPerturbation(; time_limit=0.0)
+    p = ArcFlowMILPPerturbation(; solver_time_limit=0.0)
     result = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
     # Either the solver has no solution (nothing changes) or it found a valid accepted move.
     if result == (0.0, 0)
@@ -391,8 +391,8 @@ end
 @testset "A call with too little time changes nothing, a normal call works" begin
     instance = hub_instance()
     for p in (
-        ArcFlowMILPPerturbation(; time_limit=10.0),
-        AttractReduceMILPPerturbation(; time_limit=10.0),
+        ArcFlowMILPPerturbation(; solver_time_limit=10.0),
+        AttractReduceMILPPerturbation(; solver_time_limit=10.0),
     )
         sol = hub_solution(instance)
         sol0 = copy(sol)
@@ -457,7 +457,7 @@ end
     sol = hub_solution(instance)
     @test cost(sol) ≈ 21.0
     before = cost(sol)
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
     @test n == 1
     @test inc ≈ -9.0
@@ -477,7 +477,7 @@ end
         sol, instance, hub_arc(instance, ("H", 1), ("D", 2)), [o1, o2], Set([o2])
     )
     @test collect(keys(paths)) == [o2]
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
     @test (n, inc) == (1, -1.0)
     @test cost(sol) - before ≈ inc
@@ -492,7 +492,7 @@ end
     o1, o2 = hub_bundles(instance)
     arc = hub_arc(instance, ("H", 1), ("D", 2))
     paths = TPO._attract_reduce_paths(sol, instance, arc, [o1, o2], Set([o2]))
-    p = AttractReduceMILPPerturbation(; time_limit=10.0, warm_start=true)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0, warm_start=true)
     # Alone, pushing O2 off the hub saves 1. With both, attracting O1 saves 9.
     model, z = TPO._attract_reduce_model(p, sol, instance, [o2], paths)
     JuMP.optimize!(model)
@@ -506,7 +506,7 @@ end
 @testset "Attract reduce respects finite capacities" begin
     instance = hub_instance(; hub_capacity=7)
     sol = hub_solution(instance)
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     before = cost(sol)
     (inc, _) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
     @test cost(sol) - before ≈ inc
@@ -518,7 +518,7 @@ end
     instance = hub_instance()
     # Both bundles direct: the only moves cost 11 against 10.
     sol = greedy_heuristic(instance; show_progress=false)
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     sol0 = copy(sol)
     @test perturbate!(sol, instance, p; rng=Random.MersenneTwister(1)) == (0.0, 0)
     @test TestFixtures.same_state(sol, sol0)
@@ -531,7 +531,7 @@ end
     # H -> D could take both bundles, but O1 may not use the hub, so only one gets a path.
     instance = hub_instance(; forbidden_node_ids=["H"])
     sol = hub_solution(instance)
-    p = AttractReduceMILPPerturbation(; time_limit=10.0, min_candidate_ratio=0.6)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0, min_candidate_ratio=0.6)
     @test perturbate!(sol, instance, p; rng=Random.MersenneTwister(1)) == (-1.0, 1)
     @test is_feasible(sol, instance)
 end
@@ -571,7 +571,7 @@ end
     @test length(ahead) == 2
     @test TestFixtures.same_state(sol, sol0)
     # A call whose pricing deadline has passed prices nothing.
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     @test isnothing(
         TPO._select_attract_reduce_arc(
             sol, instance, p, Random.MersenneTwister(1); time_limit=-2.0
@@ -657,7 +657,7 @@ end
     new_paths = Dict(
         b => hub_path(instance, instance.bundles[b].origin_id, true) for b in modeled
     )
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     model, z = TPO._attract_reduce_model(p, sol, instance, modeled, new_paths)
     JuMP.optimize!(model)
     # Both on the hub costs 12 but needs 10 > 7, one alone costs 11 against 10.
@@ -668,7 +668,7 @@ end
     instance = TestFixtures.small_instance()
     sol = TestFixtures.small_greedy()
     before = cost(sol)
-    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    p = AttractReduceMILPPerturbation(; solver_time_limit=10.0)
     (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(1))
     @test cost(sol) - before ≈ inc
     @test inc <= p.tolerance * before
@@ -691,8 +691,8 @@ end
         sol,
         instance,
         [
-            ArcFlowMILPPerturbation(; time_limit=2.0),
-            AttractReduceMILPPerturbation(; time_limit=2.0),
+            ArcFlowMILPPerturbation(; solver_time_limit=2.0),
+            AttractReduceMILPPerturbation(; solver_time_limit=2.0),
         ];
         config=ILSConfig(; time_limit=4, perturbation_time_limit=3, ls_time_limit=1),
         rng=Random.MersenneTwister(5),
