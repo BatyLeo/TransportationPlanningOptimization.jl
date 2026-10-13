@@ -44,6 +44,9 @@ An accepted call may have `n_changed == 0` and a nonzero cost increase, when the
 keep their paths but their commodities are repacked differently.
 Otherwise (including when `reinsert!` returns `false`) the assignments and the bundle
 paths are restored exactly and `(0.0, 0)` is returned.
+
+`outcome[]` is set to a description of the result for [`_log_perturbation`](@ref), with
+`failure` as the reason when `reinsert!` returns `false`.
 """
 function _reroute_bundles!(
     reinsert!,
@@ -52,6 +55,8 @@ function _reroute_bundles!(
     bundle_idxs::Vector{Int};
     tolerance::Real,
     cost_before::Real=cost(sol),
+    outcome::Base.RefValue{String}=Ref(""),
+    failure::String="reinsertion failed",
 )
     old_paths = [copy(sol.bundle_paths[b]) for b in bundle_idxs]
     snapshots = _snapshot_multi_bundle_assignments(sol, instance, bundle_idxs)
@@ -72,7 +77,13 @@ function _reroute_bundles!(
         n_changed = count(
             sol.bundle_paths[b] != old for (b, old) in zip(bundle_idxs, old_paths)
         )
+        outcome[] = "accepted"
         return (cost_increase, n_changed)
+    end
+    outcome[] = if ok
+        "rejected: cost increase $cost_increase above tolerance $(tolerance * cost_before)"
+    else
+        "rejected: $failure"
     end
     _restore_multi_bundle_assignments!(sol, bundle_idxs, old_paths, snapshots)
     return (0.0, 0)
@@ -110,4 +121,45 @@ function _fits_capacities(sol::SolutionState, instance::Instance, snapshots)
         _capacity_feasible(arc, a, nothing; tol=EPS, verbose=false) || return false
     end
     return true
+end
+
+"""
+Minimum time in seconds that a MILP perturbation call needs to be worth a model.
+"""
+const MIN_MILP_TIME = 1.0
+
+"""
+$TYPEDSIGNATURES
+
+Log one line for a call of perturbation `p` when `verbose` is set and return `result`.
+`outcome` tells whether the call was accepted or why it was rejected and `fields` are
+extra structured fields. With `debug_rejections`, rejected calls are logged at debug level
+instead of info level.
+"""
+function _log_perturbation(
+    verbose::Bool,
+    p::AbstractPerturbation,
+    outcome::AbstractString,
+    result;
+    debug_rejections::Bool=false,
+    fields...,
+)
+    if verbose
+        type = nameof(typeof(p))
+        if debug_rejections && outcome != "accepted"
+            @debug "Perturbation" type outcome fields...
+        else
+            @info "Perturbation" type outcome cost_increase = result[1] n_changed = result[2] fields...
+        end
+    end
+    return result
+end
+
+# Whether `arc` has a finite capacity (any mode for a multimodal arc).
+_finite_capacity(arc::NetworkArc) = arc.capacity != typemax(Int)
+_finite_capacity(arc::MultiModalArc) = any(_finite_capacity, arc.modes)
+
+# Whether an arc of `instance` has a finite capacity.
+function _has_finite_capacity(instance::Instance)
+    return any(_finite_capacity, values(instance.index_cache.edge_group_to_arc))
 end

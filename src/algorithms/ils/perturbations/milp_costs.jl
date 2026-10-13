@@ -18,13 +18,12 @@ end
 """
 $TYPEDSIGNATURES
 
-Empty JuMP model for a perturbation MILP: silent, with a time limit, a relative gap and a
-single thread when the solver supports the attribute.
+Empty JuMP model for a perturbation MILP: silent, with a relative gap and a single thread
+when the solver supports the attribute. The caller sets the time limit before the solve.
 """
-function _milp_model(optimizer, time_limit::Real, mip_gap::Real)
+function _milp_model(optimizer, mip_gap::Real)
     model = JuMP.Model(optimizer)
     JuMP.set_silent(model)
-    JuMP.set_time_limit_sec(model, time_limit)
     JuMP.set_attribute(model, JuMP.MOI.RelativeGapTolerance(), mip_gap)
     try
         JuMP.set_attribute(model, JuMP.MOI.NumberOfThreads(), 1)
@@ -32,6 +31,17 @@ function _milp_model(optimizer, time_limit::Real, mip_gap::Real)
         err isa JuMP.MOI.UnsupportedAttribute || rethrow()
     end
     return model
+end
+
+"""
+$TYPEDSIGNATURES
+
+Copy the cached `model` to its optimizer now. JuMP otherwise does it inside `optimize!`,
+where it escapes the time limit, which is set from the time left after this call.
+"""
+function _milp_attach!(model::JuMP.Model)
+    JuMP.MOI.Utilities.attach_optimizer(model)
+    return nothing
 end
 
 """
@@ -102,4 +112,29 @@ function _milp_start_bins!(tau, sol::SolutionState, instance::Instance)
         JuMP.set_start_value(var, ceil(max(0.0, current / bin.bin_capacity - 1e-9)))
     end
     return nothing
+end
+
+"""
+$TYPEDSIGNATURES
+
+Structured log fields of a MILP `model` after its solve: size, build and solve times,
+solver status, objective and relative gap (`missing` without a solution).
+"""
+function _milp_fields(model::JuMP.Model, build_time::Real, solve_time::Real)
+    solved = JuMP.has_values(model)
+    gap = try
+        solved ? JuMP.relative_gap(model) : missing
+    catch
+        missing
+    end
+    return (;
+        n_variables=JuMP.num_variables(model),
+        n_constraints=JuMP.num_constraints(model; count_variable_in_set_constraints=false),
+        build_time,
+        solve_time,
+        termination=JuMP.termination_status(model),
+        primal=JuMP.primal_status(model),
+        objective=solved ? JuMP.objective_value(model) : missing,
+        gap,
+    )
 end

@@ -8,6 +8,10 @@ is rerouted at once. For an origin grouping use `group_by = b -> b.origin_id`.
 
 The new routing is kept if the cost increase is at most `tolerance * cost(sol)`,
 otherwise the solution is left unchanged and the perturbation reports no change.
+The reinsertion of a group cannot be interrupted, so the `time_limit` keyword of
+[`perturbate!`](@ref) is accepted but ignored.
+The group is rerouted many times per phase, so with `verbose=true` accepted calls are logged
+at info level and rejected calls at debug level.
 
 # Fields
 $TYPEDFIELDS
@@ -33,9 +37,12 @@ function perturbate!(
     p::GroupReinsertPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     groups = _routed_groups(sol, instance, p.group_by)
-    isempty(groups) && return (0.0, 0)
+    isempty(groups) && return _log_perturbation(
+        verbose, p, "rejected: no routed bundle", (0.0, 0); debug_rejections=true
+    )
     bundle_idxs = Random.shuffle(rng, rand(rng, groups))
 
     buffer = BinPackingBuffer()
@@ -47,8 +54,9 @@ function perturbate!(
     else
         Dict(b => _bundle_adjacency(instance.travel_time_graph, b) for b in bundle_idxs)
     end
+    outcome = Ref("")
     result = _reroute_bundles!(
-        sol, instance, bundle_idxs; tolerance=p.tolerance
+        sol, instance, bundle_idxs; tolerance=p.tolerance, outcome, failure="no path"
     ) do s, inst, snapshots
         return all(
             _insert_bundle_snapshotted!(
@@ -56,10 +64,9 @@ function perturbate!(
             ) for b in bundle_idxs
         )
     end
-    if verbose && result[2] > 0
-        @info "GroupReinsertPerturbation accepted" n_bundles = length(bundle_idxs) result
-    end
-    return result
+    return _log_perturbation(
+        verbose, p, outcome[], result; debug_rejections=true, n_bundles=length(bundle_idxs)
+    )
 end
 
 """

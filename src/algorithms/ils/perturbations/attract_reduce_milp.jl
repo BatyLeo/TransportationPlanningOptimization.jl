@@ -7,13 +7,22 @@ combination that pays with a MILP.
 An arc of the `TravelTimeGraph` with a bin cost that carries at least one bundle is drawn at
 random. An arc that leaves more than `min_candidate_ratio` of the routed bundles with a new
 path is used at once, otherwise the priced arc with the most new paths is used. At most
-`MAX_PRICED_ARCS` (20) arcs are priced per call and no new arc is priced after
-`time_limit / 2` (the first one always is), so a call takes at most about 1.5 times
-`time_limit` plus the arc pricing. Every bundle on the arc
-gets a "reduce" path, its cheapest elementary path that avoids the arc. Every other bundle
-that can use the arc gets an "attract" path, its cheapest elementary path forced through it.
-Paths are priced against the current solution without the bundle itself and respect the
-forbidden nodes and arcs of the bundle. A bundle without such a path is not modeled.
+`MAX_PRICED_ARCS` (20) arcs are priced per call and the pricing stops at half of the
+effective time limit, including inside an arc. The effective time limit is the smaller of
+the `time_limit` field and the call budget, which is the `time_limit` keyword of
+[`perturbate!`](@ref). The solver gets what is left of the call budget after the pricing
+and the model build, at most the `time_limit` field.
+A call with less than `MIN_MILP_TIME` (1 second) left, before the build or after it,
+changes nothing.
+Every bundle on the arc gets a "reduce" path, its cheapest elementary path that avoids the
+arc.
+Every other bundle that can use the arc gets an "attract" path, its cheapest elementary
+path forced through it.
+Paths respect the forbidden nodes and arcs of the bundle, and a bundle without such a path
+is not modeled.
+Without finite arc capacities, paths are priced against the current solution as it is, so
+the load of the bundle itself is counted in the costs.
+With finite capacities, the bundle is removed while its paths are priced.
 The arc is a `TravelTimeGraph` arc because bundles share it in relative time, the bins
 that decide the cost are on the time-space edges and are all in the model.
 
@@ -94,7 +103,11 @@ end
 # New paths of `bundle_idxs` for the TTG arc `arc`: reduce paths for the bundles in `users`,
 # attract paths for the others. The bundles missing from the result have no new path.
 # `adjacencies` caches the bundle adjacencies across arcs. The pricing stops early, with a
-# partial result, once the bundles left cannot bring the count above `to_beat`.
+# partial result, once the bundles left cannot bring the count above `to_beat` or once
+# `time()` passes `deadline`. With `remove_bundle=false` the paths are priced against `sol`
+# as it is, so the load of a bundle on its current edges is counted in its own new path
+# costs. That would count it twice in the capacity check, so `remove_bundle` is on whenever
+# an arc has a finite capacity: the bundle is removed while it is priced, then restored.
 function _attract_reduce_paths(
     sol::SolutionState,
     instance::Instance,
@@ -103,6 +116,8 @@ function _attract_reduce_paths(
     users;
     adjacencies::Dict{Int,Dict{Int,Vector{Int}}}=Dict{Int,Dict{Int,Vector{Int}}}(),
     to_beat::Int=0,
+    deadline::Float64=Inf,
+    remove_bundle::Bool=_has_finite_capacity(instance),
 )
     ttg = instance.travel_time_graph
     mode_selector = CheapestMode()
@@ -111,10 +126,11 @@ function _attract_reduce_paths(
     paths = Dict{Int,Vector{Int}}()
     for (i, b) in enumerate(bundle_idxs)
         length(paths) + length(bundle_idxs) - i + 1 <= to_beat && break
-        # Price the paths without the bundle itself, then put it back as it was.
+        time() > deadline && break
         old_path = sol.bundle_paths[b]
-        snapshots = _snapshot_path_assignments(sol, instance, b, old_path)
-        remove_bundle_path!(sol, instance, b)
+        snapshots =
+            remove_bundle ? _snapshot_path_assignments(sol, instance, b, old_path) : nothing
+        remove_bundle && remove_bundle_path!(sol, instance, b)
         adj = get!(() -> _bundle_adjacency(ttg, b), adjacencies, b)
         path = if b in users
             reduce_path = _lazy_bundle_path!(
@@ -128,13 +144,16 @@ function _attract_reduce_paths(
                 adj;
                 workspace,
                 exclude=arc,
+                deadline,
             )
             _remove_shortcuts_from_path!(reduce_path, ttg)
             reduce_path
         else
-            _lazy_forced_path!(sol, instance, b, arc, mode_selector, buffer, adj; workspace)
+            _lazy_forced_path!(
+                sol, instance, b, arc, mode_selector, buffer, adj; workspace, deadline
+            )
         end
-        _restore_path_assignments!(sol, b, old_path, snapshots)
+        isnothing(snapshots) || _restore_path_assignments!(sol, b, old_path, snapshots)
         (isempty(path) || path == old_path) || (paths[b] = path)
     end
     return paths
@@ -146,12 +165,16 @@ const MAX_PRICED_ARCS = 20
 # The first arc, in random order, that leaves more than `min_candidate_ratio` of the routed
 # bundles with a new path, with these paths. When no priced arc reaches that count, the arc
 # with the most new paths is used. `nothing` if no priced arc has any path. At most
-# `MAX_PRICED_ARCS` arcs are priced, and no new arc once half of `time_limit` is spent.
+# `MAX_PRICED_ARCS` arcs are priced, and the pricing stops once half of `time_limit` is
+# spent (the effective limit of the call, the field `p.time_limit` by default), inside an
+# arc too. The first arc is priced, but only up to that time.
 function _select_attract_reduce_arc(
     sol::SolutionState,
     instance::Instance,
     p::AttractReduceMILPPerturbation,
-    rng::Random.AbstractRNG,
+    rng::Random.AbstractRNG;
+    time_limit::Real=p.time_limit,
+    start::Real=time(),
 )
     n_routed = count(!isempty, sol.bundle_paths)
     threshold = p.min_candidate_ratio * n_routed
@@ -159,10 +182,11 @@ function _select_attract_reduce_arc(
     adjacencies = Dict{Int,Dict{Int,Vector{Int}}}()
     best = Dict{Int,Vector{Int}}()
     n_priced = 0
-    t_start = time()
+    deadline = start + Float64(time_limit) / 2
+    remove_bundle = _has_finite_capacity(instance)
     for arc in arcs
         n_priced >= MAX_PRICED_ARCS && break
-        n_priced > 0 && time() - t_start > p.time_limit / 2 && break
+        n_priced > 0 && time() > deadline && break
         # Cheap upper bound first, the paths are only computed when it passes.
         length(could_use[arc]) > max(threshold, length(best)) || continue
         n_priced += 1
@@ -174,6 +198,8 @@ function _select_attract_reduce_arc(
             Set(users[arc]);
             adjacencies,
             to_beat=length(best),
+            deadline,
+            remove_bundle,
         )
         length(paths) > threshold && return paths
         length(paths) > length(best) && (best = paths)
@@ -197,7 +223,7 @@ function _attract_reduce_model(
 )
     ttg = instance.travel_time_graph
     cache = instance.index_cache
-    model = _milp_model(p.optimizer, p.time_limit, p.mip_gap)
+    model = _milp_model(p.optimizer, p.mip_gap)
     z = @variable(model, [1:length(modeled)], Bin)
     tau = Dict{Tuple{Int,Int},JuMP.VariableRef}()
     loads = Dict{Tuple{Int,Int},JuMP.AffExpr}()
@@ -255,29 +281,46 @@ function perturbate!(
     p::AttractReduceMILPPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     any(a -> a isa MultiModalArc, values(instance.index_cache.edge_group_to_arc)) && throw(
         ArgumentError("AttractReduceMILPPerturbation does not support multimodal arcs")
     )
-    new_paths = _select_attract_reduce_arc(sol, instance, p, rng)
-    isnothing(new_paths) && return (0.0, 0)
+    start = time()
+    reject(outcome; fields...) = _log_perturbation(verbose, p, outcome, (0.0, 0); fields...)
+    time_limit >= MIN_MILP_TIME || return reject("rejected: not enough time"; time_limit)
+    new_paths = _select_attract_reduce_arc(
+        sol, instance, p, rng; time_limit=min(p.time_limit, time_limit), start
+    )
+    isnothing(new_paths) && return reject("rejected: no candidate arc")
     modeled = sort!(collect(keys(new_paths)))
+    time_limit - (time() - start) >= MIN_MILP_TIME ||
+        return reject("rejected: not enough time"; n_modeled=length(modeled))
+    build_start = time()
     model, z = _attract_reduce_model(p, sol, instance, modeled, new_paths)
+    _milp_attach!(model)
+    build_time = time() - build_start
+    left = time_limit - (time() - start)
+    left >= MIN_MILP_TIME ||
+        return reject("rejected: not enough time"; n_modeled=length(modeled), build_time)
+    JuMP.set_time_limit_sec(model, min(p.time_limit, left))
+    solve_start = time()
     JuMP.optimize!(model)
-    JuMP.has_values(model) || return (0.0, 0)
+    fields = (;
+        n_modeled=length(modeled), _milp_fields(model, build_time, time() - solve_start)...
+    )
+    JuMP.has_values(model) || return reject("rejected: no solution"; fields...)
 
     changed = modeled[JuMP.value.(z) .> 0.5]
-    isempty(changed) && return (0.0, 0)
+    isempty(changed) && return reject("rejected: no change"; fields...)
+    outcome = Ref("")
     result = _reroute_bundles!(
-        sol, instance, changed; tolerance=p.tolerance
+        sol, instance, changed; tolerance=p.tolerance, outcome, failure="capacity"
     ) do s, inst, snapshots
         for b in changed
             _add_fixed_path!(s, inst, b, new_paths[b], snapshots)
         end
         return _fits_capacities(s, inst, snapshots)
     end
-    if verbose && result[2] > 0
-        @info "AttractReduceMILPPerturbation accepted" n_modeled = length(modeled) result
-    end
-    return result
+    return _log_perturbation(verbose, p, outcome[], result; fields...)
 end

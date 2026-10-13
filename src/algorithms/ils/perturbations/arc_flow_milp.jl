@@ -15,8 +15,13 @@ The new paths are kept if the real cost increase is at most
 `tolerance * cost(sol)`, otherwise the solution is left unchanged.
 
 Multimodal arcs are not supported and raise an `ArgumentError`.
-HiGHS presolve can exceed `time_limit` on large models, so with HiGHS the variable cap is
-what bounds the runtime.
+The solver time limit is the smaller of the `time_limit` field and the call budget left.
+The call budget is the `time_limit` keyword of [`perturbate!`](@ref), minus the time
+already spent on the selection and the model build (the copy to the solver included).
+A call with less than `MIN_MILP_TIME` (1 second) left, before or after the build, changes
+nothing.
+HiGHS presolve can exceed the `time_limit` field on large models, so with HiGHS the
+variable cap is what bounds the runtime.
 
 # Fields
 $TYPEDFIELDS
@@ -80,7 +85,7 @@ end
 
 # Whether the arc of a TTG edge adds a packing constraint (bins or a finite capacity).
 function _milp_is_packed(arc)
-    return !isnothing(_bin_packing_cost_of(arc.cost)) || arc.capacity != typemax(Int)
+    return !isnothing(_bin_packing_cost_of(arc.cost)) || _finite_capacity(arc)
 end
 
 # Draw groups at random, then their bundles in random order, and keep each bundle whose
@@ -150,7 +155,7 @@ function _arc_flow_model(
     cache = instance.index_cache
     removed = _milp_background_loads(sol, instance, selected)
 
-    model = _milp_model(p.optimizer, p.time_limit, p.mip_gap)
+    model = _milp_model(p.optimizer, p.mip_gap)
 
     x = @variable(model, [1:sum(b -> length(arcs_of[b].u), selected)], Bin)
     # Bin variables count the bins of the whole edge, background included, so the relative
@@ -293,32 +298,47 @@ function perturbate!(
     p::ArcFlowMILPPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     any(a -> a isa MultiModalArc, values(instance.index_cache.edge_group_to_arc)) &&
         throw(ArgumentError("ArcFlowMILPPerturbation does not support multimodal arcs"))
+    start = time()
+    reject(outcome; fields...) = _log_perturbation(verbose, p, outcome, (0.0, 0); fields...)
+    time_limit >= MIN_MILP_TIME || return reject("rejected: not enough time"; time_limit)
     selected, arcs_of = _select_milp_bundles(sol, instance, p, rng)
-    isempty(selected) && return (0.0, 0)
+    isempty(selected) && return reject("rejected: no bundle selected")
+    time_limit - (time() - start) >= MIN_MILP_TIME ||
+        return reject("rejected: not enough time"; n_bundles=length(selected))
+    build_start = time()
     model, x = _arc_flow_model(p, sol, instance, selected, arcs_of)
+    _milp_attach!(model)
+    build_time = time() - build_start
+    left = time_limit - (time() - start)
+    left >= MIN_MILP_TIME ||
+        return reject("rejected: not enough time"; n_bundles=length(selected), build_time)
+    JuMP.set_time_limit_sec(model, min(p.time_limit, left))
+    solve_start = time()
     JuMP.optimize!(model)
-    JuMP.has_values(model) || return (0.0, 0)
+    fields = (;
+        n_bundles=length(selected), _milp_fields(model, build_time, time() - solve_start)...
+    )
+    JuMP.has_values(model) || return reject("rejected: no solution"; fields...)
 
     # The model assumed the new routing of every selected bundle, so one invalid path
     # cannot be mixed with the others (a finite capacity could be exceeded).
     paths = _arc_flow_paths(instance, selected, arcs_of, JuMP.value.(x))
-    isnothing(paths) && return (0.0, 0)
+    isnothing(paths) && return reject("rejected: invalid path"; fields...)
     changed = [b for b in selected if paths[b] != sol.bundle_paths[b]]
-    isempty(changed) && return (0.0, 0)
+    isempty(changed) && return reject("rejected: no change"; fields...)
 
+    outcome = Ref("")
     result = _reroute_bundles!(
-        sol, instance, changed; tolerance=p.tolerance
+        sol, instance, changed; tolerance=p.tolerance, outcome, failure="capacity"
     ) do s, inst, snapshots
         for b in changed
             _add_fixed_path!(s, inst, b, paths[b], snapshots)
         end
         return _fits_capacities(s, inst, snapshots)
     end
-    if verbose && result[2] > 0
-        @info "ArcFlowMILPPerturbation accepted" n_bundles = length(selected) result
-    end
-    return result
+    return _log_perturbation(verbose, p, outcome[], result; fields...)
 end

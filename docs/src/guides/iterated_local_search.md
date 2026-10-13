@@ -7,13 +7,29 @@ It is a separate call, [`solve`](@ref) never runs it.
 
 Each round takes the next perturbation of the list (round-robin) and applies it repeatedly until enough bundles changed paths (`change_threshold_ratio` of the bundles), the accumulated cost increase reaches `cost_threshold_ratio` of the best cost, or `perturbation_time_limit` is hit.
 Local search then runs only once the change threshold is reached, so small perturbations pile up before being repaired.
-A solution cheaper than the best one becomes the new best, and the best solution is restored and polished at the end.
+A solution cheaper than the best one becomes the new best, also when it is found right after a perturbation phase.
+At the end the best solution is restored and polished by a final local search.
 The search stops on `time_limit`, or after `max_no_change` rounds without change, or after `max_no_improv` local searches without a new best (all fields of [`ILSConfig`](@ref)).
+`max_no_improv` counts the local searches with no new best since the previous one, the perturbation phases before it included.
 
 Pass `cost_update! = slope_scaling_update!` to rescale the costs of the arcs by their bin utilization before the loop and after every local search, which makes under-filled bin-packing arcs more expensive (factor `n_bins / ceil(volume / capacity)`, between 1 and 2) in the objectives of the MILP perturbations only (see [Cost Functions](@ref cost_functions_guide)).
 The factors are stored per edge group (spatial pair and transit time), and a group takes the largest factor of its time-space edges.
 Local search, insertions and acceptance always use the real cost.
 The cost scaling factors of the travel time graph are always emptied when [`iterated_local_search!`](@ref) returns, also when it throws, including factors set by the caller.
+
+## Time budget
+
+`time_limit` is the wall-clock limit of the whole call.
+The last `final_ls_time_limit` seconds are reserved for the final local search, which gets at most that time and at most the time left.
+By default it is `min(300, time_limit / 6)` seconds, and it cannot exceed `time_limit`.
+The main loop uses the rest, and `ls_time_limit` only limits each local search phase inside it.
+Each perturbation call receives the seconds it may use, the smaller of the time left in its phase (`perturbation_time_limit`) and in the main loop.
+The loop starts no call with less than 1 second left, or half of the shorter limit when a limit is under 2 seconds.
+
+With `verbose=true`, each perturbation call logs one `@info "Perturbation"` line.
+It gives the type, the outcome (accepted or the reason of the rejection), `cost_increase` and `n_changed`.
+[`GroupReinsertPerturbation`](@ref) logs its rejected calls at debug level, because it is cheap and called many times per phase.
+The MILP perturbations add the size of the model, the build and solve times, the solver status and the gap.
 
 ## Workflow
 
@@ -47,6 +63,9 @@ The state is modified in place and ends on the best solution found.
   The number of variables is capped by `max_variables`.
 - [`AttractReduceMILPPerturbation`](@ref): picks an arc with a bin cost, gives every bundle on it a path that avoids it and every other bundle that can use it a path through it, and a MILP selects the combination that pays.
 
+[`AttractReduceMILPPerturbation`](@ref) prices the new paths against the current solution without removing the bundle first when no arc has a finite capacity, and removes it otherwise.
+It stops pricing at half of the call budget, also inside an arc.
+
 All of them keep the new routing only if the real cost increase is at most `tolerance` times the current cost, and otherwise restore the solution exactly.
 Both MILP perturbations raise an `ArgumentError` on instances with multimodal arcs.
 
@@ -60,7 +79,8 @@ using Gurobi
 p = ArcFlowMILPPerturbation(; optimizer=gurobi_optimizer)
 ```
 
-HiGHS presolve can exceed `time_limit` on large models, so for [`ArcFlowMILPPerturbation`](@ref) the variable cap `max_variables` is what bounds the runtime.
+The MILP perturbations use the smaller of their own `time_limit` field and the call budget, and the copy of the model to the solver counts in that budget.
+HiGHS presolve can exceed the time limit on large models, so for [`ArcFlowMILPPerturbation`](@ref) the variable cap `max_variables` is what bounds the runtime.
 
 Both MILP perturbations have a `warm_start` keyword, off by default, because starting from the current routing makes time-limited solves return it again instead of diversifying.
 
@@ -79,10 +99,14 @@ function TransportationPlanningOptimization.perturbate!(
     p::MyPerturbation;
     rng=Random.default_rng(),
     verbose=false,
+    time_limit::Real=Inf,
 )
     # modify `sol`, then return (cost_increase, n_changed)
 end
 ```
+
+`time_limit` is the number of seconds the call may use.
+Return `(0.0, 0)` without changing the solution when the time is too short to be useful.
 
 The method returns `(cost_increase, n_changed)`: the cost after minus the cost before, and the number of bundles whose path changed.
 When it rejects its own move, it must restore `sol` exactly and return `(0.0, 0)`.

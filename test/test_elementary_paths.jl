@@ -558,3 +558,32 @@ end
     @test arc ∉ zip(new[1:(end - 1)], new[2:end])
     @test TPO.is_elementary_path(new, spatial)
 end
+
+@testset "path searches stop at the deadline" begin
+    n = 300
+    g = Graphs.SimpleDiGraph(n)
+    for v in 1:(n - 1)
+        Graphs.add_edge!(g, v, v + 1)
+    end
+    costs = SparseArrays.sparse(1:(n - 1), 2:n, ones(n - 1), n, n)
+    spatial = collect(1:n)
+    @test length(TPO.elementary_shortest_path(g, costs, spatial, 1, n)) == n
+    late = time() - 1.0
+    @test isempty(TPO.elementary_shortest_path(g, costs, spatial, 1, n; deadline=late))
+
+    instance = TestFixtures.small_instance()
+    ttg = instance.travel_time_graph
+    sol = SolutionState(instance)
+    b = 1
+    origin, dest = ttg.origin_codes[b], ttg.destination_codes[b]
+    adj = TPO._bundle_adjacency(ttg, b)
+    args = (sol, instance, b, origin, dest, CheapestMode(), TPO.BinPackingBuffer(), adj)
+    @test !isempty(TPO._lazy_bundle_path!(args...))
+    # The search settles enough nodes for a deadline check to be possible.
+    ws = TPO.DijkstraWorkspace(Graphs.nv(ttg.graph))
+    TPO._lazy_bundle_dijkstra!(args...; workspace=ws)
+    @test count(ws.dists .< ws.dists[dest]) >= TPO.DEADLINE_CHECK_EVERY
+    @test isempty(TPO._lazy_bundle_path!(args...; deadline=late))
+    parents = TPO._lazy_bundle_dijkstra!(args...; deadline=late)
+    @test isempty(TPO.trace_path(parents, origin, dest))
+end

@@ -19,6 +19,7 @@ function TransportationPlanningOptimization.perturbate!(
     p::DegradingPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     # No-op: doesn't change anything, so ILS will count it as no change
     return (0.0, 0)
@@ -131,6 +132,7 @@ function TransportationPlanningOptimization.perturbate!(
     p::CountingPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     p.calls[] += 1
     return (Inf, 1)
@@ -183,6 +185,7 @@ function TransportationPlanningOptimization.perturbate!(
     p::FixedIncreasePerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     p.calls[] += 1
     return (p.fraction * cost(sol), 0)
@@ -191,7 +194,8 @@ end
 @testset "ILS cost threshold only counts cost increases" begin
     instance = TestFixtures.small_instance()
 
-    # A cheaper perturbation never reaches the cost threshold, so the phase runs until its time limit
+    # A cheaper perturbation never reaches the cost threshold, so the phase runs until its
+    # time limit
     sol = TestFixtures.small_greedy()
     cheaper = FixedIncreasePerturbation(Ref(0), -0.6)
     result = iterated_local_search!(
@@ -226,4 +230,211 @@ end
     )
     @test result.iterations == 1
     @test costlier.calls[] == 1
+end
+
+# Lowers the cost on its first call (by a local search) without counting any changed bundle,
+# so the change threshold is never reached and the loop runs no local search.
+struct SilentImprovePerturbation <: AbstractPerturbation
+    lowered_cost::Base.RefValue{Float64}
+end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::SilentImprovePerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+    time_limit::Real=Inf,
+)
+    isnan(p.lowered_cost[]) || return (0.0, 0)
+    before = cost(sol)
+    local_search!(sol, instance; time_limit=2.0, rng)
+    p.lowered_cost[] = cost(sol)
+    return (p.lowered_cost[] - before, 0)
+end
+
+@testset "ILS keeps an improvement found by a perturbation without local search" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    start_cost = cost(sol)
+    perturbation = SilentImprovePerturbation(Ref(NaN))
+
+    result = iterated_local_search!(
+        sol,
+        instance,
+        [perturbation];
+        config=ILSConfig(;
+            time_limit=10,
+            perturbation_time_limit=1,
+            ls_time_limit=0,
+            final_ls_time_limit=0,
+            max_no_change=1,
+        ),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+
+    @test perturbation.lowered_cost[] < start_cost
+    # The lowered cost was recorded as a best right after the phase.
+    @test result.cost_history[2][2] == perturbation.lowered_cost[]
+    # The final local search has no time, so the lowered solution is returned as is.
+    @test result.best_cost ≈ perturbation.lowered_cost[]
+    @test cost(sol) ≈ perturbation.lowered_cost[]
+    @test is_feasible(sol, instance)
+end
+
+# Records the time budget of every call.
+struct TimeRecordingPerturbation <: AbstractPerturbation
+    calls::Vector{Tuple{Float64,Float64}}
+end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::TimeRecordingPerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+    time_limit::Real=Inf,
+)
+    push!(p.calls, (time(), time_limit))
+    sleep(0.01)
+    return (0.0, 0)
+end
+
+@testset "Perturbations receive the time left in the loop and in the phase" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    perturbation = TimeRecordingPerturbation(Tuple{Float64,Float64}[])
+
+    iterated_local_search!(
+        sol,
+        instance,
+        [perturbation];
+        config=ILSConfig(;
+            time_limit=1.2,
+            perturbation_time_limit=0.5,
+            ls_time_limit=1,
+            final_ls_time_limit=0,
+            max_no_change=100,
+        ),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+
+    @test length(perturbation.calls) > 2
+    @test all(c -> 0 < c[2] <= 0.5, perturbation.calls)
+    # No call is allowed to run past the end of the main loop (1.2 s is not a multiple of
+    # the phase limit, so the last phase is cut short by the loop and not by the phase
+    # limit).
+    @test all(c -> c[1] + c[2] <= perturbation.calls[1][1] + 1.2 + 0.05, perturbation.calls)
+    # The budget shrinks within the first phase.
+    @test perturbation.calls[2][2] < perturbation.calls[1][2]
+end
+
+# Returns at once when it gets less than a second, as the MILP perturbations do.
+struct ShortBudgetPerturbation <: AbstractPerturbation
+    budgets::Vector{Float64}
+end
+
+function TransportationPlanningOptimization.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::ShortBudgetPerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+    time_limit::Real=Inf,
+)
+    push!(p.budgets, time_limit)
+    time_limit >= 1.0 && sleep(0.2)
+    return (0.0, 0)
+end
+
+@testset "No perturbation call starts with less than a second left" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    p = ShortBudgetPerturbation(Float64[])
+    iterated_local_search!(
+        sol,
+        instance,
+        [p];
+        config=ILSConfig(;
+            time_limit=5, perturbation_time_limit=3, ls_time_limit=1, max_no_change=100
+        ),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+    @test !isempty(p.budgets)
+    @test all(isfinite, p.budgets)
+    @test all(>=(1.0), p.budgets)
+    @test length(p.budgets) < 50
+end
+
+@testset "ILSConfig rejects invalid time limits" begin
+    @test_throws ArgumentError ILSConfig(; time_limit=-1)
+    @test_throws ArgumentError ILSConfig(; perturbation_time_limit=0)
+    @test_throws ArgumentError ILSConfig(; ls_time_limit=-1)
+    @test ILSConfig(; time_limit=0, ls_time_limit=0).ls_time_limit == 0.0
+end
+
+@testset "time_limit is the budget of the whole call" begin
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    perturbation = TimeRecordingPerturbation(Tuple{Float64,Float64}[])
+    t0 = time()
+    result = iterated_local_search!(
+        sol,
+        instance,
+        [perturbation];
+        config=ILSConfig(;
+            time_limit=6,
+            perturbation_time_limit=1.5,
+            ls_time_limit=1,
+            final_ls_time_limit=2,
+            max_no_change=1000,
+        ),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+    elapsed = time() - t0
+    @test elapsed < 6 + 1.5
+    @test result.time_elapsed <= elapsed
+    # The last 2 seconds are reserved: no perturbation call runs into them.
+    @test !isempty(perturbation.calls)
+    @test all(c -> c[1] + c[2] <= t0 + 4 + 0.1, perturbation.calls)
+    @test maximum(c -> c[1], perturbation.calls) < t0 + 4
+end
+
+@testset "The final local search keeps its reserved time" begin
+    # No loop time is left, so only the final local search can improve the greedy cost.
+    instance = TestFixtures.small_instance()
+    sol = TestFixtures.small_greedy()
+    start_cost = cost(sol)
+    perturbation = TimeRecordingPerturbation(Tuple{Float64,Float64}[])
+    result = iterated_local_search!(
+        sol,
+        instance,
+        [perturbation, GroupReinsertPerturbation()];
+        config=ILSConfig(; time_limit=4, final_ls_time_limit=4),
+        rng=Random.MersenneTwister(1),
+        verbose=false,
+    )
+    @test isempty(perturbation.calls)
+    @test result.iterations == 0
+    @test result.best_cost < start_cost
+    @test result.time_elapsed < 4 + 1.5
+end
+
+@testset "ILSConfig final_ls_time_limit" begin
+    @test ILSConfig().final_ls_time_limit == 300.0
+    @test ILSConfig(; time_limit=60).final_ls_time_limit == 10.0
+    @test ILSConfig(; time_limit=60, final_ls_time_limit=60).final_ls_time_limit == 60.0
+    err = try
+        ILSConfig(; time_limit=60, final_ls_time_limit=61)
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("61", err.msg) && occursin("60", err.msg)
+    @test_throws ArgumentError ILSConfig(; final_ls_time_limit=-1)
+    @test_throws ArgumentError ILSConfig(; time_limit=Inf, final_ls_time_limit=Inf)
 end

@@ -133,14 +133,18 @@ end
 end
 
 @testset "MILP perturbation on a benchmark instance" begin
+    TestFixtures.reset!()
     instance = TestFixtures.small_instance()
     sol = TestFixtures.small_greedy()
-    # Cap the model so that a few bundles of one group are selected.
-    p = ArcFlowMILPPerturbation(; max_variables=40_000, time_limit=10.0)
+    # The cap selects 5 bundles (about 10_000 variables) and HiGHS proves optimality in a
+    # few seconds, far below the generous time limit, so the outcome does not depend on the
+    # load.
+    # Seed 9 accepts a cheaper routing of one bundle.
+    p = ArcFlowMILPPerturbation(; max_variables=10_000, time_limit=60.0)
     before = cost(sol)
-    # Seed 2 accepts a different routing of 15 bundles.
-    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(2))
+    (inc, n) = perturbate!(sol, instance, p; rng=Random.MersenneTwister(9))
     @test n > 0
+    @test inc < 0
     @test cost(sol) - before ≈ inc atol = 1e-6
     @test inc <= p.tolerance * before + 1e-9
     @test is_feasible(sol, instance)
@@ -365,6 +369,28 @@ end
     end
 end
 
+@testset "A call with too little time changes nothing, a normal call works" begin
+    instance = hub_instance()
+    for p in (
+        ArcFlowMILPPerturbation(; time_limit=10.0),
+        AttractReduceMILPPerturbation(; time_limit=10.0),
+    )
+        sol = hub_solution(instance)
+        sol0 = copy(sol)
+        @test perturbate!(
+            sol, instance, p; rng=Random.MersenneTwister(1), time_limit=1e-3
+        ) == (0.0, 0)
+        @test TestFixtures.same_state(sol, sol0)
+
+        (inc, n) = perturbate!(
+            sol, instance, p; rng=Random.MersenneTwister(1), time_limit=60.0
+        )
+        @test n > 0
+        @test inc < 0
+        @test is_feasible(sol, instance)
+    end
+end
+
 @testset "A cap below every group changes nothing" begin
     instance = TestFixtures.tiny_instance()
     sol = TestFixtures.tiny_greedy()
@@ -507,6 +533,97 @@ end
     @test length(full) == 2
     early = TPO._attract_reduce_paths(sol, instance, arc, [o1, o2], Set([o2]); to_beat=2)
     @test isempty(early)
+end
+
+@testset "Pricing stops at the deadline" begin
+    instance = hub_instance()
+    sol = hub_solution(instance)
+    sol0 = copy(sol)
+    arc = hub_arc(instance, ("H", 1), ("D", 2))
+    o1, o2 = hub_bundles(instance)
+    late = TPO._attract_reduce_paths(
+        sol, instance, arc, [o1, o2], Set([o2]); deadline=time() - 1.0
+    )
+    @test isempty(late)
+    # A deadline far ahead prices every bundle.
+    ahead = TPO._attract_reduce_paths(
+        sol, instance, arc, [o1, o2], Set([o2]); deadline=time() + 3600.0
+    )
+    @test length(ahead) == 2
+    @test TestFixtures.same_state(sol, sol0)
+    # A call whose pricing deadline has passed prices nothing.
+    p = AttractReduceMILPPerturbation(; time_limit=10.0)
+    @test isnothing(
+        TPO._select_attract_reduce_arc(
+            sol, instance, p, Random.MersenneTwister(1); time_limit=-2.0
+        ),
+    )
+    @test TestFixtures.same_state(sol, sol0)
+    # The time already spent since the call start counts against the pricing deadline.
+    @test isnothing(
+        TPO._select_attract_reduce_arc(
+            sol,
+            instance,
+            p,
+            Random.MersenneTwister(1);
+            start=time() - 10.0,
+            time_limit=10.0,
+        ),
+    )
+    @test TestFixtures.same_state(sol, sol0)
+end
+
+@testset "Pricing removes the bundle only with finite capacities" begin
+    @test !TPO._has_finite_capacity(hub_instance())
+    @test TPO._has_finite_capacity(hub_instance(; hub_capacity=7))
+    # A -> M -> D carries the bundle, M -> D holds exactly its load. The path through N
+    # shares M -> D, so it only fits once the bundle itself is out of the way.
+    nodes = [
+        Node(; id="A", node_type=:origin),
+        Node(; id="N", node_type=:other),
+        Node(; id="M", node_type=:other),
+        Node(; id="D", node_type=:destination),
+    ]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="M", cost=LinearArcCost(0.1), travel_time=Day(2)
+        ),
+        Arc(;
+            origin_id="A", destination_id="N", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="N", destination_id="M", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+        Arc(;
+            origin_id="M",
+            destination_id="D",
+            cost=BinPackingArcCost(10.0, 10),
+            travel_time=Day(1),
+            capacity=5,
+        ),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="D",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(3),
+        size=5.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1))
+    sol = greedy_heuristic(instance; show_progress=false)
+    sol0 = copy(sol)
+    @test spatial_ids(instance, sol.bundle_paths[1]) == ["A", "M", "D"]
+    arc = hub_arc(instance, ("N", 1), ("M", 2))
+    price(; kwargs...) =
+        TPO._attract_reduce_paths(sol, instance, arc, [1], Set{Int}(); kwargs...)
+    @test isempty(price(; remove_bundle=false))
+    @test TestFixtures.same_state(sol, sol0)
+    paths = price(; remove_bundle=true)
+    @test spatial_ids(instance, paths[1]) == ["A", "N", "M", "D"]
+    @test TestFixtures.same_state(sol, sol0)
+    @test price() == paths
+    @test TestFixtures.same_state(sol, sol0)
 end
 
 @testset "An attract path through a full arc is still generated" begin

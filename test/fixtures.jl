@@ -95,6 +95,7 @@ function TransportationPlanningOptimization.perturbate!(
     ::ReinsertPerturbation;
     rng::Random.AbstractRNG=Random.default_rng(),
     verbose::Bool=false,
+    time_limit::Real=Inf,
 )
     isempty(instance.bundles) && return (0.0, 0)
     idx = rand(rng, 1:length(instance.bundles))

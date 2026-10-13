@@ -71,6 +71,9 @@ as nodes are settled and stops at the destination. Returns the `parents`
 vector (for use with `trace_path`).
 Its path may loop on a physical node, see [`bundle_shortest_path`](@ref).
 The TTG edge `exclude` (no edge by default) is never used.
+If the absolute time `deadline` passes (checked every `DEADLINE_CHECK_EVERY` settled
+nodes), the search stops and the destination is left unreached, so `trace_path` gives no
+path.
 """
 function _lazy_bundle_dijkstra!(
     sol::SolutionState{C},
@@ -83,6 +86,7 @@ function _lazy_bundle_dijkstra!(
     bundle_adj::Dict{Int,Vector{Int}};
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     exclude::Tuple{Int,Int}=(0, 0),
+    deadline::Float64=Inf,
 ) where {C}
     ttg = instance.travel_time_graph
     cache = instance.index_cache
@@ -106,10 +110,16 @@ function _lazy_bundle_dijkstra!(
     heap = DataStructures.BinaryMinHeap{Tuple{Float64,Int}}()
     push!(heap, (0.0, origin))
 
+    n_pops = 0
     while !isempty(heap)
         d_u, u = pop!(heap)
         d_u > dists[u] && continue
         u == dest && break
+        n_pops += 1
+        if n_pops % DEADLINE_CHECK_EVERY == 0 && time() > deadline
+            parents[dest] = 0
+            break
+        end
 
         su = cache.ttg_code_to_spatial_code[u]
         for v in get(bundle_adj, u, Int[])
@@ -143,11 +153,13 @@ end
 $TYPEDSIGNATURES
 
 Cheapest elementary path from `origin` to `dest` over the arcs of bundle `bundle_idx`,
-priced against the current `sol` (so the bundle should not be in it), or `Int[]` if there
-is none. It is the lazy Dijkstra of [`_lazy_bundle_dijkstra!`](@ref), and only when its
-path loops on a physical node (or enters one of the physical nodes `visited`) is the
-cost matrix filled for [`elementary_shortest_path`](@ref). The TTG edge `exclude` is never
-used. The result may still carry shortcut edges at its ends.
+priced against the current `sol` as it is (a bundle still in it has its own load counted),
+or `Int[]` if there is none. It is the lazy Dijkstra of [`_lazy_bundle_dijkstra!`](@ref),
+and only when its path loops on a physical node (or enters one of the physical nodes
+`visited`) is the cost matrix filled for [`elementary_shortest_path`](@ref). The TTG edge
+`exclude` is never used. The result may still carry shortcut edges at its ends. `Int[]` is
+also returned when the absolute time `deadline` passes, in the search or in the cost
+matrix fill.
 """
 function _lazy_bundle_path!(
     sol::SolutionState,
@@ -161,6 +173,7 @@ function _lazy_bundle_path!(
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
     exclude::Tuple{Int,Int}=(0, 0),
     visited::Union{BitSet,Nothing}=nothing,
+    deadline::Float64=Inf,
 )
     ttg = instance.travel_time_graph
     spatial = instance.index_cache.ttg_code_to_spatial_code
@@ -175,6 +188,7 @@ function _lazy_bundle_path!(
         bundle_adj;
         workspace,
         exclude,
+        deadline,
     )
     path = trace_path(parents, origin, dest)
     if is_elementary_path(path, spatial) &&
@@ -182,7 +196,9 @@ function _lazy_bundle_path!(
         return path
     end
     # The lazy search leaves the cost matrix unfilled, so fill it first.
-    update_bundle_cost_matrix!(sol, instance, bundle_idx, mode_selector; buffer)
+    update_bundle_cost_matrix!(
+        sol, instance, bundle_idx, mode_selector; buffer, deadline
+    ) || return Int[]
     exclude == (0, 0) || (ttg.cost_matrix[exclude...] = Inf)
     return elementary_shortest_path(
         ttg.graph,
@@ -191,6 +207,7 @@ function _lazy_bundle_path!(
         origin,
         dest;
         visited=isnothing(visited) ? BitSet() : visited,
+        deadline,
     )
 end
 
@@ -202,7 +219,8 @@ Cheapest elementary path of bundle `bundle_idx` that goes through the TTG edge `
 elementary path goes through it). It joins the cheapest paths from the
 origin to the start of `arc` and from its end to the destination, see
 [`_lazy_bundle_path!`](@ref). The cost of the edge is not checked, a full capacity
-is left to the caller. Shortcut edges at the ends are removed.
+is left to the caller. Shortcut edges at the ends are removed. `Int[]` is also returned
+when `deadline` passes, see [`_lazy_bundle_path!`](@ref).
 """
 function _lazy_forced_path!(
     sol::SolutionState,
@@ -213,6 +231,7 @@ function _lazy_forced_path!(
     buffer::BinPackingBuffer,
     bundle_adj::Dict{Int,Vector{Int}};
     workspace::Union{DijkstraWorkspace,Nothing}=nothing,
+    deadline::Float64=Inf,
 )
     ttg = instance.travel_time_graph
     spatial = instance.index_cache.ttg_code_to_spatial_code
@@ -235,6 +254,7 @@ function _lazy_forced_path!(
         bundle_adj;
         workspace,
         visited=BitSet([sv]),
+        deadline,
     )
     isempty(first_leg) && return Int[]
     second_leg = _lazy_bundle_path!(
@@ -248,6 +268,7 @@ function _lazy_forced_path!(
         bundle_adj;
         workspace,
         visited=BitSet(spatial[c] for c in first_leg),
+        deadline,
     )
     isempty(second_leg) && return Int[]
     path = vcat(first_leg, second_leg)
