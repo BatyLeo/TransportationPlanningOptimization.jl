@@ -92,6 +92,7 @@ Full documentation is available [here](https://BatyLeo.github.io/TransportationP
 - **[Tutorials](https://BatyLeo.github.io/TransportationPlanningOptimization.jl/dev/tutorials/basic_example/)**: hands-on examples
 - **Guides**:
   - [Algorithm Pipeline](https://BatyLeo.github.io/TransportationPlanningOptimization.jl/dev/guides/algorithm_pipeline/): construction heuristics, filtering, local search
+  - [Iterated Local Search](https://BatyLeo.github.io/TransportationPlanningOptimization.jl/dev/guides/iterated_local_search/): perturbations and the iterated local search
   - [Cost Functions](https://BatyLeo.github.io/TransportationPlanningOptimization.jl/dev/guides/cost_functions/): arc costs, node costs, custom cost functions
   - [Forbidden Constraints](https://BatyLeo.github.io/TransportationPlanningOptimization.jl/dev/guides/forbidden_constraints/): restricting routes per commodity
   - [Multi-Modal Arcs](https://BatyLeo.github.io/TransportationPlanningOptimization.jl/dev/guides/multi_modal_arcs/): multiple transport modes per edge

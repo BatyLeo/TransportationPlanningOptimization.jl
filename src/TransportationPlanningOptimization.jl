@@ -71,7 +71,6 @@ include("algorithms/local_search/bin_repacking.jl")
 include("algorithms/local_search/bundle_reinsertion.jl")
 include("algorithms/local_search/two_node_consolidation.jl")
 include("algorithms/local_search/local_search.jl")
-include("algorithms/solve.jl")
 
 include("algorithms/ils/perturbation.jl")
 include("algorithms/ils/config.jl")
@@ -84,6 +83,8 @@ include("algorithms/ils/perturbations/arc_flow_milp.jl")
 include("algorithms/ils/perturbations/attract_reduce_milp.jl")
 include("algorithms/ils/slope_scaling.jl")
 include("algorithms/ils/iterated_local_search.jl")
+
+include("algorithms/solve.jl")
 
 # Types
 export LightCommodity, Commodity, Order, Bundle, Instance
