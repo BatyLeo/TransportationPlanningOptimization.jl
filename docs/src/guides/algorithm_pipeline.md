@@ -225,5 +225,5 @@ solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
 ### Packing semantics
 
-On [`BinPackingArcCost`](@ref) arcs, greedy and local search price and commit moves by first-fit of the new commodities onto the arc's existing bins (opening new bins as needed, as in ShipperTransportationPlanning.jl), except on `FillThenSpillMode` multimodal edges, which repack the modes they fill.
+On [`BinPackingArcCost`](@ref) arcs, greedy and local search price and commit moves by first-fit of the new commodities onto the arc's existing bins (opening new bins as needed), except on `FillThenSpillMode` multimodal edges, which repack the modes they fill.
 Local search ends with a [`bin_packing_improvement!`](@ref TransportationPlanningOptimization.bin_packing_improvement!) pass (when `allow_repack=true`) that repacks the bins.
