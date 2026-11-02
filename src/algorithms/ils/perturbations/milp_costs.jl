@@ -77,7 +77,7 @@ has a bin cost and none yet, and its slope-scaled cost to `objective`.
 function _milp_add_bins!(model, tau, objective, e::Tuple{Int,Int}, arc, scaling::Real)
     bin = _bin_packing_cost_of(arc.cost)
     (isnothing(bin) || haskey(tau, e)) && return nothing
-    tau[e] = @variable(model, lower_bound = 0, integer = true)
+    tau[e] = @variable(model, lower_bound=0, integer=true)
     JuMP.add_to_expression!(objective, scaling * bin.cost_per_bin, tau[e])
     return nothing
 end
