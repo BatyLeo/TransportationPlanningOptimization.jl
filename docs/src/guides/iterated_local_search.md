@@ -1,7 +1,7 @@
 # [Iterated Local Search](@id ils_guide)
 
 [`iterated_local_search!`](@ref) escapes the local optima of [`local_search!`](@ref) by alternating perturbations and local searches.
-It is a separate call, [`solve`](@ref) never runs it.
+[`solve`](@ref) runs it when `perturbations` is a non-empty vector.
 
 ## What it does
 
@@ -33,7 +33,25 @@ The MILP perturbations add the size of the model, the build and solve times, the
 
 ## Workflow
 
-Run it on the filtered sub-instance, then merge:
+Pass `perturbations` to [`solve`](@ref):
+
+```julia
+solution = solve(
+    instance;
+    perturbations=[GroupReinsertPerturbation(), AttractReduceMILPPerturbation()],
+    ils_config=ILSConfig(; time_limit=600.0),
+    (cost_update!)=slope_scaling_update!,
+)
+```
+
+The ILS runs on the filtered sub-instance, after the local search, with the same `mode_selector` and `rng`.
+`time_limit` is the budget of the local search before it, and `ils_config.time_limit` is the ILS budget (1800 seconds by default, so pass a config).
+`show_progress` controls its logs.
+
+### Advanced: building blocks
+
+Run it on the filtered sub-instance, then merge.
+This gives access to the `ILSResult` and to the `on_improvement` keyword of [`iterated_local_search!`](@ref):
 
 ```julia
 result = solve_filtered(instance)

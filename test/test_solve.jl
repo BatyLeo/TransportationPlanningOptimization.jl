@@ -325,3 +325,186 @@ end
     )
     @test TPO.is_feasible(TPO.SolutionState(solution, instance), instance; verbose=true)
 end
+
+# Records `(bundle_count, mode_selector, rng)` of each call and never improves.
+# Returning `(Inf, 0)` makes each ILS phase stop after one call (the cost increase reaches the threshold at once),
+# so the ILS stops after exactly `max_no_change` calls, independent of wall-clock time.
+struct SolveRecordingPerturbation <: AbstractPerturbation
+    received::Vector{Any}
+end
+
+function TPO.perturbate!(
+    sol::SolutionState,
+    instance::Instance,
+    p::SolveRecordingPerturbation;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    verbose::Bool=false,
+    time_limit::Real=Inf,
+    mode_selector::AbstractModeSelector=CheapestMode(),
+)
+    push!(p.received, (bundle_count(instance), mode_selector, rng))
+    return (Inf, 0)
+end
+
+const ILS_CONFIG = ILSConfig(;
+    time_limit=3, final_ls_time_limit=0.5, perturbation_time_limit=1, ls_time_limit=1
+)
+const ILS_KW = (; LS..., ils_config=ILS_CONFIG, show_progress=false)
+
+@testset "solve runs the ILS on the filtered sub-instance" begin
+    instance = TestFixtures.small_instance()
+    sub_count = bundle_count(TPO.solve_filtered(instance; show_progress=false).sub_instance)
+    @test sub_count < bundle_count(instance)
+    mode = FillThenSpillMode()
+
+    for local_search in (true, false)
+        received = Any[]
+        sol = TPO.solve_state(
+            instance;
+            ILS_KW...,
+            local_search,
+            mode_selector=mode,
+            perturbations=[SolveRecordingPerturbation(received)],
+        )
+        @test length(received) == 3
+        @test all(r -> r[1] == sub_count && r[2] === mode, received)
+        @test TPO.is_feasible(sol, instance; verbose=true)
+    end
+end
+
+@testset "solve runs the ILS without filtering" begin
+    instance = TestFixtures.small_instance()
+    kw = (; ILS_KW..., filtering=false)
+    plain = TPO.solve_state(instance; kw..., rng=MersenneTwister(0))
+    received = Any[]
+    with = TPO.solve_state(
+        instance;
+        kw...,
+        rng=MersenneTwister(0),
+        perturbations=[SolveRecordingPerturbation(received)],
+    )
+    @test length(received) == 3
+    @test all(r -> r[1] == bundle_count(instance), received)
+    @test TPO.cost(with) <= TPO.cost(plain) + 1e-6
+
+    TestFixtures.reset!()
+    TPO.solve_state(
+        instance;
+        kw...,
+        rng=MersenneTwister(0),
+        perturbations=[SolveRecordingPerturbation(Any[])],
+        (cost_update!)=slope_scaling_update!,
+    )
+    @test isempty(instance.travel_time_graph.cost_scaling)
+
+    # The recording perturbation changes nothing, so no local search phase runs in the
+    # loop and the callback is only called once, before it.
+    calls = Ref(0)
+    TPO.solve_state(
+        instance;
+        kw...,
+        rng=MersenneTwister(0),
+        perturbations=[SolveRecordingPerturbation(Any[])],
+        (cost_update!)=(args...; kwargs...) -> (calls[] += 1; nothing),
+    )
+    @test calls[] == 1
+end
+
+@testset "solve runs the ILS from a start" begin
+    instance = TestFixtures.small_instance()
+    start = TPO.solve(instance; LS..., local_search=false, show_progress=false)
+    received = Any[]
+    sol = TPO.solve_state(
+        instance; ILS_KW..., start, perturbations=[SolveRecordingPerturbation(received)]
+    )
+    @test length(received) == 3
+    @test all(r -> r[1] == bundle_count(instance), received)
+    @test TPO.is_feasible(sol, instance; verbose=true)
+    @test TPO.cost(sol) <= TPO.cost(TPO.SolutionState(start, instance)) + 1e-6
+end
+
+@testset "solve with a perturbation unsupported by the instance" begin
+    # Two same-transit A->B arcs form a multi-modal edge, the direct bundle is filtered out.
+    nodes = [Node(; id="A"), Node(; id="B"), Node(; id="D")]
+    arc(o, d, c) =
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(c), travel_time=Day(1))
+    arcs = [arc("A", "B", 1.0), arc("A", "B", 3.0), arc("B", "D", 1.0), arc("A", "D", 10.0)]
+    commodity(dst, days) = Commodity(;
+        origin_id="A",
+        destination_id=dst,
+        quantity=2,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(days),
+        size=1.0,
+    )
+    instance = Instance(
+        nodes, arcs, [commodity("B", 1), commodity("D", 3)], Day(1); allow_multimodal=true
+    )
+    sub = TPO.solve_filtered(instance; show_progress=false).sub_instance
+    @test bundle_count(sub) > 0
+    @test !supports_instance(ArcFlowMILPPerturbation(), sub)
+
+    for filtering in (true, false)
+        @test_throws ArgumentError TPO.solve_state(
+            instance; ILS_KW..., filtering, perturbations=[ArcFlowMILPPerturbation()]
+        )
+    end
+    received = Any[]
+    sol = TPO.solve_state(
+        instance;
+        ILS_KW...,
+        perturbations=[SolveRecordingPerturbation(received), ArcFlowMILPPerturbation()],
+    )
+    @test length(received) == 3
+    @test TPO.is_feasible(sol, instance; verbose=true)
+end
+
+@testset "solve perturbations edge cases" begin
+    instance = TestFixtures.small_instance()
+    default = TPO.solve_state(instance; LS..., rng=MersenneTwister(0), show_progress=false)
+    empty_list = TPO.solve_state(
+        instance;
+        LS...,
+        rng=MersenneTwister(0),
+        perturbations=AbstractPerturbation[],
+        show_progress=false,
+    )
+    @test default.bundle_paths == empty_list.bundle_paths
+    explicit_nothing = TPO.solve_state(
+        instance; LS..., rng=MersenneTwister(0), perturbations=nothing, show_progress=false
+    )
+    @test default.bundle_paths == explicit_nothing.bundle_paths
+    @test_throws TypeError TPO.solve_state(
+        instance; ILS_KW..., perturbations=SolveRecordingPerturbation(Any[])
+    )
+
+    rng = MersenneTwister(1)
+    received = Any[]
+    TPO.solve_state(
+        instance; ILS_KW..., rng, perturbations=[SolveRecordingPerturbation(received)]
+    )
+    @test !isempty(received)
+    @test all(r -> r[3] === rng, received)
+
+    nodes = [Node(; id="A"), Node(; id="B")]
+    arcs = [
+        Arc(;
+            origin_id="A", destination_id="B", cost=LinearArcCost(1.0), travel_time=Day(1)
+        ),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="B",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(1),
+        size=1.0,
+    )
+    filtered_out = Instance(nodes, arcs, [commodity], Day(1))
+    received = Any[]
+    sol = TPO.solve_state(
+        filtered_out; ILS_KW..., perturbations=[SolveRecordingPerturbation(received)]
+    )
+    @test isempty(received)
+    @test TPO.is_feasible(sol, filtered_out; verbose=true)
+end

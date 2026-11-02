@@ -22,13 +22,16 @@ mix_greedy_and_lower_bound   (on the sub-instance, seeded with the pre-load)
     local_search!            (on the sub-instance)
         │
         ▼
+iterated_local_search!       (optional, on the sub-instance, when perturbations is a non-empty vector)
+        │
+        ▼
   merge_solutions            (stitch back onto full instance, checks feasibility)
 ```
 
 The function [`solve`](@ref) runs this whole pipeline and is the recommended entry point.
 It returns a [`Solution`](@ref), and [`solve_state`](@ref) returns the internal [`SolutionState`](@ref) instead.
 The function [`solve_filtered`](@ref) wraps everything up to (but not including) local search, for workflows that need control over the local search step.
-[`iterated_local_search!`](@ref) is not part of [`solve`](@ref), it is a separate call on the sub-instance state, see [Iterated Local Search](@ref ils_guide).
+When `perturbations` is a non-empty vector, [`solve`](@ref) also runs [`iterated_local_search!`](@ref) on the sub-instance after the local search, see [Iterated Local Search](@ref ils_guide).
 
 ## Construction Heuristics
 
@@ -136,9 +139,21 @@ For small instances you can skip filtering with `filtering=false`, which runs co
 solution = solve(instance; filtering=false)
 ```
 
+To continue with the iterated local search, pass `perturbations`:
+
+```julia
+solution = solve(
+    instance;
+    perturbations=[GroupReinsertPerturbation()],
+    ils_config=ILSConfig(; time_limit=600.0),
+)
+```
+
+`time_limit` stays the budget of the local search that runs before the ILS, and `ils_config.time_limit` is the ILS budget.
+
 ### Manual pipeline with filtering
 
-Use the building blocks when you need another local search, such as [`iterated_local_search!`](@ref) (see [Iterated Local Search](@ref ils_guide)), on the sub-instance.
+Use the building blocks for advanced control, such as a custom `on_improvement` callback or the [`ILSResult`](@ref) of [`iterated_local_search!`](@ref) (see [Iterated Local Search](@ref ils_guide)), on the sub-instance.
 With a non-default `mode_selector`, pass the same one to `solve_filtered`, to `local_search!` (positional) and to `merge_solutions` (keyword):
 
 ```julia
@@ -167,7 +182,7 @@ A [`SolutionState`](@ref) is the mutable internal state of the algorithms: the p
 The construction heuristics, [`local_search!`](@ref) and [`merge_solutions`](@ref) work on it, whereas [`Solution`](@ref) is a plain read-only view on your input arcs and commodities.
 
 [`solve_state`](@ref) runs the same pipeline as [`solve`](@ref) and returns the state.
-Use it when you need a state, for example for [`local_search!`](@ref) or [`iterated_local_search!`](@ref), or for the content of each bin.
+Use it when you need a state, for example for [`local_search!`](@ref) or for the content of each bin.
 The bins of a state are the ones packed by the algorithms, while those of a `Solution` are repacked when it is converted back.
 
 ```julia
@@ -210,5 +225,5 @@ solution_state = greedy_heuristic(instance; mode_selector=FillThenSpillMode())
 
 ### Packing semantics
 
-On [`BinPackingArcCost`](@ref) arcs, greedy and local search price and commit moves by first-fit of the new commodities onto the arc's existing bins (opening new bins as needed, as in ShipperTransportationPlanning.jl), except on `FillThenSpillMode` multimodal edges, which repack the modes they fill.
+On [`BinPackingArcCost`](@ref) arcs, greedy and local search price and commit moves by first-fit of the new commodities onto the arc's existing bins (opening new bins as needed), except on `FillThenSpillMode` multimodal edges, which repack the modes they fill.
 Local search ends with a [`bin_packing_improvement!`](@ref TransportationPlanningOptimization.bin_packing_improvement!) pass (when `allow_repack=true`) that repacks the bins.

@@ -14,10 +14,11 @@ Improve `solution_state` on `sub_instance` with [`local_search!`](@ref) or [`ite
 Because `solution_state` is pre-loaded with the reserved load of every filtered bundle whose direct arc is still in `sub_instance`, `cost(result.solution_state)` is neither the sub-instance cost nor the full-instance cost.
 Only the merged state has the full-instance cost.
 
-With a non-default `mode_selector`, pass the same one to `local_search!` (positional) and `merge_solutions` (keyword).
+With a non-default `mode_selector`, pass the same one to `local_search!` (positional), and to [`iterated_local_search!`](@ref) and `merge_solutions` (keyword).
 
 Set `show_progress=false` to hide the progress bars.
 `mode_selector` is the [`AbstractModeSelector`](@ref) used by all steps.
+[`solve`](@ref) also runs [`iterated_local_search!`](@ref) after the local search when `perturbations` is a non-empty vector.
 """
 function solve_filtered(
     instance::Instance;
@@ -35,37 +36,86 @@ end
 _start_state(start::Solution, instance::Instance) = SolutionState(start, instance)
 _start_state(start::SolutionState, ::Instance) = copy(start)
 
+# Local search, then the iterated local search when `perturbations` is a non-empty vector, both skipped without bundles.
+function _improve!(
+    solution_state::SolutionState,
+    instance::Instance;
+    local_search,
+    time_limit,
+    max_iter,
+    rng,
+    refine_two_node,
+    mode_selector,
+    perturbations,
+    ils_config,
+    cost_update!,
+    show_progress,
+)
+    bundle_count(instance) > 0 || return nothing
+    if local_search
+        local_search!(
+            solution_state,
+            instance,
+            mode_selector;
+            time_limit,
+            max_iter,
+            rng,
+            refine_two_node,
+        )
+    end
+    if !isnothing(perturbations) && !isempty(perturbations)
+        iterated_local_search!(
+            solution_state,
+            instance,
+            perturbations;
+            config=ils_config,
+            (cost_update!)=cost_update!,
+            mode_selector,
+            rng,
+            verbose=show_progress,
+        )
+    end
+    return nothing
+end
+
 """
 $TYPEDSIGNATURES
 
 Solve `instance` and return a feasible [`SolutionState`](@ref) on it.
 Most users want [`solve`](@ref), which returns the user-facing [`Solution`](@ref).
-Use `solve_state` when the state is needed, for example for [`local_search!`](@ref) or [`iterated_local_search!`](@ref).
+Use `solve_state` when the state is needed, for example for [`local_search!`](@ref).
 
 With `filtering=true` (default):
 
 1. [`lower_bound_filtering`](@ref) fixes the bundles whose best path is the direct arc.
 2. The remaining bundles form a sub-instance, solved by [`mix_greedy_heuristic`](@ref) from a start holding the load of the fixed bundles (see [`solve_filtered`](@ref)).
 3. If `local_search=true`, [`local_search!`](@ref) improves the sub-instance solution.
-4. [`merge_solutions`](@ref) brings the result back to the full instance.
+4. If `perturbations` is a non-empty vector, [`iterated_local_search!`](@ref) continues on the sub-instance with `ils_config` and `cost_update!`.
+5. [`merge_solutions`](@ref) brings the result back to the full instance.
 
-With `filtering=false`, construction ([`mix_greedy_heuristic`](@ref)) and local search run directly on the full instance.
+With `filtering=false`, construction ([`mix_greedy_heuristic`](@ref)), local search and the optional iterated local search run directly on the full instance.
 This is only reasonable on small instances.
 Construction on the full instance is much slower on large ones, because its cost scales with the number of unit commodities times the number of bundle arcs (and so is that of [`greedy_heuristic`](@ref)).
 
 With `start` (a [`Solution`](@ref) or a [`SolutionState`](@ref)), filtering and construction are skipped and `filtering` is ignored.
 A `Solution` is converted by `SolutionState(start, instance)`, so its bins are repacked by first-fit decreasing.
 A `SolutionState` is copied and the caller's one is left untouched.
-The state must be feasible on `instance`, then local search runs on the full instance if `local_search=true`.
+The state must be feasible on `instance`, then local search runs on the full instance if `local_search=true`, followed by the iterated local search if `perturbations` is a non-empty vector.
 The cost of the result is at most the cost of the converted start, which can differ from `cost(start)` for bin packing costs.
 
-`time_limit` (seconds), `max_iter`, `rng` and `refine_two_node` only apply to local search, so `time_limit` does not cover construction.
+`time_limit` (seconds), `max_iter` and `refine_two_node` only apply to the local search that runs before the ILS (so `time_limit` covers neither construction nor the ILS).
 `refine_two_node=true` re-inserts each lifted bundle on its whole path after a two-node consolidation move (see [`local_search!`](@ref)), which makes moves slower but slightly improves world-scale instances.
 Local search also stops after 15000 consecutive non-improving iterations (the [`local_search!`](@ref) default), so it can return well before `time_limit`.
-`mode_selector` (default [`CheapestMode`](@ref)) is the [`AbstractModeSelector`](@ref) used by every step.
-Set `show_progress=false` to hide the progress bars.
+`mode_selector` defaults to [`CheapestMode`](@ref) and is an [`AbstractModeSelector`](@ref).
+`perturbations` (default `nothing`, no ILS) is a vector of [`AbstractPerturbation`](@ref), the ILS runs only when it is non-empty.
+`ils_config.time_limit` is the total ILS budget (the default [`ILSConfig`](@ref) allows 1800 seconds).
+`cost_update!` is forwarded to the ILS (for example [`slope_scaling_update!`](@ref)).
+The local searches inside the ILS use the `ils_config` time limits.
+`mode_selector` is shared by every step and `rng` by the local search and the ILS.
+On the filtered path, [`supports_instance`](@ref) is judged on the sub-instance.
+Set `show_progress=false` to hide the progress bars and the ILS logs.
 
-Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, if `start` cannot be represented on `instance` (see `SolutionState(solution, instance)`) or if `start` is infeasible.
+Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, if `start` cannot be represented on `instance` (see `SolutionState(solution, instance)`), if `start` is infeasible, or if `perturbations` is a non-empty vector and none supports the instance the ILS runs on.
 """
 function solve_state(
     instance::Instance;
@@ -77,8 +127,23 @@ function solve_state(
     rng::Random.AbstractRNG=Random.default_rng(),
     refine_two_node::Bool=false,
     mode_selector::AbstractModeSelector=CheapestMode(),
+    perturbations::Union{Nothing,Vector{<:AbstractPerturbation}}=nothing,
+    ils_config::ILSConfig=ILSConfig(),
+    cost_update!::Union{Nothing,Function}=nothing,
     show_progress::Bool=true,
 )
+    improve_kwargs = (;
+        local_search,
+        time_limit,
+        max_iter,
+        rng,
+        refine_two_node,
+        mode_selector,
+        perturbations,
+        ils_config,
+        (cost_update!)=cost_update!,
+        show_progress,
+    )
     if !isnothing(start)
         solution_state = _start_state(start, instance)
         is_feasible(solution_state, instance; verbose=true) || throw(
@@ -86,34 +151,14 @@ function solve_state(
                 "the start solution is infeasible on instance (see the warnings above)."
             ),
         )
-        if local_search && bundle_count(instance) > 0
-            local_search!(
-                solution_state,
-                instance,
-                mode_selector;
-                time_limit,
-                max_iter,
-                rng,
-                refine_two_node,
-            )
-        end
+        _improve!(solution_state, instance; improve_kwargs...)
         _check_feasible(solution_state, instance)
         return solution_state
     end
 
     if !filtering
         solution_state = mix_greedy_heuristic(instance; mode_selector, show_progress)
-        if local_search
-            local_search!(
-                solution_state,
-                instance,
-                mode_selector;
-                time_limit,
-                max_iter,
-                rng,
-                refine_two_node,
-            )
-        end
+        _improve!(solution_state, instance; improve_kwargs...)
         _check_feasible(solution_state, instance)
         return solution_state
     end
@@ -121,28 +166,18 @@ function solve_state(
     (; solution_state, sub_instance, filtering_state) = solve_filtered(
         instance; mode_selector, show_progress
     )
-    if local_search && bundle_count(sub_instance) > 0
-        local_search!(
-            solution_state,
-            sub_instance,
-            mode_selector;
-            time_limit,
-            max_iter,
-            rng,
-            refine_two_node,
-        )
-    end
+    _improve!(solution_state, sub_instance; improve_kwargs...)
     return merge_solutions(
         filtering_state, solution_state, instance, sub_instance; mode_selector
     )
 end
 
-# Safety net after local search: the moves are meant to keep the state feasible.
+# Safety net after local search and perturbations: the moves are meant to keep the state feasible.
 function _check_feasible(solution_state::SolutionState, instance::Instance)
     is_feasible(solution_state, instance; verbose=true) || throw(
         ArgumentError(
             "solve_state: the solution is infeasible on instance (see the feasibility report above). " *
-            "This indicates a bug in a local search move, please report it with the instance.",
+            "This indicates a bug in a local search move or a perturbation, please report it with the instance.",
         ),
     )
     return nothing
@@ -154,12 +189,13 @@ $TYPEDSIGNATURES
 Solve `instance` and return a feasible [`Solution`](@ref) on its input arcs and commodities.
 This is the recommended way to solve an instance.
 It is `Solution(solve_state(instance; kwargs...), instance)`, see [`solve_state`](@ref) for the pipeline and the keywords.
+Pass `perturbations` and `ils_config` to also run the iterated local search ([`iterated_local_search!`](@ref)).
 
 Pass `start` (a [`Solution`](@ref) or a [`SolutionState`](@ref)) to continue from an existing plan, for example an edited one.
 Filtering and construction are skipped and `filtering` is ignored.
 The cost of the result is at most the cost of the start converted by `SolutionState(start, instance)`.
 
-Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, or if `start` is unrepresentable or infeasible on `instance`.
+Throws `ArgumentError` if no feasible construction is found, if the final (merged) solution is infeasible, if `start` is unrepresentable or infeasible on `instance`, or if `perturbations` is a non-empty vector and none supports the instance the ILS runs on.
 """
 function solve(
     instance::Instance;
@@ -171,6 +207,9 @@ function solve(
     rng::Random.AbstractRNG=Random.default_rng(),
     refine_two_node::Bool=false,
     mode_selector::AbstractModeSelector=CheapestMode(),
+    perturbations::Union{Nothing,Vector{<:AbstractPerturbation}}=nothing,
+    ils_config::ILSConfig=ILSConfig(),
+    cost_update!::Union{Nothing,Function}=nothing,
     show_progress::Bool=true,
 )
     solution_state = solve_state(
@@ -183,6 +222,9 @@ function solve(
         rng,
         refine_two_node,
         mode_selector,
+        perturbations,
+        ils_config,
+        (cost_update!)=cost_update!,
         show_progress,
     )
     return Solution(solution_state, instance)
