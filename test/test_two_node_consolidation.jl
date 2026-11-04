@@ -310,19 +310,22 @@ end
     arcs = instance.travel_time_graph.bundle_arcs[TPO._donor_index(instance, lifted)]
     nz = SparseArrays.nonzeros(instance.travel_time_graph.cost_matrix)
 
-    TPO.update_bundle_cost_matrix!(sol, instance, virtual, arcs, TPO.CheapestMode())
+    forbidden = TestFixtures._resolved_forbidden(instance, virtual)
+    TPO.update_bundle_cost_matrix!(
+        sol, instance, virtual, arcs, TPO.CheapestMode(); forbidden
+    )
     plain = copy(nz)
     counts = TPO.empty_pack_counts(instance, virtual, arcs)
     @test all(ec -> !isempty(ec.capacities), counts)
     TPO.update_bundle_cost_matrix!(
-        sol, instance, virtual, arcs, TPO.CheapestMode(); empty_counts=counts
+        sol, instance, virtual, arcs, TPO.CheapestMode(); forbidden, empty_counts=counts
     )
     @test reinterpret(UInt64, nz) == reinterpret(UInt64, plain)
     @test any(isfinite, plain)
     # Deliberately wrong counts must change the matrix, so they are really used.
     bumped = [TPO.EmptyPackCounts(ec.capacities, ec.counts .+ 1) for ec in counts]
     TPO.update_bundle_cost_matrix!(
-        sol, instance, virtual, arcs, TPO.CheapestMode(); empty_counts=bumped
+        sol, instance, virtual, arcs, TPO.CheapestMode(); forbidden, empty_counts=bumped
     )
     @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
 end
@@ -359,14 +362,16 @@ end
     arcs = instance.travel_time_graph.bundle_arcs[1]
     @test length(arcs) >= TPO.DEADLINE_CHECK_EVERY
     bundle = instance.bundles[1]
+    forbidden = TPO.forbidden_codes(instance.index_cache, 1)
     mode = TPO.CheapestMode()
     pool = TPO.create_buffer_pool()
     for deadline in (0.0, Inf)
         expected = deadline == Inf
-        @test TPO.update_bundle_cost_matrix!(sol, instance, bundle, arcs, mode; deadline) ==
-            expected
+        @test TPO.update_bundle_cost_matrix!(
+            sol, instance, bundle, arcs, mode; forbidden, deadline
+        ) == expected
         @test TPO.parallel_update_bundle_cost_matrix!(
-            sol, instance, bundle, arcs, mode, pool; deadline
+            sol, instance, bundle, arcs, mode, pool; forbidden, deadline
         ) == expected
     end
 end
@@ -561,14 +566,17 @@ end
         @test issubset(Set(corridor), Set(donor_arcs))
         @test (src, dst) in corridor
 
+        forbidden = TestFixtures._resolved_forbidden(instance, virtual)
         TPO.update_bundle_cost_matrix!(
-            sol, instance, virtual, donor_arcs, TPO.CheapestMode()
+            sol, instance, virtual, donor_arcs, TPO.CheapestMode(); forbidden
         )
         donor_costs = [ttg.cost_matrix[u, v] for (u, v) in corridor]
         parents, _ = TPO.bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst)
         donor_path = TPO.trace_path(parents, src, dst)
 
-        TPO.update_bundle_cost_matrix!(sol, instance, virtual, corridor, TPO.CheapestMode())
+        TPO.update_bundle_cost_matrix!(
+            sol, instance, virtual, corridor, TPO.CheapestMode(); forbidden
+        )
         @test [ttg.cost_matrix[u, v] for (u, v) in corridor] == donor_costs
         parents, _ = TPO.bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst)
         @test TPO.trace_path(parents, src, dst) == donor_path
@@ -653,4 +661,120 @@ end
     @test TPO.is_feasible(sol, instance)
     @test sol.bundle_paths == old_paths
     @test TPO.cost(sol) == start_cost
+end
+
+@testset "the virtual bundle keeps the union of the forbidden codes of the merged bundles" begin
+    base_date = DateTime(2025, 11, 20)
+    nodes = [Node(; id=id) for id in ["A", "B", "C", "D", "X", "Y"]]
+    arcs = [
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
+        for (o, d) in
+        [("A", "B"), ("B", "C"), ("C", "D"), ("B", "X"), ("X", "C"), ("B", "Y"), ("Y", "C")]
+    ]
+    commodity(o, d; kwargs...) = Commodity(;
+        origin_id=o,
+        destination_id=d,
+        size=1.0,
+        departure_date=base_date,
+        max_delivery_time=Day(5),
+        kwargs...,
+    )
+    instance = Instance(
+        nodes,
+        arcs,
+        [
+            commodity("A", "D"; forbidden_node_ids=["X"]),
+            commodity("B", "D"; forbidden_arcs=[("B", "Y")]),
+        ],
+        Day(1),
+    )
+    cache = instance.index_cache
+    ttg = instance.travel_time_graph
+    idxs = collect(eachindex(instance.bundles))
+    stored = [TPO.forbidden_codes(cache, i) for i in idxs]
+    @test all(!isempty(c.nodes) || !isempty(c.arcs) for c in stored)
+
+    virtual = TPO.merge_bundles(instance, idxs)
+    resolved = TPO._resolve_forbidden_codes(
+        cache.input_node_codes, instance.network_graph.graph, virtual
+    )
+    @test resolved.nodes == union((c.nodes for c in stored)...)
+    @test resolved.arcs == union((c.arcs for c in stored)...)
+
+    # A forbidden arc of one merged bundle is Inf in the virtual cost matrix, and so is
+    # an arc through a forbidden node of the other.
+    sol = SolutionState(instance)
+    arcs_union = unique(reduce(vcat, ttg.bundle_arcs[i] for i in idxs))
+    TPO.update_bundle_cost_matrix!(
+        sol, instance, virtual, arcs_union, TPO.CheapestMode(); forbidden=resolved
+    )
+    spatial = cache.ttg_code_to_spatial_code
+    forbidden_arcs = [
+        (u, v) for (u, v) in arcs_union if (spatial[u], spatial[v]) in resolved.arcs
+    ]
+    forbidden_nodes = [
+        (u, v) for
+        (u, v) in arcs_union if spatial[u] in resolved.nodes || spatial[v] in resolved.nodes
+    ]
+    @test !isempty(forbidden_arcs) && !isempty(forbidden_nodes)
+    @test all(a -> ttg.cost_matrix[a...] == Inf, vcat(forbidden_arcs, forbidden_nodes))
+    @test any(a -> isfinite(ttg.cost_matrix[a...]), arcs_union)
+
+    # Without the codes the same arcs would be priced
+    TPO.update_bundle_cost_matrix!(
+        sol,
+        instance,
+        virtual,
+        arcs_union,
+        TPO.CheapestMode();
+        forbidden=TPO.ForbiddenCodes(Set{Int}(), Set{Tuple{Int,Int}}()),
+    )
+    @test any(a -> isfinite(ttg.cost_matrix[a...]), forbidden_arcs)
+end
+
+@testset "two_node_common_incremental! respects the forbidden nodes of every lifted bundle" begin
+    # Sharing H -> X -> C would be the cheapest (one bin), but the bundle from A1 forbids X.
+    nodes = [Node(; id=id) for id in ["A1", "A2", "H", "C", "X", "Z", "D"]]
+    arc(o, d, cost) = Arc(; origin_id=o, destination_id=d, cost, travel_time=Day(0))
+    arcs = [
+        arc("A1", "H", LinearArcCost(0.0)),
+        arc("A2", "H", LinearArcCost(0.0)),
+        arc("H", "C", LinearArcCost(10.0)),
+        arc("H", "X", BinPackingArcCost(6.0, 3)),
+        arc("X", "C", LinearArcCost(0.0)),
+        arc("H", "Z", LinearArcCost(3.0)),
+        arc("Z", "C", LinearArcCost(0.0)),
+        arc("C", "D", LinearArcCost(0.0)),
+    ]
+    commodity(o; kwargs...) = Commodity(;
+        origin_id=o,
+        destination_id="D",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(0),
+        size=1.5,
+        kwargs...,
+    )
+    instance = Instance(
+        nodes, arcs, [commodity("A1"; forbidden_node_ids=["X"]), commodity("A2")], Day(1)
+    )
+    ttg = instance.travel_time_graph
+    code(id) = code_for(ttg.graph, (id, 0))
+    idx1 = findfirst(b -> b.origin_id == "A1", instance.bundles)
+    idx2 = findfirst(b -> b.origin_id == "A2", instance.bundles)
+    bundle_paths = Vector{Vector{Int}}(undef, 2)
+    bundle_paths[idx1] = [code("A1"), code("H"), code("C"), code("D")]
+    bundle_paths[idx2] = [code("A2"), code("H"), code("C"), code("D")]
+    sol = SolutionState(bundle_paths, instance)
+    @test is_feasible(sol, instance; verbose=true)
+
+    saved = TPO.two_node_common_incremental!(sol, instance, code("H"), code("C"))
+    @test saved > 0
+    @test is_feasible(sol, instance; verbose=true)
+    spatial = instance.index_cache.ttg_code_to_spatial_code
+    x = code_for(instance.network_graph.graph, "X")
+    @test all(p -> !(x in spatial[p]), sol.bundle_paths)
+    @test any(
+        p -> code_for(instance.network_graph.graph, "Z") in spatial[p], sol.bundle_paths
+    )
 end

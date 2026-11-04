@@ -1,7 +1,22 @@
 """
 $TYPEDEF
 
-Precomputed integer-indexed lookup tables, derived once from the instance graphs and never mutated.
+Spatial codes of the forbidden constraints of a bundle, resolved from its user ids.
+
+# Fields
+$TYPEDFIELDS
+"""
+struct ForbiddenCodes
+    "spatial codes of the forbidden nodes"
+    nodes::Set{Int}
+    "forbidden edge code pairs (all modes)"
+    arcs::Set{Tuple{Int,Int}}
+end
+
+"""
+$TYPEDEF
+
+Precomputed integer-indexed lookup tables, derived once from the instance graphs, the user nodes and the bundles and never mutated.
 They replace MetaGraphsNext label-to-code hashing with flat array indexing.
 Unlike the construction-time `EndpointSplit` fields `origin_copy` and `destination_copy` (user ids to copy ids, including nodes without a hub), `hub_origin_copy` and `hub_destination_copy` are indexed by spatial code and only cover hubs.
 
@@ -29,6 +44,10 @@ struct IndexCache{ARC,NC}
     hub_origin_copy::Vector{Int}
     "spatial code of a hub to that of its destination copy (0 if none)"
     hub_destination_copy::Vector{Int}
+    "user node id to the spatial codes of its internal nodes (the node itself and its endpoint copies), nodes without an input node (`input_index == 0`) are left out"
+    input_node_codes::Dict{String,Vector{Int}}
+    "per bundle index, the spatial codes of its forbidden nodes and its forbidden edge code pairs, resolved once from the user ids by provenance (see [`_resolve_forbidden_codes`](@ref))"
+    forbidden_codes::Vector{ForbiddenCodes}
     "length of the time horizon of the time-space graph"
     time_horizon_length::Int
     "whether transit times wrap around the time horizon"
@@ -115,13 +134,16 @@ end
 """
 $TYPEDSIGNATURES
 
-Build the [`IndexCache`](@ref) from the instance graphs.
-Runs once at the end of `build_instance`.
+Build the [`IndexCache`](@ref) from the instance graphs, the user `input_nodes` and the `bundles`.
+The forbidden constraints of `bundles[i]` are resolved once into `forbidden_codes[i]`, so the cache must be rebuilt when the bundles change.
+Runs in `build_instance` (before the bundles are validated) and in `extract_filtered_instance`.
 """
 function build_index_cache(
     network_graph::NetworkGraph,
     travel_time_graph::TravelTimeGraph,
     time_space_graph::TimeSpaceGraph,
+    input_nodes::AbstractVector{<:Node},
+    bundles::AbstractVector{<:Bundle},
 )
     ng = network_graph.graph
     ttg = travel_time_graph.graph
@@ -193,6 +215,17 @@ function build_index_cache(
         ng[MetaGraphsNext.label_for(ng, c)].node_cost for c in 1:n_net
     ]
 
+    input_node_codes = Dict{String,Vector{Int}}()
+    for code in 1:n_net
+        node = ng[MetaGraphsNext.label_for(ng, code)]
+        iszero(node.input_index) && continue
+        push!(get!(input_node_codes, input_nodes[node.input_index].id, Int[]), code)
+    end
+
+    bundle_forbidden = ForbiddenCodes[
+        _resolve_forbidden_codes(input_node_codes, ng, bundle) for bundle in bundles
+    ]
+
     return IndexCache(
         ttg_code_to_spatial_code,
         ttg_code_to_tau,
@@ -204,7 +237,48 @@ function build_index_cache(
         spatial_code_to_node_cost,
         hub_origin_copy,
         hub_destination_copy,
+        input_node_codes,
+        bundle_forbidden,
         time_horizon_length,
         wrap_time,
     )
 end
+
+"""
+$TYPEDSIGNATURES
+
+The [`ForbiddenCodes`](@ref) of `bundle`, resolved by provenance.
+`input_node_codes` is `IndexCache.input_node_codes` and `ng` the network graph.
+A forbidden user node id gives the codes of all its internal nodes (the node and its endpoint copies).
+A forbidden arc `(u, v)` gives every pair `(cu, cv)` of internal nodes of `u` and `v` joined by an arc of
+`ng`, so it forbids the arc in every mode, and a skipped input arc gives no pair.
+A loop `(u, u)` gives no pair.
+Ids absent from `input_node_codes` are skipped, they are nodes dropped by an instance extraction
+and can no longer be traversed.
+`build_index_cache` calls it once per bundle, use [`forbidden_codes`](@ref) to read the result.
+"""
+function _resolve_forbidden_codes(
+    input_node_codes::Dict{String,Vector{Int}}, ng::MetaGraph, bundle::Bundle
+)
+    fn = Set{Int}()
+    for id in bundle.forbidden_nodes
+        union!(fn, get(input_node_codes, id, Int[]))
+    end
+    fa = Set{Tuple{Int,Int}}()
+    for (u, v) in bundle.forbidden_arcs
+        u == v && continue
+        codes_u = get(input_node_codes, u, Int[])
+        codes_v = get(input_node_codes, v, Int[])
+        for cu in codes_u, cv in codes_v
+            Graphs.has_edge(ng, cu, cv) && push!(fa, (cu, cv))
+        end
+    end
+    return ForbiddenCodes(fn, fa)
+end
+
+"""
+$TYPEDSIGNATURES
+
+Stored [`ForbiddenCodes`](@ref) of the bundle `bundle_idx` of the instance the cache was built for.
+"""
+forbidden_codes(cache::IndexCache, bundle_idx::Int) = cache.forbidden_codes[bundle_idx]

@@ -341,22 +341,21 @@ end
 # Check the path of the reference commodity `k` of bundle `b` with the forbidden node,
 # forbidden arc and elementary rules of `is_feasible` (the others hold by construction of the codes).
 function _check_bundle_path(instance::Instance, b::Int, k::Int, path::Vector{Int})
-    ttg = instance.travel_time_graph
-    bundle = instance.bundles[b]
     spatial = instance.index_cache.ttg_code_to_spatial_code
-    ids = [MetaGraphsNext.label_for(ttg.graph, code)[1] for code in path]
     fail(message) = throw(ArgumentError("route of input commodity $k: $message"))
-    user(id) = _user_id(instance, id)
-    for id in ids[2:(end - 1)]
-        id in bundle.forbidden_nodes && fail("the route uses forbidden node $(user(id))")
+    user(code) = _user_id(instance, code)
+    forbidden = forbidden_codes(instance.index_cache, b)
+    codes = spatial[path]
+    for code in codes[2:(end - 1)]
+        code in forbidden.nodes && fail("the route uses forbidden node $(user(code))")
     end
-    for (u, v) in zip(ids[1:(end - 1)], ids[2:end])
-        (u, v) in bundle.forbidden_arcs &&
+    for (u, v) in zip(codes[1:(end - 1)], codes[2:end])
+        (u, v) in forbidden.arcs &&
             fail("the route uses forbidden arc $((user(u), user(v)))")
     end
     if !is_elementary_path(path, spatial)
         # a hub and its copies are consecutive, so the user ids list each node once
-        users = user.(ids)
+        users = user.(codes)
         users = [u for (i, u) in enumerate(users) if i == 1 || u != users[i - 1]]
         fail("the route is not elementary, it revisits a node of $users")
     end
