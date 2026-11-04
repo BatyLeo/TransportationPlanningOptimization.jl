@@ -82,13 +82,7 @@ function _lazy_bundle_dijkstra!(
     cache = instance.index_cache
     bundle = instance.bundles[bundle_idx]
 
-    # The forbidden sets are usually empty (e.g. inbound instances), then skip the checks.
-    has_forbidden = !isempty(bundle.forbidden_nodes) || !isempty(bundle.forbidden_arcs)
-    fn_codes, fa_codes = if has_forbidden
-        _forbidden_codes(instance.network_graph.graph, bundle)
-    else
-        (Set{Int}(), Set{Tuple{Int,Int}}())
-    end
+    forbidden = forbidden_codes(cache, bundle_idx)
 
     if !isnothing(workspace)
         _reset_workspace!(workspace, origin)
@@ -123,8 +117,9 @@ function _lazy_bundle_dijkstra!(
             if su == sv
                 alt = d_u
             else
-                if has_forbidden &&
-                    ((su, sv) in fa_codes || su in fn_codes || sv in fn_codes)
+                if (su, sv) in forbidden.arcs ||
+                    su in forbidden.nodes ||
+                    sv in forbidden.nodes
                     continue
                 end
                 w = compute_ttg_edge_incremental_cost(
@@ -229,11 +224,11 @@ function _lazy_forced_path!(
 )
     ttg = instance.travel_time_graph
     spatial = instance.index_cache.ttg_code_to_spatial_code
-    bundle = instance.bundles[bundle_idx]
     u, v = arc
     su, sv = spatial[u], spatial[v]
-    fn, fa = _forbidden_codes(instance.network_graph.graph, bundle)
-    ((su, sv) in fa || su in fn || sv in fn) && return Int[]
+    forbidden = forbidden_codes(instance.index_cache, bundle_idx)
+    ((su, sv) in forbidden.arcs || su in forbidden.nodes || sv in forbidden.nodes) &&
+        return Int[]
     v in get(bundle_adj, u, Int[]) || return Int[]
 
     origin, dest = ttg.origin_codes[bundle_idx], ttg.destination_codes[bundle_idx]

@@ -614,4 +614,26 @@ function reset!()
     return nothing
 end
 
+# Stored spatial codes of the forbidden nodes and arcs of `bundle`, a bundle of `instance`
+function _forbidden(instance, bundle)
+    idx = findfirst(b -> b === bundle, instance.bundles)
+    return TransportationPlanningOptimization.forbidden_codes(instance.index_cache, idx)
+end
+# Same codes resolved on the fly, also for a bundle that is not in `instance.bundles`
+function _resolved_forbidden(instance, bundle)
+    return TransportationPlanningOptimization._resolve_forbidden_codes(
+        instance.index_cache.input_node_codes, instance.network_graph.graph, bundle
+    )
+end
+# Spatial codes of internal ids and id pairs
+function _code_set(instance, ids)
+    return Set(MetaGraphsNext.code_for(instance.network_graph.graph, i) for i in ids)
+end
+function _code_pairs(instance, pairs)
+    ng = instance.network_graph.graph
+    return Set(
+        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for (u, v) in pairs
+    )
+end
+
 end # module
