@@ -44,7 +44,7 @@ Dijkstra.
 
 The donor (bundle with the longest delivery window, see [`_donor_index`](@ref)) provides
 origin/destination. Forbidden nodes/arcs are the union over all lifted
-bundles. Orders sharing a `time_step` (across lifted bundles) are merged into
+bundles (user ids, the caller resolves them into codes with `_resolve_forbidden_codes`). Orders sharing a `time_step` (across lifted bundles) are merged into
 one `Order` (keeping the tighter `max_transit_steps`) so their combined load
 is priced and capacity-checked together.
 """
@@ -256,6 +256,9 @@ function two_node_common_incremental!(
     ttg = instance.travel_time_graph
     virtual_bundle = merge_bundles(instance, lifted_idxs)
     virtual_arcs = _corridor_arcs(ttg.graph, src, dst)
+    forbidden = _resolve_forbidden_codes(
+        instance.index_cache.input_node_codes, instance.network_graph.graph, virtual_bundle
+    )
     empty_counts = empty_pack_counts(instance, virtual_bundle, virtual_arcs)
 
     in_time = if Threads.nthreads() > 1 && !isnothing(buffer_pool)
@@ -266,6 +269,7 @@ function two_node_common_incremental!(
             virtual_arcs,
             mode_selector,
             buffer_pool;
+            forbidden,
             empty_counts,
             deadline,
         )
@@ -276,6 +280,7 @@ function two_node_common_incremental!(
             virtual_bundle,
             virtual_arcs,
             mode_selector;
+            forbidden,
             empty_counts,
             deadline,
         )

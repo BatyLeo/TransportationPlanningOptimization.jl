@@ -179,7 +179,12 @@ function test_raw_segment_premise(instance)
     virtual_bundle = TPO.merge_bundles(instance, [1])
     virtual_arcs = ttg.bundle_arcs[1]
     TPO.update_bundle_cost_matrix!(
-        sol, instance, virtual_bundle, virtual_arcs, CheapestMode()
+        sol,
+        instance,
+        virtual_bundle,
+        virtual_arcs,
+        CheapestMode();
+        forbidden=TestFixtures._resolved_forbidden(instance, virtual_bundle),
     )
     parents, _ = TPO.bundle_dijkstra(ttg.graph, h, ttg.cost_matrix; dst=c)
     segment = TPO.trace_path(parents, h, c)
