@@ -1,6 +1,25 @@
 """
 $TYPEDSIGNATURES
 
+Integer spatial codes of the forbidden nodes and arcs of `bundle`. Ids absent from the
+network graph are skipped. The input commodities are validated against the user nodes when the
+instance is built, so such an id is a node dropped by an instance extraction (for example an
+unused endpoint copy), it can no longer be traversed.
+"""
+function _forbidden_codes(ng, bundle::Bundle)
+    fn = Set{Int}(
+        MetaGraphsNext.code_for(ng, id) for id in bundle.forbidden_nodes if haskey(ng, id)
+    )
+    fa = Set{Tuple{Int,Int}}(
+        (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for
+        (u, v) in bundle.forbidden_arcs if haskey(ng, u) && haskey(ng, v)
+    )
+    return fn, fa
+end
+
+"""
+$TYPEDSIGNATURES
+
 Compute the incremental cost of a TravelTimeGraph edge for a specific bundle,
 considering all its orders and their projections to the TimeSpaceGraph.
 """
@@ -360,9 +379,6 @@ directly, bypassing the `instance.bundles[bundle_idx]` lookup. Used by
 `two_node_common_incremental!` (Phase 3.7) to compute the cost matrix for a
 virtual merged bundle that has no index in `instance.bundles`.
 
-The `forbidden` keyword holds the [`ForbiddenCodes`](@ref) of `bundle`: a virtual bundle has no
-stored codes, so the caller resolves them with `_resolve_forbidden_codes`.
-
 The `cost_fn` keyword selects which per-edge cost computation is used. The
 default, `compute_ttg_edge_incremental_cost`, preserves greedy behaviour.
 Lower-bound callers can pass `cost_fn=compute_ttg_edge_lower_bound_cost`.
@@ -386,7 +402,6 @@ function update_bundle_cost_matrix!(
     bundle::Bundle,
     bundle_arcs::Vector{Tuple{Int,Int}},
     mode_selector::AbstractModeSelector=CheapestMode();
-    forbidden::ForbiddenCodes,
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     buffer::BinPackingBuffer=BinPackingBuffer(),
     empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
@@ -395,7 +410,12 @@ function update_bundle_cost_matrix!(
     isnothing(empty_counts) || @assert length(empty_counts) == length(bundle.orders)
     ttg = instance.travel_time_graph
     cache = instance.index_cache
-    fn, fa = forbidden.nodes, forbidden.arcs
+    ng = instance.network_graph.graph
+
+    # Map the bundle's forbidden sets to integer spatial codes once (these sets
+    # are usually empty or tiny), so the per-arc check stays on integers and
+    # works for both real and virtual (two-node) bundles with no bundle index.
+    fn, fa = _forbidden_codes(ng, bundle)
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
 
@@ -445,7 +465,6 @@ function update_bundle_cost_matrix!(
         instance.bundles[bundle_idx],
         instance.travel_time_graph.bundle_arcs[bundle_idx],
         mode_selector;
-        forbidden=forbidden_codes(instance.index_cache, bundle_idx),
         cost_fn=cost_fn,
         buffer=buffer,
         deadline=deadline,
@@ -491,7 +510,6 @@ function parallel_update_bundle_cost_matrix!(
     bundle_arcs::Vector{Tuple{Int,Int}},
     mode_selector::AbstractModeSelector,
     buffer_pool::Vector{<:BinPackingBuffer};
-    forbidden::ForbiddenCodes,
     cost_fn::Function=compute_ttg_edge_incremental_cost,
     empty_counts::Union{Nothing,Vector{EmptyPackCounts}}=nothing,
     deadline::Float64=Inf,
@@ -503,7 +521,6 @@ function parallel_update_bundle_cost_matrix!(
             bundle,
             bundle_arcs,
             mode_selector;
-            forbidden,
             cost_fn,
             buffer=buffer_pool[1],
             empty_counts,
@@ -515,7 +532,9 @@ function parallel_update_bundle_cost_matrix!(
 
     ttg = instance.travel_time_graph
     cache = instance.index_cache
-    fn, fa = forbidden.nodes, forbidden.arcs
+    ng = instance.network_graph.graph
+
+    fn, fa = _forbidden_codes(ng, bundle)
 
     fill!(SparseArrays.nonzeros(ttg.cost_matrix), Inf)
     isempty(bundle_arcs) && return true
@@ -572,7 +591,6 @@ function parallel_update_bundle_cost_matrix!(
         instance.travel_time_graph.bundle_arcs[bundle_idx],
         mode_selector,
         buffer_pool;
-        forbidden=forbidden_codes(instance.index_cache, bundle_idx),
         cost_fn,
     )
 end

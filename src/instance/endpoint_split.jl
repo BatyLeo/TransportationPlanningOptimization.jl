@@ -28,6 +28,38 @@ end
 """
 $TYPEDSIGNATURES
 
+Translate the forbidden constraints of a bundle to the nodes of `split` that have no hub.
+Forbidding such a node `v` forbids both its copies, the forbidden arc `(u, v)` becomes
+`(u, v_d)` and `(v, w)` becomes `(v_o, w)`. Forbidding a node that has a hub changes nothing
+(it blocks both virtual arcs). A forbidden arc on a skipped input arc between distinct nodes is kept,
+it is harmless because it matches no internal arc. Loop arcs are dropped before this translation.
+"""
+function _translate_forbidden(split::EndpointSplit, forbidden_nodes, forbidden_arcs)
+    isempty(split.hubless) && return forbidden_nodes, forbidden_arcs
+    nodes = Set{String}()
+    for id in forbidden_nodes
+        if id in split.hubless
+            push!(nodes, split.origin_copy[id], split.destination_copy[id])
+        else
+            push!(nodes, id)
+        end
+    end
+    arcs = Set{Tuple{String,String}}()
+    for (u, v) in forbidden_arcs
+        push!(
+            arcs,
+            (
+                u in split.hubless ? split.origin_copy[u] : u,
+                v in split.hubless ? split.destination_copy[v] : v,
+            ),
+        )
+    end
+    return nodes, arcs
+end
+
+"""
+$TYPEDSIGNATURES
+
 Id of a copy of node `id`: `id` followed by `suffix`, extended with `suffix` until it clashes
 with no id of `taken`. The returned id is added to `taken`.
 """

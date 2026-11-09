@@ -313,9 +313,8 @@ Turns each entry into an `Order`, groups orders sharing `(origin_id, destination
 group_key)` into a bundle, aggregates each bundle's forbidden nodes and arcs from its
 commodities, and rejects bundles that forbid their own origin or destination.
 The grouping and these checks use the user node ids, then each bundle is re-rooted on the
-endpoint copies of `split` (see [`EndpointSplit`](@ref)).
-The forbidden constraints keep the user node ids, they are resolved to internal nodes by
-provenance into the `IndexCache`, once per instance (see [`_resolve_forbidden_codes`](@ref)).
+endpoint copies of `split` and its forbidden constraints are translated to them
+(see [`EndpointSplit`](@ref)).
 """
 function _build_bundles(
     order_dict,
@@ -399,10 +398,12 @@ function _build_bundles(
             )
         end
 
-        # Loop arcs are never created, so a forbidden loop is meaningless. The filter keeps the stored sets
-        # meaningful for messages and emptiness checks, and `_resolve_forbidden_codes` also skips loops
-        # for bundles built elsewhere (for example with the `Bundle(; ...)` constructor)
+        # Loop arcs are never created, so a forbidden loop is meaningless, and keeping it
+        # would only block the waiting shortcuts, which have the same spatial id at both ends
         filter!(arc -> arc[1] != arc[2], forbidden_arcs)
+        forbidden_nodes, forbidden_arcs = _translate_forbidden(
+            split, forbidden_nodes, forbidden_arcs
+        )
         bundle = Bundle(
             bundle_dict[key],
             get(split.origin_copy, origin_id, origin_id),
@@ -420,48 +421,16 @@ end
 """
 $TYPEDSIGNATURES
 
-Validate that a bundle can reach its destination from its origin in the travel-time graph
-while respecting the bundle's forbidden nodes and arcs.
-
-The forbidden codes of the bundle are read from `cache` (see [`forbidden_codes`](@ref)).
-Runs a forward BFS from the origin, skipping any edge that touches a forbidden node or
-matches a forbidden arc. Returns `true` if the destination is reachable, `false` otherwise.
-"""
-function validate_bundle_feasibility(
-    ttg::TravelTimeGraph, bundle_idx::Int, cache::IndexCache
-)
-    origin_code = ttg.origin_codes[bundle_idx]
-    destination_code = ttg.destination_codes[bundle_idx]
-    forbidden = forbidden_codes(cache, bundle_idx)
-    spatial = cache.ttg_code_to_spatial_code
-    allowed_edge =
-        (u, v) -> begin
-            su, sv = spatial[u], spatial[v]
-            return !(
-                (su, sv) in forbidden.arcs ||
-                su in forbidden.nodes ||
-                sv in forbidden.nodes
-            )
-        end
-    reachable = _bfs_reachable(ttg.graph, origin_code, Graphs.outneighbors; allowed_edge)
-    return destination_code in reachable
-end
-
-"""
-$TYPEDSIGNATURES
-
 Check that every bundle can reach its destination from its origin in the travel-time graph
 under its forbidden constraints (via [`validate_bundle_feasibility`](@ref)).
 
 Returns `nothing` when all bundles are feasible, otherwise throws an `ArgumentError` listing
 the infeasible bundles, named by user node ids.
 """
-function _validate_bundles_feasibility(
-    ttg::TravelTimeGraph, bundles, split::EndpointSplit, cache::IndexCache
-)
+function _validate_bundles_feasibility(ttg::TravelTimeGraph, bundles, split::EndpointSplit)
     infeasible_bundles = Tuple{Int,String,String}[]
     for (bundle_idx, bundle) in enumerate(bundles)
-        if !validate_bundle_feasibility(ttg, bundle_idx, cache)
+        if !validate_bundle_feasibility(ttg, bundle_idx, bundle)
             push!(
                 infeasible_bundles,
                 (
@@ -640,12 +609,10 @@ function _assemble_instance(
         network_graph, time_horizon_length; wrap_time=wrap_time
     )
     travel_time_graph = TravelTimeGraph(network_graph, bundles)
-    index_cache = build_index_cache(
-        network_graph, travel_time_graph, time_space_graph, input.nodes, bundles
-    )
     if check_bundle_feasibility
-        _validate_bundles_feasibility(travel_time_graph, bundles, split, index_cache)
+        _validate_bundles_feasibility(travel_time_graph, bundles, split)
     end
+    index_cache = build_index_cache(network_graph, travel_time_graph, time_space_graph)
     return Instance(;
         time_horizon_length,
         time_step,

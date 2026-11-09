@@ -58,13 +58,12 @@ function _milp_bundle_arcs(instance::Instance, bundle_idx::Int)
     cache = instance.index_cache
     bundle = instance.bundles[bundle_idx]
     # Same filter as the cost matrix update: forbidden arcs and nodes are not allowed.
-    forbidden = forbidden_codes(cache, bundle_idx)
+    fn, fa = _forbidden_codes(instance.network_graph.graph, bundle)
     arcs = _MilpArcs(Int[], Int[], Vector{Tuple{Int,Int}}[], Bool[])
     for (u, v) in instance.travel_time_graph.bundle_arcs[bundle_idx]
         su = cache.ttg_code_to_spatial_code[u]
         sv = cache.ttg_code_to_spatial_code[v]
-        ((su, sv) in forbidden.arcs || su in forbidden.nodes || sv in forbidden.nodes) &&
-            continue
+        ((su, sv) in fa || su in fn || sv in fn) && continue
         arc = su == sv ? nothing : ttg_edge_arc(cache, u, v)
         (su != sv && isnothing(arc)) && continue
         packed = !isnothing(arc) && _milp_is_packed(arc)

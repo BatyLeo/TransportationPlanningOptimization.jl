@@ -211,12 +211,8 @@ end
     bundle = only(
         b for b in instance.bundles if (b.origin_id, b.destination_id) == ("A", "C")
     )
-    @test bundle.forbidden_nodes == Set(["B"])
-    @test bundle.forbidden_arcs == Set([("A", "B"), ("B", "C")])
-    # Both copies of the hubless node B are forbidden, and the arcs enter and leave the right copy
-    fc = TestFixtures._forbidden(instance, bundle)
-    @test fc.nodes == TestFixtures._code_set(instance, ["B_o", "B_d"])
-    @test fc.arcs == TestFixtures._code_pairs(instance, [("A", "B_d"), ("B_o", "C")])
+    @test bundle.forbidden_nodes == Set(["B_o", "B_d"])
+    @test bundle.forbidden_arcs == Set([("A", "B_d"), ("B_o", "C")])
     @test is_feasible(greedy_heuristic(instance; show_progress=false), instance)
     # A bundle cannot forbid its own endpoint, checked on the user ids
     bad = [_com("A", "B"; forbidden_node_ids=["B"]), _com("B", "C")]
@@ -506,11 +502,7 @@ end
     bundle = only(
         b for b in instance.bundles if (b.origin_id, b.destination_id) == ("A", "C")
     )
-    @test bundle.forbidden_arcs == Set([("E", "B"), ("A", "B")])
-    # The skipped arc E -> B gives no code pair
-    fc = TestFixtures._forbidden(instance, bundle)
-    @test isempty(fc.nodes)
-    @test fc.arcs == TestFixtures._code_pairs(instance, [("A", "B_d")])
+    @test bundle.forbidden_arcs == Set([("E", "B_d"), ("A", "B_d")])
     @test is_feasible(greedy_heuristic(instance; show_progress=false), instance)
 end
 
@@ -565,38 +557,6 @@ end
     )
 end
 
-@testset "The stored forbidden codes of a filtered instance follow its own numbering" begin
-    # The direct bundles through P are filtered out, P and its copies leave the sub-instance
-    # P comes first, so its copies take the low codes of the parent and A and X shift in the sub-instance
-    nodes = [
-        Node(; id="P", transit=false),
-        Node(; id="A"),
-        Node(; id="X"),
-        Node(; id="Y"),
-        Node(; id="C"),
-    ]
-    arcs = [_arc(o, d) for (o, d) in [("A", "X"), ("X", "C"), ("A", "Y"), ("Y", "C")]]
-    append!(arcs, [_arc("A", "P"), _arc("P", "C")])
-    commodities = [
-        _com("A", "P"), _com("P", "C"), _com("A", "C"; forbidden_arcs=[("A", "X")])
-    ]
-    instance = _instance(nodes, arcs, commodities)
-    sub = solve_filtered(instance; show_progress=false).sub_instance
-    @test length(sub.bundles) < length(instance.bundles)
-    @test MetaGraphsNext.code_for(sub.network_graph.graph, "A") !=
-        MetaGraphsNext.code_for(instance.network_graph.graph, "A")
-    @test length(sub.index_cache.forbidden_codes) == length(sub.bundles)
-    for (i, bundle) in enumerate(sub.bundles)
-        stored = TPO.forbidden_codes(sub.index_cache, i)
-        resolved = TestFixtures._resolved_forbidden(sub, bundle)
-        @test stored.nodes == resolved.nodes
-        @test stored.arcs == resolved.arcs
-    end
-    kept = only(b for b in sub.bundles if !isempty(b.forbidden_arcs))
-    @test TestFixtures._forbidden(sub, kept).arcs ==
-        TestFixtures._code_pairs(sub, [("A", "X")])
-end
-
 @testset "A filtered instance keeps a forbidden node that was dropped" begin
     # P is an origin and a destination without hub, its two bundles are direct and filtered out
     nodes = [Node(; id="A"), Node(; id="X"), Node(; id="C"), Node(; id="P", transit=false)]
@@ -611,11 +571,7 @@ end
     ng = result.sub_instance.network_graph.graph
     @test !haskey(ng, "P_d") && !haskey(ng, "P_o")
     kept = only(result.sub_instance.bundles)
-    @test kept.forbidden_nodes == Set(["P"])
-    # The dropped copies of P resolve to no code
-    @test !haskey(result.sub_instance.index_cache.input_node_codes, "P")
-    fc = TestFixtures._forbidden(result.sub_instance, kept)
-    @test isempty(fc.nodes) && isempty(fc.arcs)
+    @test kept.forbidden_nodes == Set(["P_o", "P_d"])
     @test is_feasible(result.solution_state, result.sub_instance)
     local_search!(
         result.solution_state,

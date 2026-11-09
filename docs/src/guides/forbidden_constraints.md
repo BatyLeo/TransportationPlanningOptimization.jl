@@ -38,7 +38,6 @@ Commodity(;
 ```
 
 Each forbidden arc is specified as a tuple `(origin_id, destination_id)`.
-A forbidden arc `(u, v)` blocks every arc from `u` to `v`, in every mode (see the [Multi-Modal Arcs](multi_modal_arcs.md) guide).
 
 ### Combining Both Types
 
@@ -127,7 +126,7 @@ commodities = [
 ]
 
 # After bundling, the bundle will have BOTH constraints:
-# - forbidden_nodes = ["B"]
+# - forbidden_node_ids = ["B"]
 # - forbidden_arcs = [("A", "C")]
 ```
 

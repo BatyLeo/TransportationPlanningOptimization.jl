@@ -824,26 +824,23 @@ end
         sol = SolutionState(instance)
         bundle = instance.bundles[1]
         arcs = instance.travel_time_graph.bundle_arcs[1]
-        forbidden = TPO.forbidden_codes(instance.index_cache, 1)
         @test isempty(sol.assignments)
         nz = SparseArrays.nonzeros(instance.travel_time_graph.cost_matrix)
-        TPO.update_bundle_cost_matrix!(
-            sol, instance, bundle, arcs, CheapestMode(); forbidden
-        )
+        TPO.update_bundle_cost_matrix!(sol, instance, bundle, arcs, CheapestMode())
         plain = copy(nz)
         counts = TPO.empty_pack_counts(instance, bundle, arcs)
         @test all(ec -> !isempty(ec.capacities), counts)
         # 5 unit commodities packed 3 per bin (capacity 3) take 2 bins.
         length(modes) == 2 && @test TPO._empty_bin_count(counts[1], 3.0) == 2
         TPO.update_bundle_cost_matrix!(
-            sol, instance, bundle, arcs, CheapestMode(); forbidden, empty_counts=counts
+            sol, instance, bundle, arcs, CheapestMode(); empty_counts=counts
         )
         @test reinterpret(UInt64, nz) == reinterpret(UInt64, plain)
         @test any(isfinite, plain)
         # Deliberately wrong counts must change the matrix, so they are really used.
         bumped = [TPO.EmptyPackCounts(ec.capacities, ec.counts .+ 1) for ec in counts]
         TPO.update_bundle_cost_matrix!(
-            sol, instance, bundle, arcs, CheapestMode(); forbidden, empty_counts=bumped
+            sol, instance, bundle, arcs, CheapestMode(); empty_counts=bumped
         )
         @test any(i -> isfinite(plain[i]) && nz[i] != plain[i], eachindex(nz))
     end

@@ -12,11 +12,15 @@ function _no_path_error(
 )::ArgumentError
     bundle = instance.bundles[bundle_idx]
     max_steps = maximum(o.max_transit_steps for o in bundle.orders)
+    forbidden_nodes = Set(_user_id(instance, id) for id in bundle.forbidden_nodes)
+    forbidden_arcs = Set(
+        (_user_id(instance, u), _user_id(instance, v)) for (u, v) in bundle.forbidden_arcs
+    )
     return ArgumentError(
         "No feasible $label path for bundle $bundle_idx: " *
         "$(_user_id(instance, bundle.origin_id)) -> $(_user_id(instance, bundle.destination_id)), " *
-        "max_transit_steps=$(max_steps), forbidden_nodes=$(bundle.forbidden_nodes), " *
-        "forbidden_arcs=$(bundle.forbidden_arcs). " *
+        "max_transit_steps=$(max_steps), forbidden_nodes=$(forbidden_nodes), " *
+        "forbidden_arcs=$(forbidden_arcs). " *
         "No elementary path from origin to destination: it may be blocked by the time budget, " *
         "the forbidden constraints or the arc and mode capacities" *
         (fixed_hint ? " (capacity may be taken by previously fixed direct bundles)" : ""),

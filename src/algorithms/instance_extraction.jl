@@ -28,7 +28,7 @@ subgraph so the sub-instance is self-consistent.
 
 The returned `Instance` shares the original bundle and commodity objects (no
 deep copy) and the original `input`. The links to the input (`input_index`) live on the graph
-elements, which are kept as is. Only the `bundles` vector, the three graph layers, the index cache and
+elements, which are kept as is. Only the `bundles` vector, the three graph layers and
 `commodity_to_order` are new. The latter maps each input commodity to its position in the
 sub-instance, or to `(0, 0)` if it is not routed there (bundle dropped, or origin equal to destination).
 
@@ -51,8 +51,8 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
             time_step_to_date=instance.time_step_to_date,
             time_space_graph=instance.time_space_graph,
             travel_time_graph=instance.travel_time_graph,
-            # Reusing the original cache is safe only because no bundle index is looked
-            # up here: the bundles vector is empty.
+            # The degenerate case reuses the original graphs verbatim, so the
+            # original cache (built from those same graphs) stays valid.
             index_cache=instance.index_cache,
             input=instance.input,
             commodity_to_order=fill((0, 0), length(instance.input.commodities)),
@@ -102,9 +102,7 @@ function extract_filtered_instance(instance::Instance, filtering_solution::Solut
         time_step_to_date=instance.time_step_to_date,
         time_space_graph=sub_tsg,
         travel_time_graph=sub_ttg,
-        index_cache=build_index_cache(
-            sub_network, sub_ttg, sub_tsg, instance.input.nodes, kept_bundles
-        ),
+        index_cache=build_index_cache(sub_network, sub_ttg, sub_tsg),
         input=instance.input,
         commodity_to_order,
     )

@@ -148,7 +148,7 @@ end
         time_step_to_date=instance.time_step_to_date,
         time_space_graph=instance.time_space_graph,
         travel_time_graph=instance.travel_time_graph,
-        # Reusing the original cache is safe only because the duplicate check throws before any bundle index is looked up.
+        # Reuses the original graphs, so the original cache stays valid.
         index_cache=instance.index_cache,
         input=instance.input,
         commodity_to_order=instance.commodity_to_order,

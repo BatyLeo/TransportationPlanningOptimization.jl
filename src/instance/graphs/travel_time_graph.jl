@@ -219,6 +219,32 @@ end
 """
 $TYPEDSIGNATURES
 
+Validate that a bundle can reach its destination from its origin in the travel-time graph
+while respecting the bundle's forbidden nodes and arcs.
+
+Runs a forward BFS from the origin, skipping any edge that touches a forbidden node or
+matches a forbidden arc. Returns `true` if the destination is reachable, `false` otherwise.
+"""
+function validate_bundle_feasibility(ttg::TravelTimeGraph, bundle_idx::Int, bundle::Bundle)
+    origin_code = ttg.origin_codes[bundle_idx]
+    destination_code = ttg.destination_codes[bundle_idx]
+    node_id(code) = MetaGraphsNext.label_for(ttg.graph, code)[1]
+    allowed_edge =
+        (u, v) -> begin
+            u_id, v_id = node_id(u), node_id(v)
+            return !(
+                (u_id, v_id) in bundle.forbidden_arcs ||
+                u_id in bundle.forbidden_nodes ||
+                v_id in bundle.forbidden_nodes
+            )
+        end
+    reachable = _bfs_reachable(ttg.graph, origin_code, Graphs.outneighbors; allowed_edge)
+    return destination_code in reachable
+end
+
+"""
+$TYPEDSIGNATURES
+
 Arcs of the corridor from `src` to `dst`: all arcs whose two ends are both reachable from
 `src` and able to reach `dst` in the travel-time graph.
 """

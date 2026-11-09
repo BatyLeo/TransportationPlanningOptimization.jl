@@ -15,9 +15,9 @@ struct Bundle{O<:Order,G}
     origin_id::String
     "id of the destination node (the endpoint copy for a split node)"
     destination_id::String
-    "set of user node IDs that are forbidden for this bundle (cannot be traversed), resolved to internal nodes by provenance once per instance in the `IndexCache`, unlike `origin_id` and `destination_id` which are internal ids"
+    "set of node IDs that are forbidden for this bundle (cannot be traversed)"
     forbidden_nodes::Set{String}
-    "set of user arc (origin_id, destination_id) pairs that are forbidden for this bundle, a pair forbids every internal arc between the internal nodes of its two user nodes (in every mode), resolved once per instance in the `IndexCache`"
+    "set of arc (origin_id, destination_id) pairs that are forbidden for this bundle (both sets are translated for nodes without a hub)"
     forbidden_arcs::Set{Tuple{String,String}}
     "grouping key shared by all commodities in the bundle (from `group_by`); `nothing` under the default grouping"
     group::G

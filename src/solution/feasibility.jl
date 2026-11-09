@@ -30,7 +30,10 @@ function is_feasible(sol::SolutionState, instance::Instance; verbose::Bool=false
             return false
         end
 
-        _check_path_edges(instance, bundle_idx, path; verbose) || return false
+        bundle = instance.bundles[bundle_idx]
+
+        _check_path_edges(travel_time_graph, bundle, bundle_idx, path; verbose) ||
+            return false
         _check_elementary_path(instance, bundle_idx, path; verbose) || return false
         _check_origin_node(travel_time_graph, bundle_idx, path; verbose) || return false
         _check_destination_node(travel_time_graph, bundle_idx, path; verbose) ||
@@ -59,16 +62,13 @@ end
 $TYPEDSIGNATURES
 
 Check every edge of `path`: the arc exists in the graph, no intermediate node is
-forbidden for the bundle, and no arc is forbidden (resolved by provenance, warnings name the user ids).
-Origin and destination nodes are validated separately by [`_check_origin_node`](@ref) /
+forbidden for the bundle, and no arc is forbidden. Origin and destination nodes
+are validated separately by [`_check_origin_node`](@ref) /
 [`_check_destination_node`](@ref).
 """
 function _check_path_edges(
-    instance::Instance, bundle_idx::Int, path::Vector{Int}; verbose::Bool
+    ttg::TravelTimeGraph, bundle::Bundle, bundle_idx::Int, path::Vector{Int}; verbose::Bool
 )
-    ttg = instance.travel_time_graph
-    spatial = instance.index_cache.ttg_code_to_spatial_code
-    forbidden = forbidden_codes(instance.index_cache, bundle_idx)
     for i in 1:(length(path) - 1)
         u, v = path[i], path[i + 1]
         if !Graphs.has_edge(ttg.graph, u, v)
@@ -76,23 +76,26 @@ function _check_path_edges(
             return false
         end
 
-        # Forbidden checks use spatial codes (intermediate nodes only, origin
+        # Forbidden checks use spatial node ids (intermediate nodes only; origin
         # and destination are validated separately).
-        su, sv = spatial[u], spatial[v]
+        u_label = MetaGraphsNext.label_for(ttg.graph, u)
+        v_label = MetaGraphsNext.label_for(ttg.graph, v)
+        u_node_id = u_label[1]
+        v_node_id = v_label[1]
 
-        if i > 1 && su in forbidden.nodes
+        if i > 1 && u_node_id in bundle.forbidden_nodes
             verbose &&
-                @warn "Bundle $(bundle_idx) path uses forbidden node $(_user_id(instance, su)) at position $(i)."
+                @warn "Bundle $(bundle_idx) path uses forbidden node $(u_node_id) at position $(i)."
             return false
         end
-        if i < length(path) - 1 && sv in forbidden.nodes
+        if i < length(path) - 1 && v_node_id in bundle.forbidden_nodes
             verbose &&
-                @warn "Bundle $(bundle_idx) path uses forbidden node $(_user_id(instance, sv)) at position $(i+1)."
+                @warn "Bundle $(bundle_idx) path uses forbidden node $(v_node_id) at position $(i+1)."
             return false
         end
-        if (su, sv) in forbidden.arcs
+        if (u_node_id, v_node_id) in bundle.forbidden_arcs
             verbose &&
-                @warn "Bundle $(bundle_idx) path uses forbidden arc ($(_user_id(instance, su)), $(_user_id(instance, sv)))."
+                @warn "Bundle $(bundle_idx) path uses forbidden arc ($(u_node_id), $(v_node_id))."
             return false
         end
     end
