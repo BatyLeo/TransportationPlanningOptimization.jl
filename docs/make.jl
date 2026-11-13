@@ -34,6 +34,7 @@ makedocs(;
         edit_link="main",
         assets=String[],
         size_threshold=600 * 1024,
+        size_threshold_warn=450 * 1024,
     ),
     pages=[
         "Home" => "index.md",
@@ -53,7 +54,11 @@ makedocs(;
             "Type Transformations" => "guides/type_transformations.md",
         ],
         "Problems" => "problems.md",
-        "API Reference" => "api.md",
+        "API Reference" => [
+            "Overview" => "api/index.md",
+            "Public API" => "api/public.md",
+            "Internals" => "api/internals.md",
+        ],
     ],
 )
 
