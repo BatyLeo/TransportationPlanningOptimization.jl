@@ -289,31 +289,31 @@ function two_node_common_incremental!(
         _restore_multi_bundle_assignments!(sol, lifted_idxs, old_paths, snapshots)
         return 0.0
     end
-    spatial = instance.index_cache.ttg_code_to_spatial_code
+    location = instance.index_cache.ttg_code_to_location
     parents, _ = bundle_dijkstra(ttg.graph, src, ttg.cost_matrix; dst, workspace)
     new_sub_path = trace_path(parents, src, dst)
     # Splicing can loop even when the sub-path is elementary. In that case search
-    # again: only the physical nodes of the untouched prefixes and suffixes are off limits,
+    # again: only the locations of the untouched prefixes and suffixes are off limits,
     # the interiors of the old slices can be reused.
     splice_all(sub) =
         [splice_path(p, lo, hi, sub, ttg) for (p, (_, lo, hi)) in zip(old_paths, lifted)]
     spliced = Tuple{Vector{Int},Int}[]
     if !isempty(new_sub_path)
         spliced = splice_all(new_sub_path)
-        if !all(((p, _),) -> is_elementary_path(p, spatial), spliced)
+        if !all(((p, _),) -> is_elementary_path(p, location), spliced)
             avoid = BitSet()
             for (p, (_, lo, hi)) in zip(old_paths, lifted)
                 for v in view(p, 1:(lo - 1))
-                    push!(avoid, spatial[v])
+                    push!(avoid, location[v])
                 end
                 for v in view(p, (hi + 1):length(p))
-                    push!(avoid, spatial[v])
+                    push!(avoid, location[v])
                 end
             end
-            delete!(avoid, spatial[src])
-            delete!(avoid, spatial[dst])
+            delete!(avoid, location[src])
+            delete!(avoid, location[dst])
             new_sub_path = elementary_shortest_path(
-                ttg.graph, ttg.cost_matrix, spatial, src, dst; visited=avoid
+                ttg.graph, ttg.cost_matrix, location, src, dst; visited=avoid
             )
             isempty(new_sub_path) || (spliced = splice_all(new_sub_path))
         end

@@ -480,3 +480,11 @@ end
         @test_throws rejects("dropped by the instance") Solution(routes, instance)
     end
 end
+
+@testset "A route that revisits a location is rejected" begin
+    plain = TestFixtures.location_instance(; alias=false)
+    aliased = TestFixtures.location_instance()
+    solution = Solution(greedy_heuristic(plain; show_progress=false), plain)
+    @test SolutionState(solution, plain) isa SolutionState
+    @test_throws rejects("not elementary") SolutionState(solution, aliased)
+end

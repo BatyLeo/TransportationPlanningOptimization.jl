@@ -7,6 +7,9 @@ Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 TransportationPlanningOptimization = "e92b3169-8dd3-4529-9d46-f74323416df7"
 
+[sources]
+TransportationPlanningOptimization = {path = ".."}
+
 [compat]
 CSV = "1.1"
 DataFrames = "1"

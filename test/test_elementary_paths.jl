@@ -588,3 +588,66 @@ end
     parents = TPO._lazy_bundle_dijkstra!(args...; deadline=late)
     @test isempty(TPO.trace_path(parents, origin, dest))
 end
+
+@testset "loops are detected by location" begin
+    plain = TestFixtures.location_instance(; alias=false)
+    instance = TestFixtures.location_instance()
+    ttg = instance.travel_time_graph
+    codes(labels) = TestFixtures.ttg_codes(instance, labels)
+    dest = ttg.destination_codes[1]
+    loop = codes([("A", 0), ("P1", 1), ("S", 2), ("P2", 3), ("B", 4)])
+    hop = codes([("A", 0), ("P1", 1), ("P2", 2), ("B", 3), ("B", 4)])
+    # Premise: the cheapest path of the plain instance is the one that loops once aliased.
+    plain_state = greedy_heuristic(plain; show_progress=false)
+    @test plain_state.bundle_paths[1][1:5] == loop
+
+    @testset "is_feasible" begin
+        @test is_feasible(SolutionState([hop], instance), instance)
+        looped = SolutionState([loop], instance)
+        @test !is_feasible(looped, instance)
+        @test_logs (:warn, r"elementary") match_mode = :any is_feasible(
+            looped, instance; verbose=true
+        )
+        @test is_feasible(SolutionState([loop], plain), plain)
+    end
+
+    @testset "bundle_shortest_path and greedy avoid the loop" begin
+        sol = SolutionState(instance)
+        TPO.update_bundle_cost_matrix!(sol, instance, 1)
+        origin = ttg.origin_codes[1]
+        path = TPO.bundle_shortest_path(instance, origin, dest)
+        ids = [label_for(ttg.graph, v)[1] for v in path]
+        @test unique(ids) == ["A", "P1", "P2", "B"]
+        greedy = greedy_heuristic(instance; show_progress=false)
+        @test is_feasible(greedy, instance; verbose=true)
+        @test cost(greedy) ≈ 7.0
+    end
+
+    @testset "lazy forced path" begin
+        buffer = TPO.BinPackingBuffer()
+        function forced(inst, from, to)
+            t = inst.travel_time_graph
+            adj = TPO._bundle_adjacency(t, 1)
+            arcs = [
+                a for a in t.bundle_arcs[1] if
+                label_for(t.graph, a[1])[1] == from && label_for(t.graph, a[2])[1] == to
+            ]
+            @test !isempty(arcs)
+            return [
+                TPO._lazy_forced_path!(
+                    SolutionState(inst), inst, 1, a, CheapestMode(), buffer, adj
+                ) for a in arcs
+            ]
+        end
+        # S -> P2 enters the location of P1 that every path through S has left.
+        @test all(isempty, forced(instance, "S", "P2"))
+        # P1 -> P2 stays on one location, so the hop is a valid forced arc.
+        hops = filter(!isempty, forced(instance, "P1", "P2"))
+        location = instance.index_cache.ttg_code_to_location
+        @test !isempty(hops)
+        @test all(p -> TPO.is_elementary_path(p, location), hops)
+        # A forced arc entering the origin location from another location always loops.
+        origin_alias = TestFixtures.with_location(plain, "P2" => "A")
+        @test all(isempty, forced(origin_alias, "S", "P2"))
+    end
+end

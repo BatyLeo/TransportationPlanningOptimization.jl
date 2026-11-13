@@ -59,7 +59,7 @@ $TYPEDSIGNATURES
 Lazy Dijkstra for a single bundle reinsertion: evaluates edge costs on-demand
 as nodes are settled and stops at the destination. Returns the `parents`
 vector (for use with `trace_path`).
-Its path may loop on a physical node, see [`bundle_shortest_path`](@ref).
+Its path may loop on a location, see [`bundle_shortest_path`](@ref).
 The TTG edge `exclude` (no edge by default) is never used.
 If the absolute time `deadline` passes (checked every `DEADLINE_CHECK_EVERY` settled
 nodes), the search stops and the destination is left unreached, so `trace_path` gives no
@@ -144,7 +144,7 @@ $TYPEDSIGNATURES
 Cheapest elementary path from `origin` to `dest` over the arcs of bundle `bundle_idx`,
 priced against the current `sol` as it is (a bundle still in it has its own load counted),
 or `Int[]` if there is none. It is the lazy Dijkstra of [`_lazy_bundle_dijkstra!`](@ref),
-and only when its path loops on a physical node (or enters one of the physical nodes
+and only when its path loops on a location (or enters one of the locations
 `visited`) is the cost matrix filled for [`elementary_shortest_path`](@ref). The TTG edge
 `exclude` is never used. The result may still carry shortcut edges at its ends. `Int[]` is
 also returned when the absolute time `deadline` passes, in the search or in the cost
@@ -165,7 +165,7 @@ function _lazy_bundle_path!(
     deadline::Float64=Inf,
 )
     ttg = instance.travel_time_graph
-    spatial = instance.index_cache.ttg_code_to_spatial_code
+    location = instance.index_cache.ttg_code_to_location
     parents = _lazy_bundle_dijkstra!(
         sol,
         instance,
@@ -180,8 +180,8 @@ function _lazy_bundle_path!(
         deadline,
     )
     path = trace_path(parents, origin, dest)
-    if is_elementary_path(path, spatial) &&
-        (isnothing(visited) || !any(c -> spatial[c] in visited, path))
+    if is_elementary_path(path, location) &&
+        (isnothing(visited) || !any(c -> location[c] in visited, path))
         return path
     end
     # The lazy search leaves the cost matrix unfilled, so fill it first.
@@ -192,7 +192,7 @@ function _lazy_bundle_path!(
     return elementary_shortest_path(
         ttg.graph,
         ttg.cost_matrix,
-        spatial,
+        location,
         origin,
         dest;
         visited=isnothing(visited) ? BitSet() : visited,
@@ -224,6 +224,7 @@ function _lazy_forced_path!(
 )
     ttg = instance.travel_time_graph
     spatial = instance.index_cache.ttg_code_to_spatial_code
+    location = instance.index_cache.ttg_code_to_location
     u, v = arc
     su, sv = spatial[u], spatial[v]
     forbidden = forbidden_codes(instance.index_cache, bundle_idx)
@@ -232,6 +233,10 @@ function _lazy_forced_path!(
     v in get(bundle_adj, u, Int[]) || return Int[]
 
     origin, dest = ttg.origin_codes[bundle_idx], ttg.destination_codes[bundle_idx]
+    # A forced arc entering the origin location or leaving the destination location
+    # from another location always loops.
+    lu, lv = location[u], location[v]
+    lu != lv && (lv == location[origin] || lu == location[dest]) && return Int[]
     first_leg = _lazy_bundle_path!(
         sol,
         instance,
@@ -242,10 +247,14 @@ function _lazy_forced_path!(
         buffer,
         bundle_adj;
         workspace,
-        visited=BitSet([sv]),
+        visited=lu == lv ? nothing : BitSet([lv]),
         deadline,
     )
     isempty(first_leg) && return Int[]
+    # The head location starts the second leg, so removing it only keeps the lazy fast
+    # path from rejecting that leg.
+    visited = BitSet(location[c] for c in first_leg)
+    delete!(visited, lv)
     second_leg = _lazy_bundle_path!(
         sol,
         instance,
@@ -256,12 +265,12 @@ function _lazy_forced_path!(
         buffer,
         bundle_adj;
         workspace,
-        visited=BitSet(spatial[c] for c in first_leg),
+        visited,
         deadline,
     )
     isempty(second_leg) && return Int[]
     path = vcat(first_leg, second_leg)
-    is_elementary_path(path, spatial) || return Int[]
+    is_elementary_path(path, location) || return Int[]
     _remove_shortcuts_from_path!(path, ttg)
     return path
 end

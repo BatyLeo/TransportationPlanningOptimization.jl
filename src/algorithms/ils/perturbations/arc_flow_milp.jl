@@ -181,10 +181,12 @@ function _arc_flow_model(
             u, v = arcs.u[k], arcs.v[k]
             JuMP.add_to_expression!(get!(JuMP.AffExpr, balance, u), 1.0, x[i])
             JuMP.add_to_expression!(get!(JuMP.AffExpr, balance, v), -1.0, x[i])
-            sv = cache.ttg_code_to_spatial_code[v]
-            cache.ttg_code_to_spatial_code[u] == sv && continue
+            cache.ttg_code_to_spatial_code[u] == cache.ttg_code_to_spatial_code[v] &&
+                continue
             arc = ttg_edge_arc(cache, u, v)
-            JuMP.add_to_expression!(get!(JuMP.AffExpr, entering, sv), 1.0, x[i])
+            lv = cache.ttg_code_to_location[v]
+            cache.ttg_code_to_location[u] == lv ||
+                JuMP.add_to_expression!(get!(JuMP.AffExpr, entering, lv), 1.0, x[i])
 
             JuMP.add_to_expression!(
                 objective, _milp_arc_coefficient(instance, bundle, u, v), x[i]
@@ -203,10 +205,10 @@ function _arc_flow_model(
         for (node, expr) in balance
             @constraint(model, expr == (node == origin) - (node == destination))
         end
-        # A path visits each physical node at most once, and never returns to its origin.
-        origin_node = cache.ttg_code_to_spatial_code[origin]
-        for (node, expr) in entering
-            @constraint(model, expr <= (node == origin_node ? 0 : 1))
+        # A path visits each location at most once, and never returns to its origin.
+        origin_location = cache.ttg_code_to_location[origin]
+        for (location, expr) in entering
+            @constraint(model, expr <= (location == origin_location ? 0 : 1))
         end
     end
 
@@ -264,7 +266,7 @@ end
 # single elementary chain to the sink.
 function _arc_flow_paths(instance::Instance, selected, arcs_of, x_values)
     ttg = instance.travel_time_graph
-    spatial = instance.index_cache.ttg_code_to_spatial_code
+    location = instance.index_cache.ttg_code_to_location
     paths = Dict{Int,Vector{Int}}()
     i = 0
     for b in selected
@@ -281,7 +283,7 @@ function _arc_flow_paths(instance::Instance, selected, arcs_of, x_values)
             length(successors) == 1 && length(path) <= length(arcs.u) || break
             push!(path, only(successors))
         end
-        path[end] == destination && is_elementary_path(path, spatial) || return nothing
+        path[end] == destination && is_elementary_path(path, location) || return nothing
         _remove_shortcuts_from_path!(path, ttg)
         paths[b] = path
     end

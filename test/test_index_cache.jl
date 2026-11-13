@@ -168,3 +168,98 @@ for date_kw in (:departure_date, :arrival_date)
         @test _cache_matches_graphs(instance)
     end
 end
+
+@testset "location key" begin
+    @testset "a hub and its endpoint copies share one location" begin
+        nodes = [Node(; id=id) for id in ("A", "B", "C")]
+        arcs = [
+            Arc(;
+                origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1)
+            ) for (o, d) in (("A", "B"), ("B", "C"))
+        ]
+        commodity(o, d) = Commodity(;
+            origin_id=o,
+            destination_id=d,
+            size=1.0,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(3),
+        )
+        instance = Instance(
+            nodes,
+            arcs,
+            [commodity("A", "C"), commodity("B", "C"), commodity("A", "B")],
+            Day(1),
+        )
+        cache = instance.index_cache
+        ng = instance.network_graph.graph
+        ids = MetaGraphsNext.labels(ng)
+        @test Set(ids) == Set(["A", "B", "B_o", "B_d", "C"])
+        base(id) = first(split(id, "_"))
+        code(id) = MetaGraphsNext.code_for(ng, id)
+        location(id) = cache.ttg_code_to_location[findfirst(
+            ==(code(id)), cache.ttg_code_to_spatial_code
+        )]
+        for u in ids, v in ids
+            @test (location(u) == location(v)) == (base(u) == base(v))
+        end
+    end
+
+    @testset "a hubless node and its endpoint copies share one location" begin
+        nodes = [Node(; id="A"), Node(; id="P", transit=false), Node(; id="C")]
+        arcs = [
+            Arc(;
+                origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1)
+            ) for (o, d) in (("A", "P"), ("P", "C"))
+        ]
+        commodity(o, d) = Commodity(;
+            origin_id=o,
+            destination_id=d,
+            size=1.0,
+            departure_date=DateTime(2021, 1, 1),
+            max_delivery_time=Day(3),
+        )
+        instance = Instance(nodes, arcs, [commodity("A", "P"), commodity("P", "C")], Day(1))
+        cache = instance.index_cache
+        ng = instance.network_graph.graph
+        ids = MetaGraphsNext.labels(ng)
+        @test Set(ids) == Set(["A", "P_o", "P_d", "C"])
+        location(id) = cache.ttg_code_to_location[findfirst(
+            ==(MetaGraphsNext.code_for(ng, id)), cache.ttg_code_to_spatial_code
+        )]
+        for u in ids, v in ids
+            @test (location(u) == location(v)) ==
+                (first(split(u, "_")) == first(split(v, "_")))
+        end
+    end
+
+    @testset "tiny: equal locations are equal spatial codes" begin
+        cache = TestFixtures.tiny_instance().index_cache
+        spatial = cache.ttg_code_to_spatial_code
+        location = cache.ttg_code_to_location
+        @test length(location) == length(spatial)
+        @test all(
+            (location[u] == location[v]) == (spatial[u] == spatial[v]) for
+            u in eachindex(spatial), v in eachindex(spatial)
+        )
+    end
+
+    @testset "network nodes without an input node" begin
+        for n_input in (0, 2)
+            nodes = [
+                NetworkNode(; id="O", node_type=:origin),
+                NetworkNode(; id="D", node_type=:destination),
+            ]
+            arc = NetworkArc(; travel_time_steps=0, cost=LinearArcCost(1.0))
+            net = NetworkGraph(nodes, [("O", "D", arc)])
+            c = LightCommodity(; origin_id="O", destination_id="D", size=1.0)
+            order = Order(; commodities=[c], time_step=1, max_transit_steps=1)
+            bundle = Bundle(; orders=[order], origin_id="O", destination_id="D")
+            ttg = TravelTimeGraph(net, [bundle])
+            tsg = TimeSpaceGraph(net, 3; wrap_time=false)
+            cache = TPO.build_index_cache(
+                net, ttg, tsg, [Node(; id="N$i") for i in 1:n_input], [bundle]
+            )
+            @test cache.ttg_code_to_location == cache.ttg_code_to_spatial_code .+ n_input
+        end
+    end
+end

@@ -26,6 +26,8 @@ $TYPEDFIELDS
 struct IndexCache{ARC,NC}
     "travel-time node code to network (spatial) node code"
     ttg_code_to_spatial_code::Vector{Int}
+    "travel-time node code to its location: the `input_index` of its network node, or `n_input_nodes + spatial code` for a network node without an input node. Loop checks compare locations, so the copies of a user node count as one location, and the key never collides"
+    ttg_code_to_location::Vector{Int}
     "travel-time node code to its time budget tau"
     ttg_code_to_tau::Vector{Int}
     "(spatial code, time budget tau + 1) to travel-time node code (0 means absent)"
@@ -159,6 +161,12 @@ function build_index_cache(
         ttg_code_to_spatial_code[code] = MetaGraphsNext.code_for(ng, loc)
         ttg_code_to_tau[code] = τ
     end
+    n_input = length(input_nodes)
+    spatial_code_to_location = map(1:n_net) do c
+        i = ng[MetaGraphsNext.label_for(ng, c)].input_index
+        return iszero(i) ? n_input + c : i
+    end
+    ttg_code_to_location = spatial_code_to_location[ttg_code_to_spatial_code]
     spatial_code_and_tau_to_ttg_code = zeros(
         Int, n_net, maximum(ttg_code_to_tau; init=0) + 1
     )  # 0 encodes "no TTG node at this (spatial, τ) pair"
@@ -228,6 +236,7 @@ function build_index_cache(
 
     return IndexCache(
         ttg_code_to_spatial_code,
+        ttg_code_to_location,
         ttg_code_to_tau,
         spatial_code_and_tau_to_ttg_code,
         spatial_code_and_time_to_tsg_code,

@@ -11,6 +11,7 @@ module TestFixtures
 
 using TransportationPlanningOptimization
 using Dates
+using Graphs: nv
 using MetaGraphsNext
 using Random
 using Test
@@ -634,6 +635,53 @@ function _code_pairs(instance, pairs)
     return Set(
         (MetaGraphsNext.code_for(ng, u), MetaGraphsNext.code_for(ng, v)) for (u, v) in pairs
     )
+end
+
+# Copy of `instance` whose cache maps every TTG code of node `alias_id` to the location of
+# node `target_id`, as a split of one location into copies would.
+function with_location(instance, (alias_id, target_id)::Pair{String,String})
+    cache = instance.index_cache
+    ttg = instance.travel_time_graph.graph
+    ids = [label_for(ttg, v)[1] for v in 1:nv(ttg)]
+    location = copy(cache.ttg_code_to_location)
+    location[ids .== alias_id] .= location[findfirst(==(target_id), ids)]
+    names = fieldnames(typeof(cache))
+    values = [f === :ttg_code_to_location ? location : getfield(cache, f) for f in names]
+    kwargs = Dict(f => getfield(instance, f) for f in fieldnames(typeof(instance)))
+    kwargs[:index_cache] = TransportationPlanningOptimization.IndexCache(values...)
+    return Instance(; kwargs...)
+end
+
+# A -> P1 -> S -> P2 -> B costs 4, the hop P1 -> P2 makes A -> P1 -> P2 -> B cost 7 and
+# A -> R -> B costs 10. With P2 aliased to P1 only the last two are elementary.
+function location_instance(; alias::Bool=true)
+    nodes = [Node(; id=id) for id in ("A", "P1", "S", "P2", "B", "R")]
+    arc(o, d, c) =
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(c), travel_time=Day(1))
+    arcs = [
+        arc("A", "P1", 1),
+        arc("P1", "S", 1),
+        arc("S", "P2", 1),
+        arc("P2", "B", 1),
+        arc("P1", "P2", 5),
+        arc("A", "R", 5),
+        arc("R", "B", 5),
+    ]
+    commodity = Commodity(;
+        origin_id="A",
+        destination_id="B",
+        quantity=1,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(4),
+        size=1.0,
+    )
+    instance = Instance(nodes, arcs, [commodity], Day(1))
+    return alias ? with_location(instance, "P2" => "P1") : instance
+end
+
+# TTG codes of `labels`, a vector of `(node id, tau)`.
+function ttg_codes(instance, labels)
+    return [code_for(instance.travel_time_graph.graph, l) for l in labels]
 end
 
 end # module

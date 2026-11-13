@@ -353,7 +353,7 @@ function _check_bundle_path(instance::Instance, b::Int, k::Int, path::Vector{Int
         (u, v) in forbidden.arcs &&
             fail("the route uses forbidden arc $((user(u), user(v)))")
     end
-    if !is_elementary_path(path, spatial)
+    if !is_elementary_path(path, instance.index_cache.ttg_code_to_location)
         # a hub and its copies are consecutive, so the user ids list each node once
         users = user.(codes)
         users = [u for (i, u) in enumerate(users) if i == 1 || u != users[i - 1]]

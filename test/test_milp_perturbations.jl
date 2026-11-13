@@ -245,6 +245,30 @@ end
     @test is_feasible(sol, instance)
 end
 
+# Termination status and objective (NaN unless optimal) of the arc-flow model of bundle `b`
+# with `x` fixed along the TTG node `codes`.
+function fixed_path_status(instance, codes, b=1)
+    sol = TPO.SolutionState(instance)
+    arcs_of = TPO._milp_bundle_arcs(instance, b)
+    model, x = TPO._arc_flow_model(
+        ArcFlowMILPPerturbation(; solver_time_limit=10.0),
+        sol,
+        instance,
+        [b],
+        Dict(b => arcs_of),
+    )
+    on = Set(zip(codes[1:(end - 1)], codes[2:end]))
+    for k in eachindex(x)
+        JuMP.fix(x[k], (arcs_of.u[k], arcs_of.v[k]) in on ? 1.0 : 0.0; force=true)
+        JuMP.is_binary(x[k]) && JuMP.unset_binary(x[k])
+    end
+    JuMP.optimize!(model)
+    status = JuMP.termination_status(model)
+    return status, status == JuMP.OPTIMAL ? JuMP.objective_value(model) : NaN
+end
+
+const INFEASIBLE_STATUSES = (JuMP.INFEASIBLE, JuMP.INFEASIBLE_OR_UNBOUNDED)
+
 @testset "The model forbids a path that revisits a node" begin
     nodes = [Node(; id="A"), Node(; id="B"), Node(; id="C"), Node(; id="D")]
     arc(o, d) =
@@ -259,31 +283,58 @@ end
         size=1.0,
     )
     instance = Instance(nodes, arcs, [commodity], Day(1))
-    sol = TPO.SolutionState(instance)
     g = instance.travel_time_graph.graph
-    code(label) = MetaGraphsNext.code_for(g, label)
-    function status(labels)
-        codes = [code(l) for l in labels]
-        arcs_of = TPO._milp_bundle_arcs(instance, 1)
-        model, x = TPO._arc_flow_model(
-            ArcFlowMILPPerturbation(; solver_time_limit=10.0),
-            sol,
-            instance,
-            [1],
-            Dict(1 => arcs_of),
-        )
-        on = Set(zip(codes[1:(end - 1)], codes[2:end]))
-        for k in eachindex(x)
-            JuMP.fix(x[k], (arcs_of.u[k], arcs_of.v[k]) in on ? 1.0 : 0.0; force=true)
-            JuMP.is_binary(x[k]) && JuMP.unset_binary(x[k])
-        end
-        JuMP.optimize!(model)
-        return JuMP.termination_status(model)
-    end
+    status(labels) =
+        fixed_path_status(instance, [MetaGraphsNext.code_for(g, l) for l in labels])[1]
     revisit = [("A", 0), ("B", 1), ("C", 2), ("B", 3), ("D", 4)]
     simple = [("A", 0), ("B", 1), ("D", 2), ("D", 3), ("D", 4)]
     @test status(simple) == JuMP.OPTIMAL
-    @test status(revisit) in (JuMP.INFEASIBLE, JuMP.INFEASIBLE_OR_UNBOUNDED)
+    @test status(revisit) in INFEASIBLE_STATUSES
+end
+
+@testset "The model forbids a path that revisits a location" begin
+    loop = [("A", 0), ("P1", 1), ("S", 2), ("P2", 3), ("B", 4)]
+    hop = [("A", 0), ("P1", 1), ("P2", 2), ("B", 3), ("B", 4)]
+    plain = TestFixtures.location_instance(; alias=false)
+    aliased = TestFixtures.location_instance()
+    codes(instance, labels) = TestFixtures.ttg_codes(instance, labels)
+    @test fixed_path_status(plain, codes(plain, loop))[1] == JuMP.OPTIMAL
+    @test fixed_path_status(aliased, codes(aliased, loop))[1] in INFEASIBLE_STATUSES
+    status, objective = fixed_path_status(aliased, codes(aliased, hop))
+    @test status == JuMP.OPTIMAL
+    @test objective ≈ 7.0
+    # A later node on the location of the origin cannot be entered.
+    back = TestFixtures.with_location(plain, "S" => "A")
+    @test fixed_path_status(back, codes(back, loop))[1] in INFEASIBLE_STATUSES
+end
+
+@testset "Hops between copies of a hub stay allowed in the model" begin
+    nodes = [Node(; id=id) for id in ("A", "B", "C")]
+    arcs = [
+        Arc(; origin_id=o, destination_id=d, cost=LinearArcCost(1.0), travel_time=Day(1))
+        for (o, d) in (("A", "B"), ("B", "C"))
+    ]
+    commodity(o, d) = Commodity(;
+        origin_id=o,
+        destination_id=d,
+        size=1.0,
+        departure_date=DateTime(2021, 1, 1),
+        max_delivery_time=Day(3),
+    )
+    instance = Instance(nodes, arcs, [commodity("A", "C"), commodity("B", "C")], Day(1))
+    @test "B_o" in MetaGraphsNext.labels(instance.network_graph.graph)
+    ttg = instance.travel_time_graph
+    b = findfirst(v -> MetaGraphsNext.label_for(ttg.graph, v)[1] == "B_o", ttg.origin_codes)
+    path = greedy_heuristic(instance; show_progress=false).bundle_paths[b]
+    # The stored path has no trailing shortcuts, the model needs the way to the sink.
+    path = vcat(
+        path, [MetaGraphsNext.code_for(ttg.graph, ("C", 2)), ttg.destination_codes[b]]
+    )
+    g = ttg.graph
+    @test [MetaGraphsNext.label_for(g, v)[1] for v in path][1:3] == ["B_o", "B", "C"]
+    status, objective = fixed_path_status(instance, path, b)
+    @test status == JuMP.OPTIMAL
+    @test objective ≈ 1.0
 end
 
 @testset "An invalid recovered path is detected" begin

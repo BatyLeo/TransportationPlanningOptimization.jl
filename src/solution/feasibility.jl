@@ -5,8 +5,8 @@ Check if a solution is feasible for a given instance.
 Feasibility requires:
 1. Every bundle in the instance must have a corresponding path in the solution.
 2. Every path must exist (each arc exists in the graph).
-3. Every path is elementary: it never revisits a physical node after leaving it
-   (waiting on the same node is allowed).
+3. Every path is elementary: it never revisits a location after leaving it
+   (waiting on the same location is allowed).
 4. Every path must start at the bundle's designated entry node (`origin_codes`).
 5. Every path must end at the bundle's designated exit node (`destination_codes`).
 6. Every stored assignment sits on an existing arc and respects its capacity (per mode
@@ -107,8 +107,8 @@ Check that `path` of bundle `bundle_idx` is elementary, see [`is_elementary_path
 function _check_elementary_path(
     instance::Instance, bundle_idx::Int, path::Vector{Int}; verbose::Bool
 )
-    spatial = instance.index_cache.ttg_code_to_spatial_code
-    is_elementary_path(path, spatial) && return true
+    location = instance.index_cache.ttg_code_to_location
+    is_elementary_path(path, location) && return true
     if verbose
         ids = [
             MetaGraphsNext.label_for(instance.travel_time_graph.graph, v)[1] for v in path
