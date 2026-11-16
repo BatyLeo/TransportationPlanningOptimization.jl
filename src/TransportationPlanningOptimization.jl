@@ -136,7 +136,7 @@ export gurobi_optimizer
 
 include("problems/Problems.jl")
 
-public Problems
+public Problems, Leg, ArcFlow
 public order_aggregate,
     incremental_cost,
     incremental_cost_with_size,

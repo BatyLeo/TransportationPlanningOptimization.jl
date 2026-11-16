@@ -94,7 +94,7 @@ function parse_dataMVP_instance(
     if model_costs
         grouped = Dict{
             Tuple{String,String,Symbol},
-            @NamedTuple{capacity::Int,costs::Dict{String,Float64}}
+            @NamedTuple{capacity::Int,costs::Dict{String,Float64}},
         }()
         arc_order = Tuple{String,String,Symbol}[]
         for row in eachrow(df_legs)

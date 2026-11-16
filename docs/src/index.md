@@ -76,7 +76,8 @@ Pages = [
     "guides/multi_modal_arcs.md",
     "guides/solution_io.md",
     "guides/type_transformations.md",
-    "api.md",
+    "api/public.md",
+    "api/internals.md",
 ]
 Depth = 1
 ```
